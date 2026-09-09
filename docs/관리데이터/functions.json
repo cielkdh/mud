@@ -1,0 +1,9890 @@
+[
+  {
+    "p": 0,
+    "i": 1,
+    "id": "FUNC-P0-001",
+    "name": "원문 기준선과 충돌 판정",
+    "method": "BaselineResolver.resolve(sectionId: SourceId, ruleKey: RuleKey) -> RuleDecision",
+    "tables": [],
+    "rules": [
+      "원문 전체와 SHA-256을 고정하고 번호·행범위로 추적한다",
+      "명시적 교체/최종 조항을 우선하되 단순히 번호가 크다는 이유만으로 덮어쓰지 않는다",
+      "해결 근거가 없는 충돌은 DESIGN_DECISION_REQUIRED로 표시하고 영향 Task를 차단한다",
+      "본 문서의 보완 정책은 원문 규칙과 다른 namespace로 관리한다"
+    ],
+    "normal": [
+      "§28 6명, §1737 조직10/출전6",
+      "조직과 출전을 분리하고 R-PARTY-001에 원문 근거 2개 보존"
+    ],
+    "edge": [
+      "같은 규칙의 모순이며 교체 문구 없음",
+      "결정 대기; 해당 기능의 운영 활성화 차단"
+    ],
+    "failure": [
+      "요구사항 번호 하나 누락",
+      "문서 검증 실패; 릴리즈 범위에서 숨기지 않음"
+    ],
+    "kw": [
+      "개요",
+      "결론",
+      "원칙",
+      "최종",
+      "확정",
+      "요구",
+      "개발",
+      "단계"
+    ],
+    "state": "EXTRACTED → CLASSIFIED → RESOLVED 또는 OPEN",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      1,
+      123,
+      124,
+      125,
+      127,
+      3046,
+      3135
+    ],
+    "test_ids": [
+      "P0-UT-001",
+      "P0-BT-001",
+      "P0-FT-001",
+      "P0-CT-001",
+      "P0-IT-001"
+    ],
+    "task_ids": [
+      "P0-TASK-001",
+      "P0-TASK-002",
+      "P0-TASK-003",
+      "P0-TASK-004",
+      "P0-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 0,
+    "i": 2,
+    "id": "FUNC-P0-002",
+    "name": "빌드·모듈·기술버전 고정",
+    "method": "BuildBaseline.verify(lock: ToolchainLock, graph: ModuleGraph) -> BuildReport",
+    "tables": [],
+    "rules": [
+      "원문 §3031 모듈명을 유지하고 기존 저장소는 P0에서 먼저 인벤토리한다",
+      "모듈 허용 의존성 allowlist 밖의 모든 내부 edge와 simulation의 Android·Room·Compose·네트워크 import를 정적 검사한다",
+      "WorldSession과 SavePort는 :core:simulation, SaveCoordinator 구현은 :core:save에 두고 feature의 WorldEngine·SaveCoordinator·mutable Repository 직접 참조를 금지한다",
+      ":app과 :tools:headless만 조립 루트이며 동일 WorldSession/SavePort 계약을 사용한다",
+      "AGP/Kotlin/KSP/Room 정확 버전과 schema export 경로를 version catalog에서 잠근다",
+      "기존 구현이 있으면 adapter부터 연결하며 UI/도메인 전면 재작성은 별도 승인한다"
+    ],
+    "normal": [
+      "simulation 소스에 Android import 없음",
+      "순수 JVM test 태스크 단독 성공"
+    ],
+    "edge": [
+      "금지 edge/API 6종: simulation→save/Room, feature:party→feature:guild, core:data→feature:party, core:model→Android, feature→WorldEngine/SaveCoordinator, feature→mutable Repository; 허용 edge: save→simulation/database, tools:headless→simulation/database/save/testing",
+      "금지 edge/API 6종은 각각 실패하고 허용 edge와 두 JVM compile은 통과"
+    ],
+    "failure": [
+      "잠금 버전 의존성 resolve 실패",
+      "빌드 차단; 자동 최신 버전으로 변경하지 않음"
+    ],
+    "kw": [
+      "기술",
+      "플랫폼",
+      "Baseline",
+      "버전",
+      "Kotlin",
+      "Java",
+      "Unity",
+      "KMP",
+      "Architecture",
+      "Module",
+      "CI",
+      "Git",
+      "서버"
+    ],
+    "state": "DISCOVERED → LOCKED → COMPILE_VERIFIED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      122,
+      3022,
+      3023,
+      3024,
+      3025,
+      3026,
+      3027,
+      3028,
+      3029,
+      3030,
+      3031,
+      3032,
+      3095,
+      3115,
+      3116,
+      3126,
+      3130,
+      3134
+    ],
+    "test_ids": [
+      "P0-UT-002",
+      "P0-BT-002",
+      "P0-FT-002",
+      "P0-CT-002",
+      "P0-IT-002"
+    ],
+    "task_ids": [
+      "P0-TASK-006",
+      "P0-TASK-007",
+      "P0-TASK-008",
+      "P0-TASK-009",
+      "P0-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 0,
+    "i": 3,
+    "id": "FUNC-P0-003",
+    "name": "공통 타입·명령·오류·이벤트 계약",
+    "method": "ContractRegistry.validate(command: WorldCommand, event: DomainEvent) -> ContractResult",
+    "tables": [],
+    "rules": [
+      "GameMinute·CombatMillis·Money·BasisPoint·EntityId를 구분하고 혼합 연산을 차단한다",
+      "공통 CommandEnvelope는 commandId/sessionEpoch/expectedVersion/payload를 포함한다",
+      "DomainEvent는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload를 포함한다",
+      "기능 미구현 port는 UnsupportedFeature를 반환하며 성공을 가장한 no-op을 금지한다"
+    ],
+    "normal": [
+      "Money(100), debit=40",
+      "Money(60), 원본 값은 불변"
+    ],
+    "edge": [
+      "Long.MAX_VALUE+1 금액 연산",
+      "ArithmeticOverflow 오류·상태변경 없음"
+    ],
+    "failure": [
+      "잘못된 sessionEpoch 명령",
+      "StaleSession; 다른 슬롯 변경 없음"
+    ],
+    "kw": [
+      "ID",
+      "Enum",
+      "Error",
+      "Context",
+      "Date",
+      "Logging",
+      "Event",
+      "Mapper",
+      "Repository"
+    ],
+    "state": "RECEIVED → VALIDATED 또는 REJECTED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      126,
+      3042,
+      3043,
+      3091,
+      3092,
+      3093,
+      3094,
+      3096,
+      3122,
+      3123
+    ],
+    "test_ids": [
+      "P0-UT-003",
+      "P0-BT-003",
+      "P0-FT-003",
+      "P0-CT-003",
+      "P0-IT-003"
+    ],
+    "task_ids": [
+      "P0-TASK-011",
+      "P0-TASK-012",
+      "P0-TASK-013",
+      "P0-TASK-014",
+      "P0-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 0,
+    "i": 4,
+    "id": "FUNC-P0-004",
+    "name": "최소 검증 하네스·공통 UI 껍데기",
+    "method": "SmokeHarness.run(seed: Long, fixture: FixtureId) -> SmokeReport",
+    "tables": [],
+    "rules": [
+      "새게임·던전·전투·세이브 진입용 최소 route와 loading/empty/error 상태를 먼저 만든다",
+      "공통 FakeClock·ScriptedRng·FaultInjector를 JVM test에서 제공한다",
+      "core import 규칙·문서 ID 링크·Schema smoke를 CI 초기 단계에 둔다",
+      "후속 Phase의 실제 화면은 각 Phase에서 추가하고 P22에서 디자인 전체 통합한다"
+    ],
+    "normal": [
+      "fixture=EMPTY_WORLD, seed=42",
+      "같은 초기 stateHash와 홈 empty state"
+    ],
+    "edge": [
+      "선행 기능 port가 UnsupportedFeature",
+      "기능 준비 안 됨 표시; 앱 crash 없음"
+    ],
+    "failure": [
+      "headless runner가 실게임 DB 경로를 받음",
+      "실행 거절; 원본 DB hash 불변"
+    ],
+    "kw": [
+      "테스트",
+      "JVM",
+      "debug",
+      "Build",
+      "Vertical",
+      "Slice",
+      "우선순위"
+    ],
+    "state": "PENDING → RUNNING → PASS/FAIL",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      3131,
+      3132,
+      3133
+    ],
+    "test_ids": [
+      "P0-UT-004",
+      "P0-BT-004",
+      "P0-FT-004",
+      "P0-CT-004",
+      "P0-IT-004"
+    ],
+    "task_ids": [
+      "P0-TASK-016",
+      "P0-TASK-017",
+      "P0-TASK-018",
+      "P0-TASK-019",
+      "P0-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 1,
+    "i": 1,
+    "id": "FUNC-P1-001",
+    "name": "정적 카탈로그 스키마와 ID 보존",
+    "method": "CatalogImporter.import(source: ContentSource, version: ContentVersion) -> CatalogDraft",
+    "tables": [
+      "content_manifest",
+      "content_template",
+      "content_alias"
+    ],
+    "rules": [
+      "원문 카탈로그 ID·한글명·등급·태그·수치·단위를 원본 필드로 유지한다",
+      "무기420/방어구480/장신구420/아이템180/몬스터300과 별도 스킬·보스·이벤트 카탈로그를 검증한다",
+      "설명만 있는 효과는 미정 필드로 기록하고 임의 수치를 실제 원문값처럼 채우지 않는다",
+      "잘못된 조사/표기 교정은 displayName override와 원문명 이력을 별도 관리한다"
+    ],
+    "normal": [
+      "WPN-0001 물리19 레벨1",
+      "원문 ID와 수치가 content_template에 일치"
+    ],
+    "edge": [
+      "같은 ID 두 행, 서로 다른 효과",
+      "중복 오류와 두 원문 행번호 반환"
+    ],
+    "failure": [
+      "참조되지 않는 MON ID가 loot에 있음",
+      "정적 번들 발행 차단"
+    ],
+    "kw": [
+      "카탈로그",
+      "실제",
+      "데이터",
+      "콘텐츠",
+      "수량",
+      "파일",
+      "스키마",
+      "데이터",
+      "관리"
+    ],
+    "state": "RAW → PARSED → VALIDATED → PUBLISHED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      51,
+      56,
+      118,
+      119,
+      120,
+      128,
+      129,
+      130,
+      131,
+      132,
+      133,
+      134,
+      135,
+      136,
+      137,
+      138,
+      140
+    ],
+    "test_ids": [
+      "P1-UT-001",
+      "P1-BT-001",
+      "P1-FT-001",
+      "P1-CT-001",
+      "P1-IT-001"
+    ],
+    "task_ids": [
+      "P1-TASK-001",
+      "P1-TASK-002",
+      "P1-TASK-003",
+      "P1-TASK-004",
+      "P1-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 1,
+    "i": 2,
+    "id": "FUNC-P1-002",
+    "name": "콘텐츠 검증·사전 DB 빌드",
+    "method": "ContentBuilder.build(draft: CatalogDraft, rules: BuildRules) -> ContentBundle",
+    "tables": [
+      "content_manifest",
+      "content_template",
+      "content_alias"
+    ],
+    "rules": [
+      "schema/type/range/reference/태그 충돌/레시피 순환을 검사한다",
+      "validation report에 ERROR/WARN과 영향 ID를 남긴다",
+      "content.db는 임시 디렉터리에서 생성·무결성 검사 후 manifest와 함께 발행한다",
+      "Prototype/Alpha/Full은 데이터 profile만 다르며 최종 Full 목표를 삭제하지 않는다"
+    ],
+    "normal": [
+      "두 번 동일 소스를 빌드",
+      "canonical 콘텐츠 hash 동일, wall-clock metadata는 hash 제외"
+    ],
+    "edge": [
+      "태그 허용과 금지 동시 지정",
+      "ERROR; 합리화하여 자동 수정하지 않음"
+    ],
+    "failure": [
+      "DB 빌드 중 I/O 실패",
+      "직전 승인 bundle 유지; 절반짜리 bundle 비활성"
+    ],
+    "kw": [
+      "Validator",
+      "검증",
+      "Pipeline",
+      "Build",
+      "Format",
+      "Content"
+    ],
+    "state": "DRAFT → CHECKED → STAGED → ACTIVE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      3049,
+      3051,
+      3076,
+      3077,
+      3078,
+      3117
+    ],
+    "test_ids": [
+      "P1-UT-002",
+      "P1-BT-002",
+      "P1-FT-002",
+      "P1-CT-002",
+      "P1-IT-002"
+    ],
+    "task_ids": [
+      "P1-TASK-006",
+      "P1-TASK-007",
+      "P1-TASK-008",
+      "P1-TASK-009",
+      "P1-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 1,
+    "i": 3,
+    "id": "FUNC-P1-003",
+    "name": "로컬 이미지·AssetResolver·크롭",
+    "method": "AssetResolver.resolve(key: AssetKey, usage: ImageUsage) -> LocalAssetRef",
+    "tables": [
+      "asset_image",
+      "asset_binding",
+      "asset_fallback"
+    ],
+    "rules": [
+      "원문 10,000장 NPC 파일명과 단일 portraitKey 사용을 유지한다",
+      "domain에는 Key만 저장하며 Android URI 조합은 core:image에서 수행한다",
+      "사용처별 crop profile을 적용하고 fallback이 발생해도 저장된 원래 key를 바꾸지 않는다",
+      "네트워크 URI·경로 탈출·임의 파일 접근은 거부하고 실제 자산 미제공 상태는 NOT_PROVIDED로 기록한다"
+    ],
+    "normal": [
+      "NPC-W-03147, BATTLE_TOKEN",
+      "동일 파일의 1:1 crop과 원래 key 유지"
+    ],
+    "edge": [
+      "해당 파일 없음",
+      "여성 generic fallback 표시; NPC identity 불변"
+    ],
+    "failure": [
+      "../../save.db를 asset key로 입력",
+      "InvalidAssetKey; 파일 읽지 않음"
+    ],
+    "kw": [
+      "이미지",
+      "asset",
+      "Asset",
+      "Portrait",
+      "파일명",
+      "경로",
+      "crop",
+      "Crop",
+      "Fallback",
+      "fallback",
+      "해상도",
+      "캐시",
+      "Placeholder"
+    ],
+    "state": "RESOLVE → LOCAL/OVERRIDE/FALLBACK",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2709,
+      2710,
+      2711,
+      2712,
+      2713,
+      2714,
+      2715,
+      2716,
+      2717,
+      2718,
+      2719,
+      2720,
+      2721,
+      2722,
+      2723,
+      2724,
+      2725,
+      2726,
+      2727,
+      2728,
+      2729,
+      2730,
+      2731,
+      2732,
+      2733,
+      2734,
+      2735,
+      2736,
+      2737,
+      2738,
+      2739,
+      2740,
+      2741,
+      2742,
+      2743,
+      2744,
+      2745,
+      2746,
+      2747,
+      2748,
+      2749,
+      2750,
+      2751,
+      2752,
+      2753,
+      2754,
+      2755,
+      2756,
+      2757,
+      2758,
+      2759,
+      2760,
+      2761,
+      2769,
+      2770,
+      2771,
+      2772,
+      2773,
+      2774,
+      2775,
+      2776,
+      2777,
+      2778,
+      2779,
+      2780,
+      2781,
+      2784,
+      2785,
+      2786,
+      2787,
+      2788,
+      2789,
+      2792,
+      2793,
+      2794,
+      2795,
+      2796,
+      3079,
+      3080,
+      3081,
+      3082
+    ],
+    "test_ids": [
+      "P1-UT-003",
+      "P1-BT-003",
+      "P1-FT-003",
+      "P1-CT-003",
+      "P1-IT-003"
+    ],
+    "task_ids": [
+      "P1-TASK-011",
+      "P1-TASK-012",
+      "P1-TASK-013",
+      "P1-TASK-014",
+      "P1-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 1,
+    "i": 4,
+    "id": "FUNC-P1-004",
+    "name": "콘텐츠·이미지 버전 교체와 호환",
+    "method": "ContentBinding.resolve(saved: ContentBinding, installed: ContentBundle) -> BindingPlan",
+    "tables": [
+      "content_manifest",
+      "content_alias",
+      "asset_image"
+    ],
+    "rules": [
+      "save contentVersion과 생성기/밸런스/RNG 버전을 별도로 저장한다",
+      "삭제 ID는 alias 또는 legacy snapshot으로 복구하며 의미가 다른 템플릿으로 자동 치환하지 않는다",
+      "자산팩 변경은 파일 checksum만 새로 계산하고 NPC의 portrait key는 그대로 유지한다",
+      "선택 자산팩/표정 variant는 선택 범위로 추적하되 기본 오프라인 플레이를 막지 않는다"
+    ],
+    "normal": [
+      "옛 ID alias OLD-WPN→WPN-0001",
+      "변환 이력과 이전 ID 보존"
+    ],
+    "edge": [
+      "선택 이미지 팩 비활성",
+      "기본 portrait/fallback으로 정상 표시"
+    ],
+    "failure": [
+      "필수 스킬 ID에 alias/legacy 없음",
+      "로드 차단·원본 세이브 보존"
+    ],
+    "kw": [
+      "version",
+      "버전",
+      "패치",
+      "배포",
+      "Update",
+      "Compatibility",
+      "운영",
+      "팩"
+    ],
+    "state": "BOUND → COMPATIBLE/MIGRATION_REQUIRED/UNSUPPORTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2782,
+      2783,
+      2790,
+      2791
+    ],
+    "test_ids": [
+      "P1-UT-004",
+      "P1-BT-004",
+      "P1-FT-004",
+      "P1-CT-004",
+      "P1-IT-004"
+    ],
+    "task_ids": [
+      "P1-TASK-016",
+      "P1-TASK-017",
+      "P1-TASK-018",
+      "P1-TASK-019",
+      "P1-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 2,
+    "i": 1,
+    "id": "FUNC-P2-001",
+    "name": "단일 작성자 명령 처리",
+    "method": "WorldEngine.execute(envelope: CommandEnvelope) -> CommandResult",
+    "tables": [
+      "world_state",
+      "command_receipt",
+      "world_event",
+      "rng_state"
+    ],
+    "rules": [
+      "하나의 WorldSession actor만 authoritative state를 수정한다",
+      "commandId와 expectedVersion을 검사한 뒤 불변 읽기 스냅샷에서 Delta를 계산한다",
+      "DB 커밋 성공 이후에만 메모리·UI snapshot을 publish한다",
+      "중복 commandId는 기존 receipt를 반환하며 핵심 계산 실패는 일시정지하고 결과를 건너뛰지 않는다"
+    ],
+    "normal": [
+      "동일 commandId로 금화40 지출을 2회 요청, 잔액100",
+      "잔액60·receipt 1개·stateVersion 1회 증가"
+    ],
+    "edge": [
+      "과거 expectedVersion",
+      "Conflict, 재조회 안내·변경0"
+    ],
+    "failure": [
+      "commit 실패",
+      "이전 stateHash/RNG/receipt 유지"
+    ],
+    "kw": [
+      "WorldEngine",
+      "Writer",
+      "Command",
+      "Thread",
+      "Dispatcher",
+      "동시성",
+      "Snapshot"
+    ],
+    "state": "QUEUED → VALIDATING → COMPUTED → COMMITTED → PUBLISHED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      3044,
+      3045,
+      3056,
+      3059,
+      3060,
+      3061,
+      3062
+    ],
+    "test_ids": [
+      "P2-UT-001",
+      "P2-BT-001",
+      "P2-FT-001",
+      "P2-CT-001",
+      "P2-IT-001"
+    ],
+    "task_ids": [
+      "P2-TASK-001",
+      "P2-TASK-002",
+      "P2-TASK-003",
+      "P2-TASK-004",
+      "P2-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 2,
+    "i": 2,
+    "id": "FUNC-P2-002",
+    "name": "게임 달력·잔여 밀리초·RNG 스트림",
+    "method": "TimeRngKernel.advanceCombat(ms: CombatMillis, clock: WorldClock) -> ClockDelta",
+    "tables": [
+      "world_state",
+      "rng_state"
+    ],
+    "rules": [
+      "1년360일·월30일·일24시간과 authoritative totalGameMinutes를 유지한다",
+      "설계 보완안으로 subMinuteMs 0~59999를 저장해 전투 시간을 분에 누적 변환하며 매 전투 ceil은 금지한다",
+      "버전 고정 PCG 계열을 채택하고 stream별 state/counter를 snapshot한다",
+      "UI·이름·초상 RNG가 전투/전리품 RNG에 영향을 주지 않는다"
+    ],
+    "normal": [
+      "clock=(분0,잔여0), 10초 전투를6회",
+      "clock=(분1,잔여0); 1회60초와 동일"
+    ],
+    "edge": [
+      "23:59 +1분, 12월30일",
+      "다음 연도1월1일00:00"
+    ],
+    "failure": [
+      "미지원 rngAlgorithmVersion",
+      "복구 중단; 다른 난수기로 자동 대체 금지"
+    ],
+    "kw": [
+      "달력",
+      "시간",
+      "단위",
+      "RNG",
+      "Seed",
+      "Random",
+      "확률",
+      "돈"
+    ],
+    "state": "(minute,remainder) → canonical clock + stream snapshots",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      7,
+      121,
+      3066,
+      3067,
+      3068,
+      3069,
+      3070,
+      3071
+    ],
+    "test_ids": [
+      "P2-UT-002",
+      "P2-BT-002",
+      "P2-FT-002",
+      "P2-CT-002",
+      "P2-IT-002"
+    ],
+    "task_ids": [
+      "P2-TASK-006",
+      "P2-TASK-007",
+      "P2-TASK-008",
+      "P2-TASK-009",
+      "P2-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 2,
+    "i": 3,
+    "id": "FUNC-P2-003",
+    "name": "예약·점유·자원 선점",
+    "method": "ScheduleService.reserve(request: ScheduleRequest, calendar: OccupancyView) -> ReservationDelta",
+    "tables": [
+      "scheduled_action",
+      "occupancy",
+      "resource_reservation"
+    ],
+    "rules": [
+      "인물 점유 구간은 반열린 [start,end)로 정의한다",
+      "제작재료 선점은 available=owned-reserved로 계산하고 다른 예약과 재사용하지 못한다",
+      "실제 동시 활동은 하나의 월드시간 위에서 여러 due event로 모델링하며 Thread를 NPC별로 생성하지 않는다",
+      "취소·만료·대상 소멸 시 해제할 자원과 이미 소비된 비용을 구분한다"
+    ],
+    "normal": [
+      "리아 [14:00,18:00) 치료 후 [18:00,20:00) 훈련",
+      "경계 접점은 충돌 없음"
+    ],
+    "edge": [
+      "동일 인물 [17:59,19:00)",
+      "ScheduleConflict; 선점 생성0"
+    ],
+    "failure": [
+      "재료예약 뒤 일정저장 실패",
+      "자원 예약/일정 모두 rollback"
+    ],
+    "kw": [
+      "예약",
+      "일정",
+      "선점",
+      "Scheduled",
+      "충돌",
+      "반복",
+      "점유"
+    ],
+    "state": "PLANNED → RESERVED → RUNNING → COMPLETED/CANCELLED/FAILED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1998,
+      1999,
+      2000,
+      2001,
+      2002,
+      2003,
+      2004,
+      2005,
+      2031,
+      2032,
+      2033,
+      2037,
+      2038,
+      2039,
+      2040
+    ],
+    "test_ids": [
+      "P2-UT-003",
+      "P2-BT-003",
+      "P2-FT-003",
+      "P2-CT-003",
+      "P2-IT-003"
+    ],
+    "task_ids": [
+      "P2-TASK-011",
+      "P2-TASK-012",
+      "P2-TASK-013",
+      "P2-TASK-014",
+      "P2-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 2,
+    "i": 4,
+    "id": "FUNC-P2-004",
+    "name": "이벤트 경계 시간진행·자동중단",
+    "method": "TimeAdvanceEngine.advance(request: TimeAdvanceRequest) -> AdvanceResult",
+    "tables": [
+      "world_state",
+      "scheduled_action",
+      "time_advance_state",
+      "world_event"
+    ],
+    "rules": [
+      "다음 예약·날짜·질병·던전·위기 경계의 최소값으로 점프한다",
+      "같은 시각은 예약완료→인물상태→던전→시장→랭킹→사건 순서를 고정하되 승인된 phase order 버전으로 관리한다",
+      "P0 중단은 해제 불가이며 P1~P4 정책을 평가해 남은 목표와 lastProcessedBoundary를 보존한다",
+      "30일 전체를 하나의 장시간 transaction으로 묶지 않고 경계별 bounded commit한다"
+    ],
+    "normal": [
+      "08:00→내일08:00,10:30 치료완료 중단 설정",
+      "10:30에서 정지·치료1회완료·남은 목표 유지"
+    ],
+    "edge": [
+      "target=current, due event 없음",
+      "NoOp·시간/RNG 불변"
+    ],
+    "failure": [
+      "3일째 처리 실패",
+      "마지막 성공 경계에서 정지; 다음 실행에서 이미 처리한 일마감 재실행 없음"
+    ],
+    "kw": [
+      "시간",
+      "진행",
+      "중단",
+      "Interrupt",
+      "boundary",
+      "경계",
+      "일일",
+      "주간",
+      "월간",
+      "연간"
+    ],
+    "state": "IDLE → ADVANCING → INTERRUPTED/COMPLETED/FAILED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1991,
+      1992,
+      1993,
+      1994,
+      1995,
+      1996,
+      1997,
+      2006,
+      2007,
+      2008,
+      2009,
+      2010,
+      2011,
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026,
+      2027,
+      2028,
+      2029,
+      2030,
+      2034,
+      2035,
+      2036,
+      2041,
+      2042,
+      2043,
+      2044,
+      2045,
+      2046,
+      3058
+    ],
+    "test_ids": [
+      "P2-UT-004",
+      "P2-BT-004",
+      "P2-FT-004",
+      "P2-CT-004",
+      "P2-IT-004"
+    ],
+    "task_ids": [
+      "P2-TASK-016",
+      "P2-TASK-017",
+      "P2-TASK-018",
+      "P2-TASK-019",
+      "P2-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 2,
+    "i": 5,
+    "id": "FUNC-P2-005",
+    "name": "세션·생명주기·작업 종료",
+    "method": "WorldSession.close(reason: CloseReason) -> CloseResult",
+    "tables": [
+      "world_state",
+      "time_advance_state"
+    ],
+    "rules": [
+      "앱 background에 새 명령 유입을 멈추고 안전한 경계에서 일시정지한다",
+      "structured concurrency와 세션 epoch로 이전 슬롯 작업을 무효화한다",
+      "DB 커밋 작업과 CPU 계산 취소를 분리하고 CancellationException을 일반 실패로 삼켜 계속하지 않는다",
+      "종료 callback이 반드시 호출된다고 가정하지 않으며 이미 커밋한 체크포인트에서 복원한다"
+    ],
+    "normal": [
+      "앱 종료 후 현실24시간 경과 후 재실행",
+      "worldTime·치료 잔여시간 동일"
+    ],
+    "edge": [
+      "슬롯A 이미지/DB 응답 지연 중 슬롯B 로드",
+      "epoch A 응답을 버려 B에 쓰기0"
+    ],
+    "failure": [
+      "프로세스 즉시 kill로 onStop 미실행",
+      "마지막 committed 상태만 복원"
+    ],
+    "kw": [
+      "Lifecycle",
+      "Background",
+      "WorkManager",
+      "session",
+      "생명주기",
+      "종료"
+    ],
+    "state": "OPEN → PAUSING → PAUSED → CLOSING → CLOSED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      3057,
+      3086,
+      3087,
+      3088,
+      3089
+    ],
+    "test_ids": [
+      "P2-UT-005",
+      "P2-BT-005",
+      "P2-FT-005",
+      "P2-CT-005",
+      "P2-IT-005"
+    ],
+    "task_ids": [
+      "P2-TASK-021",
+      "P2-TASK-022",
+      "P2-TASK-023",
+      "P2-TASK-024",
+      "P2-TASK-025"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 3,
+    "i": 1,
+    "id": "FUNC-P3-001",
+    "name": "현재상태 스키마·Dirty 단위 저장",
+    "method": "WorldSession.execute(command: CheckpointWorld) -> CommandResult; WorldEngine computes WorldDelta; SavePort.commit(delta: WorldDelta, expected: StateVersion) -> CommitReceipt",
+    "tables": [
+      "world_state",
+      "command_receipt",
+      "world_event",
+      "rng_state",
+      "save_generation"
+    ],
+    "rules": [
+      "content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB를 transaction 안에서 호출하지 않는다",
+      "DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다",
+      "current normalized row·RNG·receipt·events·generation manifest를 동일 write transaction에서 갱신한다",
+      "Dirty set은 성공한 commit만 해제하며 UI는 durable version만 저장됨으로 표시한다",
+      "WorldEngine은 :core:simulation의 SavePort만 의존하고 :core:save의 SaveCoordinator는 이를 구현하며 새 CommandEnvelope·commandId·중첩 receipt/Event를 만들지 않는다"
+    ],
+    "normal": [
+      "아이템 이동+금화지출+RNG 1회",
+      "세 요소와 receipt가 같은 generation에서 보임"
+    ],
+    "edge": [
+      "Dirty set 공집합",
+      "필요 metadata 변경 없으면 NoOp"
+    ],
+    "failure": [
+      "RNG row 쓰기 단계에서 예외",
+      "아이템·금화·RNG 전부 이전 값"
+    ],
+    "kw": [
+      "원자",
+      "Dirty",
+      "도메인",
+      "transaction",
+      "WAL",
+      "Metadata"
+    ],
+    "state": "SNAPSHOTTED → WRITING → COMMITTED/ABORTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2429,
+      2430,
+      2431,
+      2432,
+      2433,
+      2437,
+      2441,
+      2446,
+      2450,
+      2471,
+      2484,
+      2485,
+      2487,
+      2492,
+      2497,
+      2498,
+      2512,
+      2513,
+      2516,
+      2518,
+      2528,
+      3047,
+      3050,
+      3052,
+      3083
+    ],
+    "test_ids": [
+      "P3-UT-001",
+      "P3-BT-001",
+      "P3-FT-001",
+      "P3-CT-001",
+      "P3-IT-001"
+    ],
+    "task_ids": [
+      "P3-TASK-001",
+      "P3-TASK-002",
+      "P3-TASK-003",
+      "P3-TASK-004",
+      "P3-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 3,
+    "i": 2,
+    "id": "FUNC-P3-002",
+    "name": "복원 가능한 세대·슬롯·불변 청크",
+    "method": "GenerationStore.create(snapshot: WorldSnapshot, parent: GenerationId?) -> GenerationManifest",
+    "tables": [
+      "save_generation",
+      "save_slot",
+      "checkpoint_chunk",
+      "generation_chunk"
+    ],
+    "rules": [
+      "단순 generationNo만으로 이전 값을 복원할 수 없으므로 설계 보완안으로 불변 청크와 세대별 완전 manifest를 저장한다",
+      "변경 청크만 새로 저장하고 미변경 청크 참조를 재사용하며 세대 delta-chain replay는 기본으로 하지 않는다",
+      "자동3세대·수동5슬롯·전투/진행/마이그레이션 root를 분리한다",
+      "보존 root에서 도달 가능한 청크는 절대 GC하지 않고 과거 로드시 새 branch와 epoch를 만든다"
+    ],
+    "normal": [
+      "g1 금화100, g2 금화60 이후 g1 로드",
+      "금화100 복원; g2 내용도 보존"
+    ],
+    "edge": [
+      "수동슬롯 이름 동일2개",
+      "slotId가 달라 충돌 없음"
+    ],
+    "failure": [
+      "새 청크 완료 전 종료",
+      "g1의 완전 manifest로 복구; g2 조각 혼합 없음"
+    ],
+    "kw": [
+      "Generation",
+      "슬롯",
+      "자동저장",
+      "롤링",
+      "체크포인트",
+      "checksum",
+      "Manifest"
+    ],
+    "state": "WRITING → COMMITTED; retained roots → reachability GC",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2424,
+      2425,
+      2426,
+      2427,
+      2428,
+      2434,
+      2435,
+      2436,
+      2438,
+      2439,
+      2468,
+      2469,
+      2470,
+      2473,
+      2474,
+      2486,
+      2490,
+      2521,
+      2526,
+      2527,
+      2530,
+      2534
+    ],
+    "test_ids": [
+      "P3-UT-002",
+      "P3-BT-002",
+      "P3-FT-002",
+      "P3-CT-002",
+      "P3-IT-002"
+    ],
+    "task_ids": [
+      "P3-TASK-006",
+      "P3-TASK-007",
+      "P3-TASK-008",
+      "P3-TASK-009",
+      "P3-TASK-010"
+    ],
+    "related_sources": [
+      2420,
+      2427,
+      2428,
+      2535
+    ]
+  },
+  {
+    "p": 3,
+    "i": 3,
+    "id": "FUNC-P3-003",
+    "name": "전투·장기진행·대화 복구",
+    "method": "RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession",
+    "tables": [
+      "recovery_checkpoint",
+      "time_advance_state",
+      "dialogue_session"
+    ],
+    "rules": [
+      "전투 actor/actionId/queue/projectile/status/RNG와 combat/clock residual을 함께 저장한다",
+      "크래시 전투 이어하기와 전투시작 복귀 선택은 패배 SAFE_RECOVERY와 다른 operation이다",
+      "장기진행은 lastBoundary와 남은 target을, 선택형 이벤트는 choice receipt를 저장한다",
+      "체크포인트 중 일부만 다른 generation에서 가져오는 부분 복구를 금지한다"
+    ],
+    "normal": [
+      "투사체 발사 후 시전자 전투불능 checkpoint",
+      "유효 투사체만 이어지고 기존 발사 이벤트 재생성0"
+    ],
+    "edge": [
+      "전투 시작 상태로 복귀 선택",
+      "start checkpoint의 상태·RNG 전체 복원"
+    ],
+    "failure": [
+      "checkpoint checksum 불일치",
+      "직전 완전 generation 제안·손상 원본 유지"
+    ],
+    "kw": [
+      "Combat",
+      "Recovery",
+      "전투",
+      "크래시",
+      "TimeAdvance",
+      "관계",
+      "이벤트",
+      "투표",
+      "경매"
+    ],
+    "state": "FOUND → VALIDATED → RESTORED 또는 FALLBACK_OFFERED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2420,
+      2440,
+      2442,
+      2443,
+      2444,
+      2445,
+      2447,
+      2472,
+      2483,
+      2488,
+      2489,
+      2493,
+      2494,
+      2495,
+      2496,
+      2514,
+      2519,
+      2522,
+      2523,
+      3048
+    ],
+    "test_ids": [
+      "P3-UT-003",
+      "P3-BT-003",
+      "P3-FT-003",
+      "P3-CT-003",
+      "P3-IT-003"
+    ],
+    "task_ids": [
+      "P3-TASK-011",
+      "P3-TASK-012",
+      "P3-TASK-013",
+      "P3-TASK-014",
+      "P3-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 3,
+    "i": 4,
+    "id": "FUNC-P3-004",
+    "name": "마이그레이션·콘텐츠 호환",
+    "method": "MigrationPlanner.migrate(source: SaveArchive, target: SchemaVersion) -> MigrationResult",
+    "tables": [
+      "migration_history",
+      "save_generation",
+      "content_binding"
+    ],
+    "rules": [
+      "SchemaBaselineMode는 GREENFIELD_V1 또는 LEGACY_CHAIN이며 P0 증거로 고정한다",
+      "GREENFIELD_V1은 현재 승인 schema를 최초 v1로 생성·재오픈하고 migration 이력은 0개다",
+      "LEGACY_CHAIN만 실제 Room export schema와 불변 DB fixture를 N→N+1 순차 변환하며 destructive migration을 사용하지 않는다",
+      "schema/content/balance/generator/rng 버전을 독립 확인한다",
+      "컬럼 추가·분리·ID alias·enum mapping·derived rebuild마다 migration ID와 테스트 fixture를 둔다",
+      "신버전 세이브를 구버전 앱에서 열면 설명하고 차단한다"
+    ],
+    "normal": [
+      "GREENFIELD_V1, exported current schema v1, releasedFixtures=[]",
+      "migrationSteps=[]·가상 v2/v3 없음·fresh v1 왕복 검증 계획 생성"
+    ],
+    "edge": [
+      "지원보다 새로운 schema",
+      "UnsupportedSaveVersion·원본 hash 동일"
+    ],
+    "failure": [
+      "실제 N→N+1 체인의 한 단계에 FaultInjector로 중간 migration 실패 주입",
+      "실패 복제본 격리·원본으로 복귀"
+    ],
+    "kw": [
+      "Migration",
+      "마이그레이션",
+      "Compatibility",
+      "이전",
+      "버전",
+      "콘텐츠",
+      "삭제",
+      "파생"
+    ],
+    "state": "BACKED_UP → MIGRATING → VALIDATED → ACTIVATED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2422,
+      2423,
+      2448,
+      2449,
+      2452,
+      2453,
+      2454,
+      2455,
+      2456,
+      2457,
+      2458,
+      2459,
+      2460,
+      2461,
+      2462,
+      2475,
+      2479,
+      2481,
+      2499,
+      2520,
+      2529,
+      2535,
+      3053,
+      3112,
+      3113
+    ],
+    "test_ids": [
+      "P3-UT-004",
+      "P3-BT-004",
+      "P3-FT-004",
+      "P3-CT-004",
+      "P3-IT-004"
+    ],
+    "task_ids": [
+      "P3-TASK-016",
+      "P3-TASK-017",
+      "P3-TASK-018",
+      "P3-TASK-019",
+      "P3-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 3,
+    "i": 5,
+    "id": "FUNC-P3-005",
+    "name": "오프라인 Export·Import·아카이브 보호",
+    "method": "SaveArchiveService.importArchive(input: LocalDocument) -> NewSlotResult",
+    "tables": [
+      "save_slot",
+      "save_generation",
+      "recovery_journal"
+    ],
+    "rules": [
+      "SAF로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다",
+      "경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding을 검사한다",
+      "WAL 사용 중 열린 save.db만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다",
+      "checksum은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다"
+    ],
+    "normal": [
+      "정상 archive 가져오기",
+      "새 slotId·기존 슬롯 hash 불변·동일 상태 복원"
+    ],
+    "edge": [
+      "archive에 ../save.db 경로",
+      "UnsafeArchive 오류·외부 파일 생성0"
+    ],
+    "failure": [
+      "export 중 공간 부족",
+      "완성 표시하지 않음·부분파일 제거·기존 save 보존"
+    ],
+    "kw": [
+      "Export",
+      "Import",
+      "기기",
+      "이동",
+      "암호화",
+      "개인정보",
+      "파일",
+      "클라우드"
+    ],
+    "state": "SELECTED → VERIFIED → STAGED → NEW_SLOT",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2451,
+      2500,
+      2501,
+      2502,
+      2503,
+      2504,
+      2505,
+      2506,
+      2507,
+      2508,
+      2509,
+      2510,
+      2511,
+      2515,
+      3084,
+      3085,
+      3114
+    ],
+    "test_ids": [
+      "P3-UT-005",
+      "P3-BT-005",
+      "P3-FT-005",
+      "P3-CT-005",
+      "P3-IT-005"
+    ],
+    "task_ids": [
+      "P3-TASK-021",
+      "P3-TASK-022",
+      "P3-TASK-023",
+      "P3-TASK-024",
+      "P3-TASK-025"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 3,
+    "i": 6,
+    "id": "FUNC-P3-006",
+    "name": "무결성 검사·복구·보존 GC",
+    "method": "SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport",
+    "tables": [
+      "checkpoint_chunk",
+      "generation_chunk",
+      "save_generation",
+      "recovery_journal"
+    ],
+    "rules": [
+      "quick load는 핵심참조·시계·player·소유권·예약·RNG를 검사하고 deep audit은 전체 graph를 검사한다",
+      "손상은 최신 정상 세대→이전 자동저장 순으로 제안한다",
+      "즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다",
+      "공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다"
+    ],
+    "normal": [
+      "현재 g3 손상, g2 정상",
+      "g2 복원 제안·손실 경계와 시간 표시"
+    ],
+    "edge": [
+      "미참조 checkpoint chunk 1개",
+      "보존 root 검증 후 그 chunk만 GC"
+    ],
+    "failure": [
+      "GC 중단",
+      "트랜잭션 rollback·모든 보존 root 로드 가능"
+    ],
+    "kw": [
+      "Integrity",
+      "손상",
+      "검사",
+      "복구",
+      "압축",
+      "삭제",
+      "보존",
+      "용량",
+      "크기"
+    ],
+    "state": "CHECKED → HEALTHY/RECOVERABLE/CORRUPTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2421,
+      2463,
+      2464,
+      2465,
+      2466,
+      2467,
+      2476,
+      2477,
+      2478,
+      2480,
+      2482,
+      2491,
+      2517,
+      2524,
+      2525,
+      2531,
+      2532,
+      2533
+    ],
+    "test_ids": [
+      "P3-UT-006",
+      "P3-BT-006",
+      "P3-FT-006",
+      "P3-CT-006",
+      "P3-IT-006"
+    ],
+    "task_ids": [
+      "P3-TASK-026",
+      "P3-TASK-027",
+      "P3-TASK-028",
+      "P3-TASK-029",
+      "P3-TASK-030"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 4,
+    "i": 1,
+    "id": "FUNC-P4-001",
+    "name": "NPC 생성·성별 이름·초상 일괄 확정",
+    "method": "NpcFactory.create(request: NpcCreationRequest, ctx: CreationContext) -> NpcCreatedDelta",
+    "tables": [
+      "mercenary",
+      "name_registry",
+      "portrait_reservation",
+      "character_stat"
+    ],
+    "rules": [
+      "sexCode M/W에 맞는 이름 pool과 NPC-M/NPC-W 00001~05000 pool을 독립 RNG로 선택한다",
+      "가족 surname을 우선하고 이름 중복은 최대20회 재시도 뒤 성씨 대안/동명이인 표시로 종료한다",
+      "portrait ACTIVE·PERMANENT를 우선 보호하고 고갈 시 일반 cooldown→일반 중복 허용으로 생성 자체를 실패시키지 않는다",
+      "이름·얼굴·NPC·예약을 같은 commit에 저장하고 로드시 재추첨하지 않는다"
+    ],
+    "normal": [
+      "여성 NPC-1, 성씨 발렌, 남성pool도 존재",
+      "NPC-W 범위 portrait·발렌 성씨·세 레코드 동일 commit"
+    ],
+    "edge": [
+      "여성pool 전부 일반 ACTIVE, 보호키 제외 가능",
+      "일반 shared fallback 허용·collision metric 기록"
+    ],
+    "failure": [
+      "portrait 예약 후 NPC insert 실패",
+      "이름예약·초상예약·NPC 모두0"
+    ],
+    "kw": [
+      "이름",
+      "name",
+      "Name",
+      "Portrait",
+      "생성",
+      "성별",
+      "Normalize"
+    ],
+    "state": "DRAFT → NAME_ALLOCATED → PORTRAIT_ALLOCATED → COMMITTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2762,
+      2763,
+      2764,
+      2765,
+      2766,
+      2767,
+      2768,
+      2797,
+      2798,
+      2799,
+      2800,
+      2801,
+      2802,
+      2803,
+      2804,
+      2805,
+      2806,
+      2807,
+      2808,
+      2809,
+      2810,
+      2811,
+      2812,
+      2813,
+      2814,
+      2815,
+      2816,
+      2817,
+      2818,
+      2819,
+      2984,
+      2985,
+      2986,
+      2987,
+      2988,
+      2989,
+      2990,
+      2991,
+      2992,
+      2993,
+      2994,
+      2995,
+      2996,
+      2997,
+      2998,
+      2999,
+      3000,
+      3001,
+      3002,
+      3003,
+      3004,
+      3005,
+      3006,
+      3007,
+      3008,
+      3009,
+      3010,
+      3011,
+      3012,
+      3013,
+      3014,
+      3015,
+      3016,
+      3017,
+      3018,
+      3019,
+      3020,
+      3021,
+      3075
+    ],
+    "test_ids": [
+      "P4-UT-001",
+      "P4-BT-001",
+      "P4-FT-001",
+      "P4-CT-001",
+      "P4-IT-001"
+    ],
+    "task_ids": [
+      "P4-TASK-001",
+      "P4-TASK-002",
+      "P4-TASK-003",
+      "P4-TASK-004",
+      "P4-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 4,
+    "i": 2,
+    "id": "FUNC-P4-002",
+    "name": "기본스탯·경험치·성장원장",
+    "method": "GrowthService.applyExperience(id: NpcId, amount: Experience) -> GrowthDelta",
+    "tables": [
+      "mercenary",
+      "character_stat",
+      "growth_ledger"
+    ],
+    "rules": [
+      "7기본스탯10·생성포인트14와 생성상한15는 원문 기준값/권장값을 구분한다",
+      "경험치는 §626의 100×level^1.70×구간보정을 사용하며 초안 지수식은 대체 이력으로 남긴다",
+      "레벨업당 자동1·자유1,10레벨마다 자유2를 원장으로 적립한다",
+      "소프트캡 경계 비용은 현재 수치 기준이며 자동성장·영구 이벤트·장비분을 분리한다"
+    ],
+    "normal": [
+      "레벨9→10 1회 상승",
+      "자동성장1·자유포인트3 지급, ledger 중복0"
+    ],
+    "edge": [
+      "현재스탯30에서1 투자,31에서1 투자",
+      "각 비용1,2; 포인트 부족 시 두 번째만 거절"
+    ],
+    "failure": [
+      "같은 level event 재수신",
+      "성장 보상 추가0"
+    ],
+    "kw": [
+      "스탯",
+      "레벨",
+      "성장",
+      "경험치",
+      "기본",
+      "능력치"
+    ],
+    "state": "EXPERIENCE_ADDED → LEVELS_RESOLVED → LEDGER_APPLIED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2,
+      8,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      37,
+      40,
+      626,
+      627,
+      628,
+      629,
+      630,
+      631,
+      632,
+      633,
+      634,
+      635,
+      1421,
+      1458,
+      1459,
+      1472,
+      1482,
+      1484,
+      1496
+    ],
+    "test_ids": [
+      "P4-UT-002",
+      "P4-BT-002",
+      "P4-FT-002",
+      "P4-CT-002",
+      "P4-IT-002"
+    ],
+    "task_ids": [
+      "P4-TASK-006",
+      "P4-TASK-007",
+      "P4-TASK-008",
+      "P4-TASK-009",
+      "P4-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 4,
+    "i": 3,
+    "id": "FUNC-P4-003",
+    "name": "잠재력·후천변화·숙련",
+    "method": "PotentialService.apply(change: PotentialChange, current: CharacterPotential) -> PotentialDelta",
+    "tables": [
+      "character_stat",
+      "potential_event",
+      "mastery"
+    ],
+    "rules": [
+      "스탯별 BasePotential과 후천 PotentialModifier를 분리해 현재스탯과 혼동하지 않는다",
+      "클래스 교체는 잠재력을 감소시키지 않고 부상 손상/재활 복원은 출처 이벤트로 관리한다",
+      "원문 잠재력 상승 상한·분포·반복 감쇠를 데이터 규칙으로 운영한다",
+      "분야숙련·스킬숙련은 클래스 레벨/전직 시스템과 별개다"
+    ],
+    "normal": [
+      "부상 modifier -3 뒤 동일 injury의 재활 +3",
+      "basePotential 불변·해당 손상만0으로 복원"
+    ],
+    "edge": [
+      "이미 복원된 injury 재활 반복 요청",
+      "추가 잠재력+3 없음"
+    ],
+    "failure": [
+      "원문 수치가 없는 변화효과",
+      "콘텐츠 승인 전 활성 차단·임의 영구상승 금지"
+    ],
+    "kw": [
+      "잠재력",
+      "숙련",
+      "재능",
+      "특수",
+      "성장",
+      "후천"
+    ],
+    "state": "BASE + MODIFIERS → EFFECTIVE; DAMAGED → REHABILITATED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      23,
+      1420,
+      1422,
+      1423,
+      1424,
+      1425,
+      1426,
+      1427,
+      1428,
+      1429,
+      1430,
+      1432,
+      1433,
+      1434,
+      1435,
+      1436,
+      1437,
+      1438,
+      1476,
+      1479,
+      1483,
+      1486,
+      1487,
+      1492,
+      1493,
+      2218,
+      2219,
+      2220,
+      2221,
+      2222,
+      2223,
+      2224,
+      2225,
+      2226,
+      2227,
+      2228,
+      2229,
+      2230,
+      2231,
+      2232,
+      2233,
+      2234,
+      2235,
+      2236,
+      2237,
+      2238,
+      2239,
+      2240,
+      2241,
+      2242,
+      2243,
+      2244,
+      2245,
+      2246,
+      2247,
+      2248,
+      2249,
+      2250
+    ],
+    "test_ids": [
+      "P4-UT-003",
+      "P4-BT-003",
+      "P4-FT-003",
+      "P4-CT-003",
+      "P4-IT-003"
+    ],
+    "task_ids": [
+      "P4-TASK-011",
+      "P4-TASK-012",
+      "P4-TASK-013",
+      "P4-TASK-014",
+      "P4-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 4,
+    "i": 4,
+    "id": "FUNC-P4-004",
+    "name": "클래스 재훈련·스탯 재계산",
+    "method": "RetrainingService.start(request: RetrainRequest) -> RetrainPlan",
+    "tables": [
+      "mercenary",
+      "growth_ledger",
+      "scheduled_action",
+      "character_stat"
+    ],
+    "rules": [
+      "클래스는 하나이며 클래스 레벨/상위 전직을 만들지 않는다",
+      "레벨 감소계수·금화·시간을 미리보기하고 승인된 밸런스 profile을 참조한다",
+      "초기/영구성장 보존 후 새 레벨·새 클래스 자동성장·자유포인트를 재구성한다",
+      "스킬은 보유하되 불법 장착을 해제하고 장비 요구 미달을 표시하며 원정 중 시작은 금지한다"
+    ],
+    "normal": [
+      "Lv50 검사→창병, 테스트계수0.90",
+      "Lv45, 초기/영구분 보존·감소 성장분만 재산정"
+    ],
+    "edge": [
+      "Lv1 재훈련",
+      "하한1 유지·음수 자유포인트 없음"
+    ],
+    "failure": [
+      "시작비용 부족",
+      "클래스/예약/금화 변경0"
+    ],
+    "kw": [
+      "클래스",
+      "재훈련",
+      "교체",
+      "전직"
+    ],
+    "state": "PREVIEW → RESERVED → TRAINING → REBUILT",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1431,
+      1454,
+      1455,
+      1456,
+      1457,
+      1460,
+      1461,
+      1462,
+      1463,
+      1464,
+      1465,
+      1466,
+      1494
+    ],
+    "test_ids": [
+      "P4-UT-004",
+      "P4-BT-004",
+      "P4-FT-004",
+      "P4-CT-004",
+      "P4-IT-004"
+    ],
+    "task_ids": [
+      "P4-TASK-016",
+      "P4-TASK-017",
+      "P4-TASK-018",
+      "P4-TASK-019",
+      "P4-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 4,
+    "i": 5,
+    "id": "FUNC-P4-005",
+    "name": "초기 정보 비대칭·인물 조회 계약",
+    "method": "MercenaryProjection.build(viewer: ViewerContext, subject: NpcState) -> MercenaryView",
+    "tables": [
+      "mercenary",
+      "knowledge_record"
+    ],
+    "rules": [
+      "초기 등급·외형·알려진 클래스와 숨은 스탯/잠재력/전체스킬을 분리한다",
+      "projection만 UI/정렬/추천/semantics에 전달해 null 뒤에 원본 값을 숨겨 전송하지 않는다",
+      "같은 파티 운영정보는 공개 정책의 예외로 제공하되 잠재력 정확값은 제외한다",
+      "P15의 다축 지식 확대 전에도 deny-by-default를 실제로 구현한다"
+    ],
+    "normal": [
+      "낯선 NPC potential=99, observer knowledge 없음",
+      "view와 semantics/export/search에99 없음"
+    ],
+    "edge": [
+      "같은파티 current HP 필요",
+      "운영HP 공개·exactPotential 비공개 유지"
+    ],
+    "failure": [
+      "미정 visibility rule",
+      "기본 숨김·권한오류 audit"
+    ],
+    "kw": [
+      "정보",
+      "비대칭",
+      "공개",
+      "숨겨",
+      "스카우트",
+      "영입",
+      "후보",
+      "비교"
+    ],
+    "state": "AUTHORITATIVE → POLICY_FILTERED → VIEW",
+    "kind": "read",
+    "refs": [],
+    "sources": [
+      1467,
+      1468,
+      1469,
+      1470,
+      1471,
+      1473,
+      1474,
+      1475,
+      1477,
+      1478,
+      1480,
+      1481,
+      1485,
+      1488,
+      1489,
+      1490,
+      1491,
+      1495
+    ],
+    "test_ids": [
+      "P4-UT-005",
+      "P4-BT-005",
+      "P4-FT-005",
+      "P4-CT-005",
+      "P4-IT-005"
+    ],
+    "task_ids": [
+      "P4-TASK-021",
+      "P4-TASK-022",
+      "P4-TASK-023",
+      "P4-TASK-024",
+      "P4-TASK-025"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 5,
+    "i": 1,
+    "id": "FUNC-P5-001",
+    "name": "인벤토리·장착·소유권",
+    "method": "InventoryService.move(command: MoveItem, view: InventoryState) -> InventoryDelta",
+    "tables": [
+      "item_instance",
+      "storage_location",
+      "inventory_stack",
+      "equipment_slot",
+      "money_account"
+    ],
+    "rules": [
+      "템플릿과 인스턴스를 분리하고 ownerId·holderId·storageId·equippedBy를 혼용하지 않는다",
+      "비스택 아이템은 한 위치, 스택은 nonnegative quantity와 reservation을 유지한다",
+      "손/장갑·발/신발·귀 장신구 같은 원문 용어 차이는 slot alias로 보존하고 귀 슬롯은 C04 승인 기준을 사용한다",
+      "보호/대여/스토리/유일 아이템은 분해·판매·강화계승에서 공통 guard를 거친다"
+    ],
+    "normal": [
+      "보관장비 I1을 주무기 장착",
+      "storage→equipment 원자 이동·동시 위치1개"
+    ],
+    "edge": [
+      "같은 item을 두 NPC 장착",
+      "두 번째 Conflict·소유권 불변"
+    ],
+    "failure": [
+      "이동 대상창고 FK 없음",
+      "정합성오류·출발위치 보존"
+    ],
+    "kw": [
+      "장비",
+      "슬롯",
+      "인벤토리",
+      "소유",
+      "데이터",
+      "조합",
+      "장비",
+      "등급"
+    ],
+    "state": "STORED ↔ EQUIPPED ↔ IN_TRANSIT; PROTECTED guard",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      50,
+      52,
+      53,
+      55,
+      139,
+      278,
+      279,
+      287,
+      292,
+      297,
+      300,
+      301,
+      309,
+      329,
+      814,
+      816,
+      817,
+      820,
+      823,
+      826,
+      831,
+      832,
+      838,
+      841,
+      842,
+      844,
+      845,
+      846,
+      848,
+      849
+    ],
+    "test_ids": [
+      "P5-UT-001",
+      "P5-BT-001",
+      "P5-FT-001",
+      "P5-CT-001",
+      "P5-IT-001"
+    ],
+    "task_ids": [
+      "P5-TASK-001",
+      "P5-TASK-002",
+      "P5-TASK-003",
+      "P5-TASK-004",
+      "P5-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 5,
+    "i": 2,
+    "id": "FUNC-P5-002",
+    "name": "스킬·접사·개인 상성 데이터",
+    "method": "SkillService.learn(command: LearnSkill, character: CharacterState) -> SkillDelta",
+    "tables": [
+      "skill_instance",
+      "skill_affinity",
+      "mastery"
+    ],
+    "rules": [
+      "300개 기본 스킬과 범용/클래스군/전용 범위를 유지한다",
+      "접두/접미 각 최대1·본체 등급 유지·금지 태그를 검사한다",
+      "스킬 중복획득·거래·연구·전승·정련은 acquisition source와 effect definition을 공유한다",
+      "개인 상성은 보유/장착/숙련과 독립으로 계산하고 발견된 범위만 공개한다"
+    ],
+    "normal": [
+      "범용 skill S1에 허용 prefix1/suffix1",
+      "기본등급 유지·variation count2"
+    ],
+    "edge": [
+      "같은 prefix2개",
+      "AffixConflict·보유스킬 불변"
+    ],
+    "failure": [
+      "제한 클래스 전용 스킬 사용권 없음",
+      "장착 불가·배우기 규칙과 사용 규칙 분리"
+    ],
+    "kw": [
+      "스킬",
+      "상성",
+      "접사",
+      "태그",
+      "공용",
+      "전용"
+    ],
+    "state": "ACQUIRED → LEARNED → AVAILABLE/CLASS_RESTRICTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      24,
+      25,
+      26,
+      27,
+      274,
+      275,
+      276,
+      280,
+      281,
+      282,
+      285,
+      286,
+      288,
+      289,
+      290,
+      291,
+      293,
+      294,
+      295,
+      296,
+      298,
+      299,
+      302,
+      303,
+      304,
+      305,
+      310,
+      311,
+      313,
+      314,
+      315,
+      316,
+      317,
+      318,
+      319,
+      320,
+      321,
+      322,
+      323,
+      324,
+      325,
+      326,
+      327,
+      330,
+      847,
+      1439,
+      1440,
+      1441,
+      1442,
+      1443,
+      1444,
+      1445,
+      1446,
+      1447,
+      1448,
+      1449,
+      1450,
+      1451,
+      1452,
+      1453
+    ],
+    "test_ids": [
+      "P5-UT-002",
+      "P5-BT-002",
+      "P5-FT-002",
+      "P5-CT-002",
+      "P5-IT-002"
+    ],
+    "task_ids": [
+      "P5-TASK-006",
+      "P5-TASK-007",
+      "P5-TASK-008",
+      "P5-TASK-009",
+      "P5-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 5,
+    "i": 3,
+    "id": "FUNC-P5-003",
+    "name": "Loadout·프리셋·전술 조건식",
+    "method": "LoadoutService.validate(loadout: Loadout, actor: CharacterState) -> LoadoutResult",
+    "tables": [
+      "loadout",
+      "tactic_rule",
+      "equipment_slot",
+      "skill_instance"
+    ],
+    "rules": [
+      "패시브2/액티브3와 강화각인 활성3을 별도 제한한다",
+      "장비 부여 액티브도 액티브3에 포함하며 아이템 변경시 사용권을 재검사한다",
+      "조건식은 허용 AST 비교/AND/OR/대상 selector로 제한해 eval과 스크립트 실행을 금지한다",
+      "우선순위 평가 후 자원/쿨다운/타겟 부적합은 다음 조건,끝은 기본행동으로 이어진다"
+    ],
+    "normal": [
+      "3액티브 중1개 장비스킬 장착",
+      "정상; 해당 장비 해제시 그 슬롯만 비활성"
+    ],
+    "edge": [
+      "4번째 액티브 또는 각인4개",
+      "검증 거절·원본 preset 유지"
+    ],
+    "failure": [
+      "조건식에 파일/Reflection 호출",
+      "UnsupportedExpression·평가하지 않음"
+    ],
+    "kw": [
+      "전술",
+      "조건",
+      "프리셋",
+      "장착",
+      "패시브",
+      "액티브"
+    ],
+    "state": "DRAFT → VALIDATED → ACTIVE/NEEDS_REVIEW",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      277,
+      283,
+      284,
+      306,
+      307,
+      308,
+      328
+    ],
+    "test_ids": [
+      "P5-UT-003",
+      "P5-BT-003",
+      "P5-FT-003",
+      "P5-CT-003",
+      "P5-IT-003"
+    ],
+    "task_ids": [
+      "P5-TASK-011",
+      "P5-TASK-012",
+      "P5-TASK-013",
+      "P5-TASK-014",
+      "P5-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 5,
+    "i": 4,
+    "id": "FUNC-P5-004",
+    "name": "드롭·보상 예산·타겟파밍",
+    "method": "LootService.roll(context: LootContext, stream: RngStream) -> LootPlan",
+    "tables": [
+      "loot_receipt",
+      "item_instance",
+      "inventory_stack"
+    ],
+    "rules": [
+      "몹/상자/보스별 LootProfile과 소유권 출처를 기록한다",
+      "boss 고유재료 보장과 smart drop 상한은 원문 profile 값으로 분리한다",
+      "generationSeed만이 아니라 lootVersion·sourceEventId·claim receipt를 저장한다",
+      "보상 지급은 원자적 기본단위이며 가방 초과는 임시 전리품 보관함으로 처리하고 묵시 삭제하지 않는다"
+    ],
+    "normal": [
+      "동일 chestId 첫 개봉 보상I1, 두 번째개봉",
+      "첫1회 지급·두 번째 AlreadyClaimed"
+    ],
+    "edge": [
+      "인벤토리 용량0",
+      "overflow loot storage에 동일 보상 보존"
+    ],
+    "failure": [
+      "아이템생성 후 보상receipt 저장 실패",
+      "아이템과 receipt 모두 rollback"
+    ],
+    "kw": [
+      "드롭",
+      "보상",
+      "파밍",
+      "상자",
+      "품질",
+      "발견",
+      "타겟",
+      "Loot"
+    ],
+    "state": "UNROLLED → ROLLED → CLAIMED 또는 OVERFLOW_STORED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      312,
+      815,
+      818,
+      819,
+      821,
+      822,
+      824,
+      825,
+      827,
+      828,
+      829,
+      830,
+      833,
+      834,
+      835,
+      836,
+      837,
+      839,
+      840,
+      843
+    ],
+    "test_ids": [
+      "P5-UT-004",
+      "P5-BT-004",
+      "P5-FT-004",
+      "P5-CT-004",
+      "P5-IT-004"
+    ],
+    "task_ids": [
+      "P5-TASK-016",
+      "P5-TASK-017",
+      "P5-TASK-018",
+      "P5-TASK-019",
+      "P5-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 6,
+    "i": 1,
+    "id": "FUNC-P6-001",
+    "name": "이벤트 큐·동시 해결 배치",
+    "method": "CombatTimeline.resolveNext(state: CombatState) -> CombatStep",
+    "tables": [
+      "combat_checkpoint"
+    ],
+    "rules": [
+      "Long ms/10ms 양자화와(time,priority,sequence) 정렬을 고정한다",
+      "같은 시각 A~J 단계에서 확정 active/impact/tick을 모은 뒤 피해·치유를 동시 적용한다",
+      "actionInstanceId와 actor lifecycle version으로 stale action을 폐기하되 이미 발사된 projectile은 독립 생명주기를 유지한다",
+      "timestamp 내 발생 사건은 phase별 worklist로 처리하고 재귀 무한 큐는 hard limit 오류로 정지한다"
+    ],
+    "normal": [
+      "T=1000에 A/B 각HP10, 서로10피해 확정",
+      "A/B 동시 전투불능·먼저 정렬된 ID 우대 없음"
+    ],
+    "edge": [
+      "T=5000 만료 버프와 신규공격",
+      "버프 미적용"
+    ],
+    "failure": [
+      "eventTime이 현재보다 작음",
+      "InvariantViolation·세이브복구 안내·피해 적용0"
+    ],
+    "kw": [
+      "시간축",
+      "이벤트",
+      "큐",
+      "동일",
+      "시각",
+      "정렬",
+      "CombatEvent",
+      "stale"
+    ],
+    "state": "READY → COLLECT → CALCULATE → APPLY → REACT → DECIDE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      336,
+      341,
+      342,
+      343,
+      378,
+      406,
+      427,
+      429,
+      430,
+      431,
+      432,
+      440,
+      450,
+      470,
+      481,
+      483,
+      490,
+      504,
+      505,
+      507,
+      508,
+      515,
+      519,
+      521,
+      522,
+      524,
+      535,
+      539,
+      540,
+      541,
+      543,
+      546,
+      551,
+      1010,
+      1011,
+      1018,
+      1024,
+      1027,
+      1039,
+      3064
+    ],
+    "test_ids": [
+      "P6-UT-001",
+      "P6-BT-001",
+      "P6-FT-001",
+      "P6-CT-001",
+      "P6-IT-001"
+    ],
+    "task_ids": [
+      "P6-TASK-001",
+      "P6-TASK-002",
+      "P6-TASK-003",
+      "P6-TASK-004",
+      "P6-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 6,
+    "i": 2,
+    "id": "FUNC-P6-002",
+    "name": "피해·치유·명중·보호막 공식",
+    "method": "CombatMath.resolve(input: DamageInput, rng: CombatRng) -> DamageOutcome",
+    "tables": [],
+    "rules": [
+      "§357의 계산순서를 사용하되 §351의 피해증가가 두 번 곱해지지 않도록 raw/attacker layer를 명확히 분리한다",
+      "명중5~95%·방어관통 순서·저항-75~75%·면역태그·최종감소 cap을 데이터화한다",
+      "회피를 별도 두 번 굴리지 않도록 명중 성공 뒤 막기 판정을 연결하는 보완안 C05를 적용한다",
+      "같은 시각 다중 보호막 소비/회복은 deterministic apportioning 정책으로 총 흡수량을 넘지 않게 한다"
+    ],
+    "normal": [
+      "명중90 회피30",
+      "확률0.935384615…; 표시93.5%, 내부 clamp 전 정밀값"
+    ],
+    "edge": [
+      "원시피해100,방어0,저항0,shield30,HP100",
+      "shield0·HP30·실HP피해70"
+    ],
+    "failure": [
+      "NaN/음수 damage definition",
+      "콘텐츠/계산 오류로 차단·HP 변경0"
+    ],
+    "kw": [
+      "명중",
+      "회피",
+      "피해",
+      "방어",
+      "치유",
+      "물리",
+      "마법",
+      "치명",
+      "보호막",
+      "관통"
+    ],
+    "state": "RAW → MITIGATED → ABSORBED → HP_DELTA",
+    "kind": "compute",
+    "refs": [],
+    "sources": [
+      32,
+      33,
+      335,
+      339,
+      344,
+      345,
+      346,
+      347,
+      348,
+      349,
+      350,
+      351,
+      352,
+      353,
+      354,
+      355,
+      356,
+      357,
+      358,
+      359,
+      360,
+      361,
+      363,
+      364,
+      365,
+      366,
+      367,
+      368,
+      380,
+      381,
+      382,
+      383,
+      384,
+      385,
+      387,
+      388,
+      389,
+      390,
+      391,
+      392,
+      393,
+      394,
+      395,
+      397,
+      401,
+      411,
+      412,
+      413,
+      414,
+      421,
+      422,
+      449,
+      453,
+      454,
+      466,
+      474,
+      475,
+      484,
+      510,
+      523,
+      549,
+      986,
+      998,
+      999,
+      1002,
+      1004,
+      1007,
+      1008,
+      1012,
+      1019,
+      1020,
+      1033,
+      1037
+    ],
+    "test_ids": [
+      "P6-UT-002",
+      "P6-BT-002",
+      "P6-FT-002",
+      "P6-CT-002",
+      "P6-IT-002"
+    ],
+    "task_ids": [
+      "P6-TASK-006",
+      "P6-TASK-007",
+      "P6-TASK-008",
+      "P6-TASK-009",
+      "P6-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 6,
+    "i": 3,
+    "id": "FUNC-P6-003",
+    "name": "액션 상태·자원·발사체 스냅샷",
+    "method": "ActionExecutor.start(action: ActionSpec, actor: ActorState) -> ActionPlan",
+    "tables": [
+      "combat_checkpoint"
+    ],
+    "rules": [
+      "자원은 ACTION_START/CAST_START,쿨다운은 ACTIVE_FRAME에서 확정한다",
+      "중단 환급은 skill refundRate와 실제 소비 원장을 기준으로 한 번만 처리한다",
+      "공격수치는 발사/active 시점,대상 방어는 impact 시점의 snapshot을 사용한다",
+      "WINDUP/CAST/ACTIVE/RECOVERY/MOVING/STAGGER를 구분하고 진행 중 속도변경 정책을 원문대로 유지한다"
+    ],
+    "normal": [
+      "MP100,cost20,refundRate0.5,시전중단",
+      "MP90,환급1회·발사체 생성0"
+    ],
+    "edge": [
+      "시전중단 이벤트2번",
+      "두 번째 환급0"
+    ],
+    "failure": [
+      "이미 발사한 시전자 전투불능",
+      "발사체는 유효타겟에 도착·미래 새 행동만 취소"
+    ],
+    "kw": [
+      "행동",
+      "시전",
+      "자원",
+      "WINDUP",
+      "CAST",
+      "RECOVERY",
+      "이동",
+      "투사체",
+      "snapshot",
+      "쿨다운"
+    ],
+    "state": "IDLE → WINDUP/CASTING → ACTIVE → RECOVERY → READY",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      333,
+      334,
+      337,
+      340,
+      375,
+      376,
+      377,
+      379,
+      386,
+      398,
+      435,
+      436,
+      437,
+      439,
+      441,
+      442,
+      443,
+      444,
+      445,
+      446,
+      447,
+      448,
+      451,
+      452,
+      455,
+      456,
+      459,
+      460,
+      461,
+      462,
+      463,
+      464,
+      465,
+      467,
+      468,
+      469,
+      471,
+      472,
+      473,
+      476,
+      477,
+      478,
+      479,
+      480,
+      491,
+      492,
+      506,
+      520,
+      525,
+      526,
+      527,
+      530,
+      531,
+      533,
+      536,
+      537,
+      1003,
+      1005,
+      1006,
+      1026,
+      1038
+    ],
+    "test_ids": [
+      "P6-UT-003",
+      "P6-BT-003",
+      "P6-FT-003",
+      "P6-CT-003",
+      "P6-IT-003"
+    ],
+    "task_ids": [
+      "P6-TASK-011",
+      "P6-TASK-012",
+      "P6-TASK-013",
+      "P6-TASK-014",
+      "P6-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 6,
+    "i": 4,
+    "id": "FUNC-P6-004",
+    "name": "상태이상·축적·Tick·점감",
+    "method": "StatusEngine.apply(effect: StatusApplication, now: CombatMillis) -> StatusDelta",
+    "tables": [
+      "combat_checkpoint",
+      "status_effect"
+    ],
+    "rules": [
+      "STACK_INTENSITY/REFRESH/REPLACE/ACCUMULATION/UNIQUE를 정의별로 실행한다",
+      "독10·출혈5·화상3 중첩, tick<expire,면역과 저항을 분리한다",
+      "기절/빙결/수면/매혹의 반복점감 및 원문 장기오염을 서로 다른 시간domain에 둔다",
+      "DoT actor source를 보존하고 재적용 tick/환급/해제의 중복을 막는다"
+    ],
+    "normal": [
+      "독9스택에2스택 재적용",
+      "최대10스택·source policy 적용"
+    ],
+    "edge": [
+      "expire=4000,ticks=2000,4000",
+      "2000만실행·4000제외"
+    ],
+    "failure": [
+      "알 수 없는 status enum",
+      "로드 compatibility 오류 또는 명시 alias; 조용한 삭제 금지"
+    ],
+    "kw": [
+      "상태이상",
+      "상태효과",
+      "Tick",
+      "독",
+      "출혈",
+      "화상",
+      "중첩",
+      "점감",
+      "면역",
+      "축적",
+      "CC"
+    ],
+    "state": "APPLIED → TICKING/ACCUMULATING → EXPIRED/DISPELLED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      369,
+      370,
+      371,
+      372,
+      373,
+      374,
+      408,
+      433,
+      457,
+      485,
+      486,
+      487,
+      488,
+      489,
+      550,
+      984,
+      985,
+      987,
+      988,
+      989,
+      990,
+      991,
+      992,
+      993,
+      994,
+      995,
+      996,
+      997,
+      1000,
+      1001,
+      1013,
+      1014,
+      1015,
+      1016,
+      1017,
+      1021,
+      1022,
+      1023,
+      1025,
+      1028,
+      1030,
+      1031,
+      1032,
+      1034,
+      1035,
+      1036,
+      1040,
+      1041,
+      1042
+    ],
+    "test_ids": [
+      "P6-UT-004",
+      "P6-BT-004",
+      "P6-FT-004",
+      "P6-CT-004",
+      "P6-IT-004"
+    ],
+    "task_ids": [
+      "P6-TASK-016",
+      "P6-TASK-017",
+      "P6-TASK-018",
+      "P6-TASK-019",
+      "P6-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 6,
+    "i": 5,
+    "id": "FUNC-P6-005",
+    "name": "후퇴·반응·전투 종료 정산",
+    "method": "CombatFinalizer.evaluate(state: CombatState) -> CombatResolution",
+    "tables": [
+      "combat_result",
+      "command_receipt"
+    ],
+    "rules": [
+      "피해배치/전투불능/페이즈/action-ready 경계에서 자동후퇴를 검사한다",
+      "reaction lock500ms와 반격의 재반격 금지를 적용한다",
+      "적 전멸만으로 종료하지 않고 이미 발사된 투사체/사망폭발/폭탄 위험 이벤트를 확인한다",
+      "resultId 단위로 XP·loot·부상 요청을 한번 발행하며 실제 지급은 P9에서 world transaction으로 수행한다"
+    ],
+    "normal": [
+      "마지막 몹HP0,200ms 뒤 사망폭발 대기",
+      "폭발 처리까지 승리확정 유보"
+    ],
+    "edge": [
+      "쌍방 반사/반격 능력",
+      "추가반응 연쇄 무한 발생 없음"
+    ],
+    "failure": [
+      "정산receipt 중복",
+      "XP/보상 요청 중복0"
+    ],
+    "kw": [
+      "후퇴",
+      "종료",
+      "전투불능",
+      "반격",
+      "반사",
+      "사망",
+      "정산"
+    ],
+    "state": "RUNNING → RETREATING/RESOLVING → WON/LOST/RETREATED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      399,
+      402,
+      403,
+      404,
+      405,
+      482,
+      499,
+      501,
+      502,
+      503,
+      513,
+      514,
+      532,
+      534,
+      548,
+      1009
+    ],
+    "test_ids": [
+      "P6-UT-005",
+      "P6-BT-005",
+      "P6-FT-005",
+      "P6-CT-005",
+      "P6-IT-005"
+    ],
+    "task_ids": [
+      "P6-TASK-021",
+      "P6-TASK-022",
+      "P6-TASK-023",
+      "P6-TASK-024",
+      "P6-TASK-025"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 6,
+    "i": 6,
+    "id": "FUNC-P6-006",
+    "name": "재생·로그·전투 버전 일치",
+    "method": "CombatReplay.play(trace: CombatTrace, mode: PlaybackMode) -> PlaybackView",
+    "tables": [
+      "combat_result",
+      "combat_checkpoint"
+    ],
+    "rules": [
+      "전투계산과 UI 재생을 분리하고 ×1/×2/×4/즉시결과는 동일 trace를 읽는다",
+      "사용자 긴급후퇴는 presentation frame이 아니라 허용 논리시각 command로 기록한다",
+      "LOG_FULL/COMPRESSED/NONE은 RNG 호출과 결과를 바꾸지 않는다",
+      "checkpoint와 trace는 combatVersion·contentVersion을 포함하며 과거 replay 불가 시 요약기록은 보존한다"
+    ],
+    "normal": [
+      "동일 seed/입력 네 재생모드",
+      "stateHash·worldDuration·loot seed 동일"
+    ],
+    "edge": [
+      "로그상세 OFF",
+      "결과/난수counter 동일"
+    ],
+    "failure": [
+      "미지원 combatVersion replay",
+      "요약 표시·현재엔진으로 다른 결과를 재연하지 않음"
+    ],
+    "kw": [
+      "로그",
+      "재생",
+      "배속",
+      "즉시",
+      "결과",
+      "전투",
+      "버전",
+      "성능"
+    ],
+    "state": "TRACE_READY → PLAYING/PAUSED → FINISHED",
+    "kind": "read",
+    "refs": [],
+    "sources": [
+      31,
+      34,
+      331,
+      332,
+      338,
+      362,
+      396,
+      400,
+      407,
+      409,
+      410,
+      415,
+      416,
+      417,
+      418,
+      419,
+      420,
+      423,
+      424,
+      425,
+      426,
+      428,
+      434,
+      438,
+      458,
+      493,
+      494,
+      495,
+      496,
+      497,
+      498,
+      500,
+      509,
+      511,
+      512,
+      516,
+      517,
+      518,
+      528,
+      529,
+      538,
+      542,
+      544,
+      545,
+      547,
+      1029,
+      3063,
+      3065
+    ],
+    "test_ids": [
+      "P6-UT-006",
+      "P6-BT-006",
+      "P6-FT-006",
+      "P6-CT-006",
+      "P6-IT-006"
+    ],
+    "task_ids": [
+      "P6-TASK-026",
+      "P6-TASK-027",
+      "P6-TASK-028",
+      "P6-TASK-029",
+      "P6-TASK-030"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 7,
+    "i": 1,
+    "id": "FUNC-P7-001",
+    "name": "몬스터 감지·Utility·역할 AI",
+    "method": "MonsterDecisionEngine.decide(ctx: CombatDecisionContext) -> ActionIntent",
+    "tables": [
+      "monster_state"
+    ],
+    "rules": [
+      "AI 입력은 지각·known threat·학습 메모리이며 플레이어 비공개 잠재력/미관측쿨다운을 직접 읽지 않는다",
+      "합법 후보 생성→점수평가→안정 tie-break→행동제안 순서를 고정한다",
+      "공격/방어/치유/제어/암살/소환/자폭/도주 역할 profile을 데이터로 구분한다",
+      "점수 캐시는 contextVersion이 달라지면 무효화한다"
+    ],
+    "normal": [
+      "후열 사제 존재를 아직 감지 못한 몹",
+      "미관측 사제를 이름/직업 근거로 우선공격하지 않음"
+    ],
+    "edge": [
+      "가능한 스킬후보0",
+      "기본공격 또는 방어대기"
+    ],
+    "failure": [
+      "AI profile 파손",
+      "직전 상태 보존·콘텐츠 오류; 승리 자동처리 금지"
+    ],
+    "kw": [
+      "AI",
+      "행동",
+      "역할",
+      "타겟",
+      "Utility",
+      "감지",
+      "위협"
+    ],
+    "state": "PERCEIVE → CANDIDATES → SCORE → INTENT",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      58,
+      59,
+      61,
+      62,
+      64,
+      65,
+      67,
+      68,
+      85,
+      687,
+      688,
+      689,
+      691,
+      692,
+      694,
+      695,
+      696,
+      697,
+      698,
+      699,
+      700,
+      701,
+      703,
+      704,
+      705,
+      706,
+      707,
+      708,
+      709,
+      710,
+      711,
+      712,
+      713,
+      714,
+      715,
+      716,
+      717,
+      718,
+      719,
+      720,
+      721,
+      722,
+      725,
+      727,
+      728,
+      729,
+      731,
+      733,
+      739,
+      740,
+      741,
+      742,
+      743,
+      744,
+      745,
+      746,
+      747,
+      748,
+      749,
+      750,
+      769,
+      790,
+      791,
+      811,
+      812
+    ],
+    "test_ids": [
+      "P7-UT-001",
+      "P7-BT-001",
+      "P7-FT-001",
+      "P7-CT-001",
+      "P7-IT-001"
+    ],
+    "task_ids": [
+      "P7-TASK-001",
+      "P7-TASK-002",
+      "P7-TASK-003",
+      "P7-TASK-004",
+      "P7-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 7,
+    "i": 2,
+    "id": "FUNC-P7-002",
+    "name": "그룹 Blackboard·순찰·학습",
+    "method": "MonsterGroupAI.update(input: GroupPerception) -> GroupPlan",
+    "tables": [
+      "monster_state",
+      "patrol_state"
+    ],
+    "rules": [
+      "리더·소음·흔적·증원요청·공격집중을 group blackboard로 공유한다",
+      "정보 source와 expiresAt을 기록하고 벽/연결통로를 무시한 감지를 금지한다",
+      "몬스터 접두/접미는 허용태그와 행동능력만 확장하며 명칭상 무한소환도 엔진 hard bound 아래서 동작한다",
+      "플레이어와 몬스터에 동일 지형 penalty/면역을 적용한다"
+    ],
+    "normal": [
+      "A-B-C 통로,문B 닫힘,소음전파차단",
+      "C의 그룹이 소음을 감지하지 않음"
+    ],
+    "edge": [
+      "리더가 전투불능",
+      "정의된 fallback leader로만 이전"
+    ],
+    "failure": [
+      "blackboard 타겟 소멸",
+      "후보 재평가·null dereference 없음"
+    ],
+    "kw": [
+      "그룹",
+      "Blackboard",
+      "순찰",
+      "수색",
+      "흔적",
+      "소음",
+      "접사",
+      "리더",
+      "학습",
+      "지형"
+    ],
+    "state": "IDLE → PATROL → ALERT → SEARCH/CHASE → RETURN",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      63,
+      83,
+      84,
+      690,
+      693,
+      702,
+      723,
+      724,
+      726,
+      730,
+      732,
+      735,
+      736,
+      737,
+      738,
+      778
+    ],
+    "test_ids": [
+      "P7-UT-002",
+      "P7-BT-002",
+      "P7-FT-002",
+      "P7-CT-002",
+      "P7-IT-002"
+    ],
+    "task_ids": [
+      "P7-TASK-006",
+      "P7-TASK-007",
+      "P7-TASK-008",
+      "P7-TASK-009",
+      "P7-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 7,
+    "i": 3,
+    "id": "FUNC-P7-003",
+    "name": "보스 전조·페이즈·강인도",
+    "method": "BossController.transition(input: BossFrame) -> BossPhaseDelta",
+    "tables": [
+      "boss_state",
+      "combat_checkpoint"
+    ],
+    "rules": [
+      "보스 phase 조건은 같은 timestamp 배치후 평가하고 동일 transitionId는1회만 적용한다",
+      "telegraph 시작/피해시각/대응태그를 공개정보로 노출해 자동전술이 대응하게 한다",
+      "강인도 BREAK·부위파괴·CC점감·무적종료시각을 명시한다",
+      "phase 전환 연출시간은 논리 lock 시간과 분리한다"
+    ],
+    "normal": [
+      "HP60→20으로 한 배치,50/25 phase 경계",
+      "정책상 도달최종 phase로1회 전환·보상 중복0"
+    ],
+    "edge": [
+      "BREAK 게이지 정확0",
+      "해당 phase BREAK event1개"
+    ],
+    "failure": [
+      "무적 phase에 해제조건 없음",
+      "콘텐츠 검증에서 차단·원정 생성금지"
+    ],
+    "kw": [
+      "보스",
+      "페이즈",
+      "전조",
+      "강인도",
+      "BREAK",
+      "부위",
+      "광폭화",
+      "기믹"
+    ],
+    "state": "PHASE_n → TRANSITION → PHASE_n+1 → DEFEATED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      57,
+      82,
+      90,
+      751,
+      753,
+      755,
+      756,
+      757,
+      758,
+      759,
+      760,
+      761,
+      762,
+      763,
+      764,
+      765,
+      766,
+      767,
+      768,
+      770,
+      773,
+      774,
+      775,
+      776,
+      777,
+      779,
+      780,
+      781,
+      782,
+      783,
+      786,
+      787,
+      789,
+      792,
+      793,
+      807,
+      809,
+      810,
+      813
+    ],
+    "test_ids": [
+      "P7-UT-003",
+      "P7-BT-003",
+      "P7-FT-003",
+      "P7-CT-003",
+      "P7-IT-003"
+    ],
+    "task_ids": [
+      "P7-TASK-011",
+      "P7-TASK-012",
+      "P7-TASK-013",
+      "P7-TASK-014",
+      "P7-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 7,
+    "i": 4,
+    "id": "FUNC-P7-004",
+    "name": "보스 카탈로그·공략대·웨이브",
+    "method": "EncounterFactory.create(spec: EncounterSpec) -> EncounterPlan",
+    "tables": [
+      "boss_state",
+      "monster_state"
+    ],
+    "rules": [
+      "원문12종 상세보스와100종 카탈로그를 동일 template 체계로 구현한다",
+      "플레이어 출전6 제한과 여러 파티의 raid actor 수를 분리한다",
+      "raid는 공통 combatTimeMs를 공유하며 wave/소환/증원 대기열을 유한하게 유지한다",
+      "고유보상·최초보상·도주후재등장·네임드 기억은 bossInstanceId로 이어진다"
+    ],
+    "normal": [
+      "2개 파티 각6인 공략대",
+      "공유 시간축12인,파티당6 제한 유지"
+    ],
+    "edge": [
+      "활성적8과 증원3",
+      "3개는 wave 대기·즉시 actor 증식없음"
+    ],
+    "failure": [
+      "최초보스보상 receipt 이미있음",
+      "재공략 일반보상만·최초보상0"
+    ],
+    "kw": [
+      "카탈로그",
+      "실제",
+      "대표",
+      "보스",
+      "고유",
+      "드롭",
+      "공략대",
+      "소환",
+      "증원",
+      "세계급"
+    ],
+    "state": "CREATED → ACTIVE_WAVES → DEFEATED/ESCAPED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      60,
+      66,
+      734,
+      752,
+      754,
+      771,
+      772,
+      784,
+      785,
+      788,
+      794,
+      795,
+      796,
+      797,
+      798,
+      799,
+      800,
+      801,
+      802,
+      803,
+      804,
+      805,
+      806,
+      808
+    ],
+    "test_ids": [
+      "P7-UT-004",
+      "P7-BT-004",
+      "P7-FT-004",
+      "P7-CT-004",
+      "P7-IT-004"
+    ],
+    "task_ids": [
+      "P7-TASK-016",
+      "P7-TASK-017",
+      "P7-TASK-018",
+      "P7-TASK-019",
+      "P7-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 8,
+    "i": 1,
+    "id": "FUNC-P8-001",
+    "name": "던전 그래프·열쇠/문 위상 생성",
+    "method": "DungeonGenerator.generate(spec: DungeonSpec, seed: Long) -> GenerationResult",
+    "tables": [
+      "dungeon_instance",
+      "dungeon_room",
+      "dungeon_connection"
+    ],
+    "rules": [
+      "핵심경로30~45%·분기·루프·단축로·비밀방을 구조로 생성한다",
+      "단순 BFS 외에(방,보유열쇠,활성스위치) 상태공간으로 필수목표 접근성을 검증한다",
+      "생성재시도 최대8회 후 검증된 같은등급 fallback template을 쓰는 보완안으로 무한루프를 막는다",
+      "fallback은 던전등급을 몰래 낮추지 않고 generatorVersion/attempt를 기록한다"
+    ],
+    "normal": [
+      "문K 뒤에만 열쇠K가 있음",
+      "토폴로지 실패,검증된 다른 구조로 재생성"
+    ],
+    "edge": [
+      "보스없는 F 자연동굴",
+      "목표room 도달성 검증으로 정상"
+    ],
+    "failure": [
+      "8회 연속 위상 실패",
+      "검증 fallback 또는 생성보류; 끝없는 retry 없음"
+    ],
+    "kw": [
+      "생성",
+      "그래프",
+      "핵심",
+      "경로",
+      "분기",
+      "루프",
+      "단축로",
+      "위상"
+    ],
+    "state": "SPEC → GRAPH → VALIDATED → FROZEN",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      5,
+      91,
+      103,
+      552,
+      553,
+      554,
+      555,
+      561,
+      562,
+      563,
+      565,
+      566,
+      580,
+      585,
+      587,
+      588,
+      589,
+      590,
+      594,
+      596,
+      597,
+      598,
+      601,
+      603,
+      605,
+      607,
+      610,
+      618,
+      621,
+      623,
+      624
+    ],
+    "test_ids": [
+      "P8-UT-001",
+      "P8-BT-001",
+      "P8-FT-001",
+      "P8-CT-001",
+      "P8-IT-001"
+    ],
+    "task_ids": [
+      "P8-TASK-001",
+      "P8-TASK-002",
+      "P8-TASK-003",
+      "P8-TASK-004",
+      "P8-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 8,
+    "i": 2,
+    "id": "FUNC-P8-002",
+    "name": "지형·구역·위험/보상 예산",
+    "method": "DungeonBudgetAllocator.allocate(graph: DungeonGraph, budget: Budget) -> DungeonPlan",
+    "tables": [
+      "dungeon_room",
+      "dungeon_population",
+      "dungeon_treasure"
+    ],
+    "rules": [
+      "등급×규모×성장×변이 예산을 사용하고 위험도 UI 전투력과 혼동하지 않는다",
+      "범위형 비율을 모두 최대치로 더하지 않고 합1이 되는 선택벡터로 정규화한다",
+      "지형 전이·방역할 연속제한·위험방 경고를 배치한다",
+      "정복필수 경로와 선택고위험/보상경로를 구분한다"
+    ],
+    "normal": [
+      "C중형 예산560,배분280/90/70/90/30",
+      "합계560·불일치0"
+    ],
+    "edge": [
+      "초거대300+ 방",
+      "상한은 profile의 explicit maxRooms로 유한화"
+    ],
+    "failure": [
+      "예산 음수/NaN",
+      "InvalidDungeonBudget·상태저장0"
+    ],
+    "kw": [
+      "위험",
+      "예산",
+      "보물",
+      "보상",
+      "지형",
+      "구역",
+      "방",
+      "수",
+      "방",
+      "종류",
+      "난이도",
+      "규모"
+    ],
+    "state": "BUDGETED → ALLOCATED → REBALANCED → ACCEPTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      73,
+      74,
+      75,
+      76,
+      89,
+      92,
+      93,
+      94,
+      95,
+      104,
+      556,
+      557,
+      558,
+      559,
+      560,
+      564,
+      567,
+      568,
+      569,
+      570,
+      571,
+      572,
+      573,
+      574,
+      577,
+      578,
+      579,
+      582,
+      583,
+      584,
+      586,
+      595,
+      600,
+      604,
+      609,
+      613,
+      614,
+      615,
+      616,
+      617,
+      619,
+      622
+    ],
+    "test_ids": [
+      "P8-UT-002",
+      "P8-BT-002",
+      "P8-FT-002",
+      "P8-CT-002",
+      "P8-IT-002"
+    ],
+    "task_ids": [
+      "P8-TASK-006",
+      "P8-TASK-007",
+      "P8-TASK-008",
+      "P8-TASK-009",
+      "P8-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 8,
+    "i": 3,
+    "id": "FUNC-P8-003",
+    "name": "몬스터·상자·함정·정복목표 배치",
+    "method": "DungeonPopulationBuilder.place(plan: DungeonPlan) -> PopulationPlan",
+    "tables": [
+      "dungeon_population",
+      "dungeon_treasure",
+      "dungeon_trap",
+      "monster_state"
+    ],
+    "rules": [
+      "전체 몬스터/보물 budget부터 만든 뒤 방·고정/순찰/사냥그룹에 배분한다",
+      "세력/역할/레벨/접사·보스문/봉인/열쇠 관계를 검사한다",
+      "미믹/함정은 관찰가능 단서를 함께 생성하며 미발견 수량은 UI에 전송하지 않는다",
+      "핵 제거/주목표 완료와 탐색100%를 분리한다"
+    ],
+    "normal": [
+      "전부알려진방 조사완료·보스미처치",
+      "탐색100% 가능·정복미완료"
+    ],
+    "edge": [
+      "상자0개인 극소형",
+      "empty loot 정상·최소상자 강제생성없음"
+    ],
+    "failure": [
+      "필수열쇠 드롭그룹 배치불가",
+      "생성실패·잠긴던전 발행없음"
+    ],
+    "kw": [
+      "몬스터",
+      "세력",
+      "배치",
+      "상자",
+      "함정",
+      "보스",
+      "보물",
+      "목표",
+      "정보"
+    ],
+    "state": "BUDGET → GROUPS/OBJECTS → CLUES → FROZEN",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      71,
+      72,
+      105,
+      575,
+      576,
+      581,
+      591,
+      592,
+      593,
+      602,
+      606,
+      608,
+      611,
+      612
+    ],
+    "test_ids": [
+      "P8-UT-003",
+      "P8-BT-003",
+      "P8-FT-003",
+      "P8-CT-003",
+      "P8-IT-003"
+    ],
+    "task_ids": [
+      "P8-TASK-011",
+      "P8-TASK-012",
+      "P8-TASK-013",
+      "P8-TASK-014",
+      "P8-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 8,
+    "i": 4,
+    "id": "FUNC-P8-004",
+    "name": "던전 생명주기·Seed·재방문",
+    "method": "DungeonLifecycle.advance(dungeon: DungeonState, to: GameMinute) -> DungeonDelta",
+    "tables": [
+      "dungeon_instance",
+      "dungeon_population",
+      "world_event"
+    ],
+    "rules": [
+      "발생→안정→성장→불안정→브레이크를 절대게임시각 deadline으로 처리한다",
+      "worldSeed/dungeonSeed/generatorVersion을 저장하며 이미 탐색한 구조는 패치시 재추첨하지 않는다",
+      "재방문시 기존 조사·보상receipt·몬스터 이동/성장 상태를 불러온다",
+      "자연발생률 봉인은 P20 port가 제어하며 초기에는 명시 profile rate만 사용한다"
+    ],
+    "normal": [
+      "던전D 저장 후로드 같은버전",
+      "연결·상자·보스·Seed hash 동일"
+    ],
+    "edge": [
+      "deadline 정확도달",
+      "브레이크 event1개"
+    ],
+    "failure": [
+      "기존 generatorVersion 미지원",
+      "보존된 map 사용·없으면 compatibility 차단"
+    ],
+    "kw": [
+      "발생",
+      "수명",
+      "생명주기",
+      "성장",
+      "재방문",
+      "Seed",
+      "버전",
+      "정복",
+      "브레이크"
+    ],
+    "state": "SPAWNED → STABLE → GROWING → UNSTABLE → CLEARED/BREAK",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      69,
+      70,
+      599,
+      620
+    ],
+    "test_ids": [
+      "P8-UT-004",
+      "P8-BT-004",
+      "P8-FT-004",
+      "P8-CT-004",
+      "P8-IT-004"
+    ],
+    "task_ids": [
+      "P8-TASK-016",
+      "P8-TASK-017",
+      "P8-TASK-018",
+      "P8-TASK-019",
+      "P8-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 9,
+    "i": 1,
+    "id": "FUNC-P9-001",
+    "name": "MUD 이동·조사·점진 공개",
+    "method": "ExplorationService.act(command: ExploreAction, state: RunState) -> ExplorationDelta",
+    "tables": [
+      "exploration_state",
+      "dungeon_room",
+      "dungeon_connection",
+      "knowledge_fact"
+    ],
+    "rules": [
+      "방 이동/일반조사/정밀탐색은 각각 통로/행동 profile의 게임시간을 소비한다",
+      "발견/방문/부분/완전조사를 별도 저장하고 알려진 공간만 탐색률 분모에 넣는다",
+      "정보율·정복도는 탐색률과 별도 계산하며 미확인 수량을 화면 DTO에 넣지 않는다",
+      "통로 붕괴/수문/제단 같은 환경변화는 타겟 roomVersion을 재확인하고 적용한다"
+    ],
+    "normal": [
+      "조사점수100/100에서 비밀방 점수10 발견",
+      "100/110=90.9%로 감소·새 조사대상 안내"
+    ],
+    "edge": [
+      "연결되지 않은 방으로 이동 명령",
+      "InvalidConnection·시간/식량 소비0"
+    ],
+    "failure": [
+      "조사 중 저장실패",
+      "발견·시간·RNG 모두 직전 커밋 상태"
+    ],
+    "kw": [
+      "탐색",
+      "조사",
+      "이동",
+      "정보",
+      "지도",
+      "비밀",
+      "공개",
+      "지형",
+      "통로"
+    ],
+    "state": "OUTSIDE → EXPLORING → ROOM_ACTION → EXPLORING",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      77,
+      78,
+      79,
+      80,
+      81,
+      86,
+      87,
+      88,
+      96,
+      101,
+      106,
+      107,
+      117
+    ],
+    "test_ids": [
+      "P9-UT-001",
+      "P9-BT-001",
+      "P9-FT-001",
+      "P9-CT-001",
+      "P9-IT-001"
+    ],
+    "task_ids": [
+      "P9-TASK-001",
+      "P9-TASK-002",
+      "P9-TASK-003",
+      "P9-TASK-004",
+      "P9-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 9,
+    "i": 2,
+    "id": "FUNC-P9-002",
+    "name": "지도·주석·안전 복귀 경로",
+    "method": "DungeonMapService.route(input: KnownRouteRequest) -> RoutePlan; DungeonMapCommandService.execute(command: DungeonMapCommand) -> DungeonMapDelta",
+    "tables": [
+      "map_annotation",
+      "exploration_state",
+      "dungeon_connection"
+    ],
+    "rules": [
+      "맵은 실제 그래프의 공개 projection이며 알려진 통로만 경로계산한다",
+      "플레이어 주석/위험표시/구역 레이어는 정적 graph와 별도 저장한다",
+      "안전복귀는 이동시간0 순간이동이 아니며 지나갈 경계에서 사건/순찰을 처리한다",
+      "단축로 개방과 붕괴 시 routeVersion을 변경하고 진행 중 경로는 다음 이동 전에 재계산한다"
+    ],
+    "normal": [
+      "알려진 A-B 10분/B-C20분 경로",
+      "30분 진행 후C·중간 사건은 해당 경계 처리"
+    ],
+    "edge": [
+      "유일 통로 붕괴",
+      "경로불가 표시·정복 성공으로 처리하지 않음"
+    ],
+    "failure": [
+      "map annotation 손상",
+      "지도 원본은 유지·손상 주석 격리·경고"
+    ],
+    "kw": [
+      "지도",
+      "경로",
+      "주석",
+      "안전",
+      "복귀",
+      "단축로",
+      "map"
+    ],
+    "state": "PLANNED → TRAVERSING → ARRIVED/INTERRUPTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      97,
+      102
+    ],
+    "test_ids": [
+      "P9-UT-002",
+      "P9-BT-002",
+      "P9-FT-002",
+      "P9-CT-002",
+      "P9-IT-002"
+    ],
+    "task_ids": [
+      "P9-TASK-006",
+      "P9-TASK-007",
+      "P9-TASK-008",
+      "P9-TASK-009",
+      "P9-TASK-010"
+    ],
+    "related_sources": [
+      72,
+      91,
+      102,
+      2600
+    ]
+  },
+  {
+    "p": 9,
+    "i": 3,
+    "id": "FUNC-P9-003",
+    "name": "야영·보급·경계·응급처치",
+    "method": "CampService.start(command: CampCommand) -> ScheduledCamp",
+    "tables": [
+      "camp_state",
+      "scheduled_action",
+      "inventory_stack",
+      "status_effect"
+    ],
+    "rules": [
+      "안전도·경계배치·야영숙련·몬스터밀도로 습격 판정시각을 예약한다",
+      "식량·연료·응급도구를 선점하고 경계자/휴식자 일정 중복을 막는다",
+      "긴 야영을 한 번의 회복으로 계산하지 않고 습격/중단시점까지의 회복만 적용한다",
+      "야영 중 대화는 P11 port가 가용할 때 연결하고 미구현시 주제 비노출로 표시한다"
+    ],
+    "normal": [
+      "8시간야영 예약 중3시간에 습격",
+      "3시간 회복·소비만 정산 후전투·남은5시간 취소/재개선택"
+    ],
+    "edge": [
+      "경계 가능한 인원0",
+      "위험도 증가 명시·허용여부 profile 판정"
+    ],
+    "failure": [
+      "야영중 앱종료 후현실24시간",
+      "게임시간/회복 추가0·체크포인트부터 재개"
+    ],
+    "kw": [
+      "야영",
+      "캠프",
+      "보급",
+      "휴식",
+      "응급",
+      "식량",
+      "피로"
+    ],
+    "state": "PREPARED → CAMPING → COMPLETE/AMBUSHED/CANCELLED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      98
+    ],
+    "test_ids": [
+      "P9-UT-003",
+      "P9-BT-003",
+      "P9-FT-003",
+      "P9-CT-003",
+      "P9-IT-003"
+    ],
+    "task_ids": [
+      "P9-TASK-011",
+      "P9-TASK-012",
+      "P9-TASK-013",
+      "P9-TASK-014",
+      "P9-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 9,
+    "i": 4,
+    "id": "FUNC-P9-004",
+    "name": "패배·구조·SAFE_RECOVERY",
+    "method": "DefeatRecoveryService.resolve(result: DefeatResult) -> RecoveryPlan",
+    "tables": [
+      "recovery_receipt",
+      "character_state",
+      "item_instance",
+      "inventory_stack",
+      "scheduled_action",
+      "world_event"
+    ],
+    "rules": [
+      "전투불능은 영구사망이 아니며 외부구조를 먼저 판정한다",
+      "구조실패는 안전거점 이동·휴대금10%·현재 장착내구10%·HP30%·기본12시간과 거리/깊이추가·부상유지로 처리한다",
+      "안전회귀는 패배와 세계시간을 되감지 않고 보호물품/가문창고를 삭제하지 않는다",
+      "반올림과 추가시간은 승인된 RecoveryPolicy로 고정하고 receipt에 실제 손실값을 보존한다"
+    ],
+    "normal": [
+      "휴대금1000,내구80,최대HP100,구조실패,추가0",
+      "금900·내구72·HP30·12시간 증가·패배기록 유지"
+    ],
+    "edge": [
+      "휴대금9,정책=floor(gold*10%)",
+      "금9 유지·손실0; 창고금화 미변경"
+    ],
+    "failure": [
+      "같은 defeatId 두 번 복귀",
+      "두 번째 금/내구/시간 추가손실0"
+    ],
+    "kw": [
+      "패배",
+      "구조",
+      "안전",
+      "회귀",
+      "전투불능",
+      "부상",
+      "사망",
+      "후퇴"
+    ],
+    "state": "DEFEATED → RESCUE_CHECK → RESCUED/SAFE_RECOVERY → HUB",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      35,
+      99,
+      1367,
+      1368,
+      1369,
+      1370,
+      1371,
+      1372,
+      1373,
+      1374,
+      1375,
+      1376,
+      1377,
+      1378,
+      1379,
+      1380,
+      1381,
+      1382,
+      1383,
+      1384
+    ],
+    "test_ids": [
+      "P9-UT-004",
+      "P9-BT-004",
+      "P9-FT-004",
+      "P9-CT-004",
+      "P9-IT-004"
+    ],
+    "task_ids": [
+      "P9-TASK-016",
+      "P9-TASK-017",
+      "P9-TASK-018",
+      "P9-TASK-019",
+      "P9-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 9,
+    "i": 5,
+    "id": "FUNC-P9-005",
+    "name": "정복·보상·첫 완결 플레이 루프",
+    "method": "RunSettlementService.settle(command: SettleRun) -> RunReceipt",
+    "tables": [
+      "run_state",
+      "loot_receipt",
+      "combat_result",
+      "dungeon_instance",
+      "command_receipt"
+    ],
+    "rules": [
+      "전투결과·경험치·전리품·부상·소요시간·정복기록을 runId와 encounterId로 정산한다",
+      "주목표/핵제거 충족 시 정복이며 탐색100%를 강요하지 않는다",
+      "후퇴/실패시 해당 시점 확보 보상과 미개봉 상자를 구별한다",
+      "P9 완료는 최소 도시복귀/장비정비/저장로드 UI를 포함하고 후속도시 기능전체를 기다리지 않는다"
+    ],
+    "normal": [
+      "시작→F던전→승리→상자→후퇴→저장로드",
+      "아이템1회·시간 증가·같은 방/금/XP 복원"
+    ],
+    "edge": [
+      "보스처치 탐색71%",
+      "조건충족이면 정복완료·탐색71% 보존"
+    ],
+    "failure": [
+      "보상생성 후 DB commit 실패",
+      "지급/정복 모두 rollback·동일정산 재시도 가능"
+    ],
+    "kw": [
+      "정복",
+      "결과",
+      "정산",
+      "보상",
+      "루프",
+      "완료",
+      "귀환"
+    ],
+    "state": "ACTIVE → SETTLING → RETREATED/CLEARED/FAILED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      100,
+      116
+    ],
+    "test_ids": [
+      "P9-UT-005",
+      "P9-BT-005",
+      "P9-FT-005",
+      "P9-CT-005",
+      "P9-IT-005"
+    ],
+    "task_ids": [
+      "P9-TASK-021",
+      "P9-TASK-022",
+      "P9-TASK-023",
+      "P9-TASK-024",
+      "P9-TASK-025"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 10,
+    "i": 1,
+    "id": "FUNC-P10-001",
+    "name": "도시 이동·시설·영업·대기",
+    "method": "CityService.visit(command: VisitFacility) -> VisitOutcome",
+    "tables": [
+      "city_state",
+      "facility_state",
+      "scheduled_action"
+    ],
+    "rules": [
+      "40종 시설과 도시구역을 데이터로 등록하고 도시간/도시내 이동비용을 구분한다",
+      "영업시간은 GameClock 기준이며 폐점이면 다음영업까지 대기 제안만 한다",
+      "혼잡대기는 예약자원으로 관리하고 이동중/치료중 같은 캐릭터 중복예약을 거절한다",
+      "현재위치/권한/시설상태 검사는 UI가 아니라 use case가 수행한다"
+    ],
+    "normal": [
+      "18시폐점 시설에17:50 도착·서비스5분",
+      "서비스성공17:55"
+    ],
+    "edge": [
+      "18:00도착,마감exclusive",
+      "폐점·금소비0·대기선택"
+    ],
+    "failure": [
+      "시설 파괴 이벤트와 동시방문",
+      "새 version 확인 후FacilityUnavailable·기존예약 보상정책 적용"
+    ],
+    "kw": [
+      "도시",
+      "시설",
+      "구역",
+      "영업",
+      "이동",
+      "혼잡",
+      "대기",
+      "운영"
+    ],
+    "state": "TRAVELLING → ARRIVED → QUEUED → SERVED/CLOSED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      6,
+      1110,
+      1111,
+      1137,
+      1141,
+      1142,
+      1143,
+      1144,
+      1145,
+      1146,
+      1147,
+      1153,
+      1155,
+      1156,
+      1157,
+      1160,
+      1161,
+      1165,
+      1166,
+      1167,
+      1168,
+      1169,
+      1172,
+      1173,
+      1176,
+      1177
+    ],
+    "test_ids": [
+      "P10-UT-001",
+      "P10-BT-001",
+      "P10-FT-001",
+      "P10-CT-001",
+      "P10-IT-001"
+    ],
+    "task_ids": [
+      "P10-TASK-001",
+      "P10-TASK-002",
+      "P10-TASK-003",
+      "P10-TASK-004",
+      "P10-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 10,
+    "i": 2,
+    "id": "FUNC-P10-002",
+    "name": "부상·질병·치료·재활",
+    "method": "HealthService.treat(command: TreatmentCommand) -> TreatmentPlan",
+    "tables": [
+      "injury",
+      "disease",
+      "treatment_order",
+      "scheduled_action",
+      "money_account"
+    ],
+    "rules": [
+      "전투HP 회복과 부상/질병/후유증의 치료를 분리한다",
+      "20부상/12질병 데이터와 잠복/발병/회복/재활 상태를 연결한다",
+      "치료비·시설자리·치료사·캐릭터 시간을 원자 선점하고 취소환불률은 시작/진행/완료 구간별정책으로 정한다",
+      "휴식 중 허용활동/출전시 악화/응급처치 지속시간을 명시한다"
+    ],
+    "normal": [
+      "비용100·치료6시간·금200",
+      "금100·치료예약1개·6게임시간 후완료"
+    ],
+    "edge": [
+      "5시간59분 상태조회",
+      "완료아님·HP회복이 부상소멸을 의미하지 않음"
+    ],
+    "failure": [
+      "치료완료 경계 재처리",
+      "부상제거/환급/연대기 이벤트 각1회"
+    ],
+    "kw": [
+      "부상",
+      "질병",
+      "치료",
+      "회복",
+      "재활",
+      "감염",
+      "후유증",
+      "잠복"
+    ],
+    "state": "EXPOSED/INJURED → DIAGNOSED → TREATING → REHAB → RECOVERED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1105,
+      1106,
+      1107,
+      1108,
+      1109,
+      1112,
+      1113,
+      1114,
+      1115,
+      1116,
+      1117,
+      1118,
+      1119,
+      1120,
+      1121,
+      1122,
+      1123,
+      1124,
+      1125,
+      1126,
+      1127,
+      1128,
+      1129,
+      1130,
+      1131,
+      1132,
+      1133,
+      1136,
+      1138,
+      1139,
+      1140
+    ],
+    "test_ids": [
+      "P10-UT-002",
+      "P10-BT-002",
+      "P10-FT-002",
+      "P10-CT-002",
+      "P10-IT-002"
+    ],
+    "task_ids": [
+      "P10-TASK-006",
+      "P10-TASK-007",
+      "P10-TASK-008",
+      "P10-TASK-009",
+      "P10-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 10,
+    "i": 3,
+    "id": "FUNC-P10-003",
+    "name": "주거·숙식·유지비·시설 확장",
+    "method": "ResidenceService.change(command: HousingCommand) -> HousingDelta",
+    "tables": [
+      "residence",
+      "facility_state",
+      "storage_location",
+      "money_account",
+      "scheduled_action"
+    ],
+    "rules": [
+      "여관/임대/자가/파티하우스/길드본부의 소유주와 입주자를 분리한다",
+      "창고권한·수용인원·가족거주·시설모듈은 residenceId로 연결한다",
+      "월별유지비는 world monthCloseId로1회 청구하고 미납은 안내→유예→제한 정책으로 보호자산 자동삭제를 금지한다",
+      "전투HP/피로 회복은 숙식quality와 실제 경과게임시간만 사용한다"
+    ],
+    "normal": [
+      "같은 월 경계 두 번 처리·월세30",
+      "30금1회 차감·두 번째0"
+    ],
+    "edge": [
+      "이사후 이전창고에보호유물",
+      "자동소실없음·이관대기 보관 유지"
+    ],
+    "failure": [
+      "주택구매중잔액부족",
+      "주택/자금/창고 모두변경0"
+    ],
+    "kw": [
+      "주거",
+      "주택",
+      "여관",
+      "숙박",
+      "식사",
+      "생활",
+      "유지비",
+      "하우스",
+      "가족",
+      "훈련"
+    ],
+    "state": "TENANT/OWNER → ACTIVE → ARREARS/RELOCATING",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      49,
+      1134,
+      1135,
+      1151,
+      1152,
+      1154,
+      1158,
+      1159,
+      1162,
+      1163,
+      1164,
+      1174
+    ],
+    "test_ids": [
+      "P10-UT-003",
+      "P10-BT-003",
+      "P10-FT-003",
+      "P10-CT-003",
+      "P10-IT-003"
+    ],
+    "task_ids": [
+      "P10-TASK-011",
+      "P10-TASK-012",
+      "P10-TASK-013",
+      "P10-TASK-014",
+      "P10-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 10,
+    "i": 4,
+    "id": "FUNC-P10-004",
+    "name": "귀환 정비·생활 프리셋·도시 행사",
+    "method": "MaintenancePlanner.execute(command: MaintenanceBatch) -> BatchReport",
+    "tables": [
+      "maintenance_order",
+      "inventory_stack",
+      "money_account",
+      "facility_state"
+    ],
+    "rules": [
+      "치료→수리→소모품보충 등 프리셋은 예상비용을 제시하고 예산한도 내 명시 순서로 실행한다",
+      "batch 전체rollback 대신 각각의 정비항목을 원자적으로 처리하고 부분성공 목록을 남긴다",
+      "반복실행은 항목receipt로 이미완료 항목을 중복청구하지 않는다",
+      "축제/행사/훈련은 콘텐츠와 예약서비스를 사용하며 현실날짜로 자동진행하지 않는다"
+    ],
+    "normal": [
+      "예산50,수리20·포션40 순서",
+      "수리성공·포션예산부족·실지출20"
+    ],
+    "edge": [
+      "항목0개 프리셋",
+      "정상 empty report·시간소비0"
+    ],
+    "failure": [
+      "두번째항목실패후 batch 재시도",
+      "첫수리 재청구0·실패항목만 재검증"
+    ],
+    "kw": [
+      "정비",
+      "프리셋",
+      "자동",
+      "행사",
+      "축제",
+      "훈련",
+      "식사",
+      "도시",
+      "사건"
+    ],
+    "state": "QUOTED → EXECUTING → COMPLETE/PARTIAL/STOPPED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1148,
+      1149,
+      1150,
+      1170,
+      1171,
+      1175
+    ],
+    "test_ids": [
+      "P10-UT-004",
+      "P10-BT-004",
+      "P10-FT-004",
+      "P10-CT-004",
+      "P10-IT-004"
+    ],
+    "task_ids": [
+      "P10-TASK-016",
+      "P10-TASK-017",
+      "P10-TASK-018",
+      "P10-TASK-019",
+      "P10-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 11,
+    "i": 1,
+    "id": "FUNC-P11-001",
+    "name": "보조 의뢰·생성·수락·정산",
+    "method": "ContractService.accept(command: AcceptContract) -> ContractDelta",
+    "tables": [
+      "contract",
+      "contract_objective",
+      "contract_receipt",
+      "scheduled_action"
+    ],
+    "rules": [
+      "의뢰는 던전 중심플레이를 보조하며80개 유형의 목표/보상/기한을 데이터화한다",
+      "던전의뢰는 별도전투가 아니라 일반던전 runId를 참조한다",
+      "수락조건은 공개정보를 사용하며 목표달성은 실제 domain event로 누적한다",
+      "완료보상은 contractId/settlementNo 유일receipt로 한 번만 지급한다"
+    ],
+    "normal": [
+      "몬스터3처치 의뢰에 동일kill event2번+서로다른2개",
+      "진행3/3·완료보상1회"
+    ],
+    "edge": [
+      "기한시각과 완료시각같음",
+      "정의된 inclusive기한 정책으로 판정·수행순서와무관"
+    ],
+    "failure": [
+      "보상중인벤토리초과",
+      "overflow 보관·보상분실/중복없음"
+    ],
+    "kw": [
+      "의뢰",
+      "계약",
+      "목표",
+      "기한",
+      "수락",
+      "완료",
+      "보상",
+      "템플릿"
+    ],
+    "state": "OFFERED → ACCEPTED → IN_PROGRESS → READY → PAID/FAILED/EXPIRED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      46,
+      187,
+      199,
+      204,
+      205,
+      206,
+      209,
+      212,
+      213,
+      214,
+      215,
+      216,
+      217,
+      1043,
+      1044,
+      1045,
+      1046,
+      1047,
+      1048,
+      1049,
+      1050,
+      1051,
+      1052,
+      1053,
+      1054,
+      1055,
+      1056,
+      1057,
+      1058,
+      1059,
+      1060,
+      1061,
+      1062,
+      1063,
+      1064,
+      1065,
+      1066,
+      1067,
+      1068,
+      1069,
+      1070,
+      1071,
+      1072,
+      1073,
+      1074,
+      1075,
+      1076,
+      1077,
+      1078,
+      1079,
+      1080,
+      1081,
+      1082,
+      1083,
+      1084,
+      1085,
+      1086,
+      1087,
+      1088,
+      1089,
+      1090,
+      1091,
+      1092,
+      1093,
+      1094,
+      1095,
+      1096,
+      1097,
+      1098,
+      1099,
+      1100,
+      1101,
+      1102,
+      1103,
+      1104
+    ],
+    "test_ids": [
+      "P11-UT-001",
+      "P11-BT-001",
+      "P11-FT-001",
+      "P11-CT-001",
+      "P11-IT-001"
+    ],
+    "task_ids": [
+      "P11-TASK-001",
+      "P11-TASK-002",
+      "P11-TASK-003",
+      "P11-TASK-004",
+      "P11-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 11,
+    "i": 2,
+    "id": "FUNC-P11-002",
+    "name": "모집·협상·단기/상시 고용",
+    "method": "RecruitmentService.negotiate(command: RecruitmentProposal) -> ProposalOutcome",
+    "tables": [
+      "recruitment_post",
+      "employment_contract",
+      "party_member",
+      "money_account"
+    ],
+    "rules": [
+      "공개모집/직접제안/여관/지인추천/구조후/NPC역제안을 같은 proposal 모델로 처리한다",
+      "계약금/급여/분배/치료수리비/위험상한/기간을 snapshot 계약에 고정한다",
+      "정확잠재력/숨은스킬 조건으로 모집필터를 만들지 않는다",
+      "NPC활동/길드규약/기존계약/당사자의사를 재확인하고 수락과 계약금차감을 같은 transaction으로 확정한다"
+    ],
+    "normal": [
+      "지원자 가용·계약금50·금100·수락",
+      "금50·유효계약1·출전예약아직없음"
+    ],
+    "edge": [
+      "이미 타원정중 NPC 수락",
+      "Unavailable·계약금차감0"
+    ],
+    "failure": [
+      "수락 버튼동시2회",
+      "하나의 계약·하나의 금차감"
+    ],
+    "kw": [
+      "영입",
+      "모집",
+      "협상",
+      "계약",
+      "고용",
+      "지원",
+      "역제안",
+      "시험"
+    ],
+    "state": "PROPOSED → COUNTERED → ACCEPTED/REJECTED/EXPIRED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      186,
+      188,
+      189,
+      190,
+      191,
+      192,
+      193,
+      194,
+      195,
+      200,
+      201,
+      202,
+      203,
+      207,
+      208
+    ],
+    "test_ids": [
+      "P11-UT-002",
+      "P11-BT-002",
+      "P11-FT-002",
+      "P11-CT-002",
+      "P11-IT-002"
+    ],
+    "task_ids": [
+      "P11-TASK-006",
+      "P11-TASK-007",
+      "P11-TASK-008",
+      "P11-TASK-009",
+      "P11-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 11,
+    "i": 3,
+    "id": "FUNC-P11-003",
+    "name": "계약 종료·퇴출·위약금·신뢰",
+    "method": "EmploymentService.terminate(command: TerminateEmployment) -> TerminationPlan",
+    "tables": [
+      "employment_contract",
+      "party_member",
+      "loan_contract",
+      "relationship_memory",
+      "money_account"
+    ],
+    "rules": [
+      "계약만료/합의해지/일방해지/징계퇴출을 구별한다",
+      "원정중 즉시방출은 막고 안전거점에서 해지정산한다",
+      "미지급급여·위약금·대여반환·전리품권리를 원장으로 정산한다",
+      "정당성/증거/헌장투표는 P13/15 port를 통해 검증하며 결과없는 강제성공을 금지한다"
+    ],
+    "normal": [
+      "만료·미지급급여20·대여장비I1",
+      "급여정산·I1반환/회수대기·부당해지페널티0"
+    ],
+    "edge": [
+      "던전내 일방퇴출",
+      "안전지역까지보류·NPC삭제없음"
+    ],
+    "failure": [
+      "위약금차감중실패",
+      "계약종료와차감 모두rollback"
+    ],
+    "kw": [
+      "퇴출",
+      "해지",
+      "탈퇴",
+      "만료",
+      "위약",
+      "신뢰",
+      "부당"
+    ],
+    "state": "ACTIVE → END_REQUESTED → SETTLING → CLOSED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      196,
+      197,
+      198,
+      210,
+      211
+    ],
+    "test_ids": [
+      "P11-UT-003",
+      "P11-BT-003",
+      "P11-FT-003",
+      "P11-CT-003",
+      "P11-IT-003"
+    ],
+    "task_ids": [
+      "P11-TASK-011",
+      "P11-TASK-012",
+      "P11-TASK-013",
+      "P11-TASK-014",
+      "P11-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 11,
+    "i": 4,
+    "id": "FUNC-P11-004",
+    "name": "선택형 대화·Topic·기억·말투",
+    "method": "DialogueDirector.choose(command: DialogueChoiceCommand) -> DialogueOutcome",
+    "tables": [
+      "dialogue_session",
+      "dialogue_memory",
+      "dialogue_template_binding"
+    ],
+    "rules": [
+      "영입/던전진행/사적대화/구매판매/의뢰/길드/파티운영 Topic을 context로 노출한다",
+      "대사템플릿+성격말투+호칭으로 구성하고 외부LLM/API를 필수로 사용하지 않는다",
+      "선택지는 도메인 명령으로 변환하여 직접버튼과 동일 권한/비용/멱등검사를 거친다",
+      "session/node/version을 검사하며 반복대화 감쇠와게임시간비용은 완료선택receipt에 묶는다"
+    ],
+    "normal": [
+      "상점NPC 대화에서구입→동일BuyCommand",
+      "직접구입과동일금/재고변화·대화비용정책1회"
+    ],
+    "edge": [
+      "선택후예전node 재전송",
+      "StaleDialogueChoice·추가보상0"
+    ],
+    "failure": [
+      "필수대사template누락",
+      "안내문+되돌아가기·핵심거래use case는직접화면으로가능"
+    ],
+    "kw": [
+      "대화",
+      "Topic",
+      "Dialogue",
+      "말투",
+      "호칭",
+      "사적",
+      "대사",
+      "선택",
+      "반복"
+    ],
+    "state": "OPEN → TOPIC_SELECTED → CHOICE_PENDING → RESOLVED/CLOSED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      218,
+      2932,
+      2933,
+      2934,
+      2935,
+      2936,
+      2937,
+      2938,
+      2939,
+      2940,
+      2941,
+      2942,
+      2943,
+      2944,
+      2945,
+      2946,
+      2947,
+      2948,
+      2949,
+      2950,
+      2951,
+      2952,
+      2953,
+      2954,
+      2955,
+      2956,
+      2957,
+      2958,
+      2959,
+      2960,
+      2961,
+      2962,
+      2963,
+      2964,
+      2965,
+      2966,
+      2967,
+      2968,
+      2969,
+      2970,
+      2971,
+      2972,
+      2973,
+      2974,
+      2975,
+      2976,
+      2977,
+      2978,
+      2979,
+      2980,
+      2981,
+      2982,
+      2983,
+      3074
+    ],
+    "test_ids": [
+      "P11-UT-004",
+      "P11-BT-004",
+      "P11-FT-004",
+      "P11-CT-004",
+      "P11-IT-004"
+    ],
+    "task_ids": [
+      "P11-TASK-016",
+      "P11-TASK-017",
+      "P11-TASK-018",
+      "P11-TASK-019",
+      "P11-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 12,
+    "i": 1,
+    "id": "FUNC-P12-001",
+    "name": "강화 확률·시도 원장·비파괴",
+    "method": "EnhancementService.attempt(command: EnhanceItem) -> EnhancementReceipt",
+    "tables": [
+      "enhancement_state",
+      "enhancement_attempt",
+      "money_account",
+      "inventory_stack"
+    ],
+    "rules": [
+      "목표+1~+20 확률표·목표별실패집중·촉매1·대장장이·시설·안정도·오염을 적용한다",
+      "attemptNo/결과seed/비용/보호석/단계변경/성공로그를 한 번에 commit한다",
+      "실패는 재료/금소모와구간별단계유지/하락이며 장비파괴는없다",
+      "단순seed재현은 외부세이브조작을완전히막는보안기능이 아니라고명시한다"
+    ],
+    "normal": [
+      "+19→20 기본1%·scripted draw0.005·보정0",
+      "+20성공·비용1회·attemptNo+1"
+    ],
+    "edge": [
+      "+20 장비에강화명령",
+      "MaxEnhancement·비용/시도증가0"
+    ],
+    "failure": [
+      "비용차감뒤쓰기실패",
+      "금/재료/시도/강화상태 전체rollback"
+    ],
+    "kw": [
+      "강화",
+      "성공",
+      "확률",
+      "비용",
+      "실패",
+      "보호",
+      "촉매",
+      "대장장이",
+      "집중"
+    ],
+    "state": "QUOTED → VALIDATED → ROLLED → COMMITTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      54,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146,
+      147,
+      166,
+      167,
+      168,
+      169,
+      170,
+      177,
+      178,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      185
+    ],
+    "test_ids": [
+      "P12-UT-001",
+      "P12-BT-001",
+      "P12-FT-001",
+      "P12-CT-001",
+      "P12-IT-001"
+    ],
+    "task_ids": [
+      "P12-TASK-001",
+      "P12-TASK-002",
+      "P12-TASK-003",
+      "P12-TASK-004",
+      "P12-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 12,
+    "i": 2,
+    "id": "FUNC-P12-002",
+    "name": "강화 성장·안정도·각인 슬롯",
+    "method": "EnhancementGrowthService.apply(input: SuccessGrowth) -> GrowthResult",
+    "tables": [
+      "enhancement_growth",
+      "enhancement_state",
+      "item_inscription"
+    ],
+    "rules": [
+      "기본수치기준가산성장으로+20 일반성공누적80%를 적용한다",
+      "랜덤성장/품질/대성공/안정도/극희귀각인은 별도RNG domain으로 분리한다",
+      "등급별추가라인상한·각인장비당1/특수2·캐릭터활성3·액티브3슬롯을모두검사한다",
+      "하락후같은단계재성공 무한성장악용은 단계별성장원장 재활성 보완안C07로차단한다"
+    ],
+    "normal": [
+      "기본위력100·대성공없는+20",
+      "기본강화적용위력180"
+    ],
+    "edge": [
+      "각인활성3 상태에서네번째활성",
+      "비활성보관·장비각인자체소실없음"
+    ],
+    "failure": [
+      "+15획득후하락14→15반복",
+      "승인정책상15단계추가성장재추첨0"
+    ],
+    "kw": [
+      "랜덤",
+      "성장",
+      "안정도",
+      "각인",
+      "대성공",
+      "품질",
+      "슬롯"
+    ],
+    "state": "STEP_REACHED → GROWTH_RECORDED → ACTIVE/INACTIVE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      148,
+      149,
+      150,
+      151,
+      152,
+      153,
+      154,
+      155,
+      156,
+      157,
+      158,
+      159,
+      160,
+      161,
+      162,
+      163,
+      164,
+      165,
+      171,
+      172,
+      173
+    ],
+    "test_ids": [
+      "P12-UT-002",
+      "P12-BT-002",
+      "P12-FT-002",
+      "P12-CT-002",
+      "P12-IT-002"
+    ],
+    "task_ids": [
+      "P12-TASK-006",
+      "P12-TASK-007",
+      "P12-TASK-008",
+      "P12-TASK-009",
+      "P12-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 12,
+    "i": 3,
+    "id": "FUNC-P12-003",
+    "name": "계승·정련·재각성·유물복원",
+    "method": "EquipmentRefinery.execute(command: RefineryCommand) -> RefineryDelta",
+    "tables": [
+      "item_instance",
+      "enhancement_state",
+      "enhancement_growth",
+      "item_inscription",
+      "craft_order"
+    ],
+    "rules": [
+      "동일계열강화환산가치70~90%와특수계승90~100%는승인된recipe수치로계산한다",
+      "랜덤강화/안정도/각인은자동이전하지않고희귀재료정책을검사한다",
+      "정련잠금라인/재각성품질/유물단계는소모재료와선택대상을고정한다",
+      "보호/유일/대여원본의소실가능작업은금지또는명시승인된특수recipe만허용한다"
+    ],
+    "normal": [
+      "잠금1줄+대상1줄정련",
+      "잠금값동일·대상줄만변경·비용1회"
+    ],
+    "edge": [
+      "대여장비를계승소재로선택",
+      "ProtectedOwnership·변경0"
+    ],
+    "failure": [
+      "계승목표/소재동일ID",
+      "InvalidTarget·아이템소실없음"
+    ],
+    "kw": [
+      "계승",
+      "정련",
+      "재각성",
+      "유물",
+      "복원",
+      "잠금"
+    ],
+    "state": "PREVIEW → CONSENTED → APPLIED/REJECTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      174,
+      175,
+      176
+    ],
+    "test_ids": [
+      "P12-UT-003",
+      "P12-BT-003",
+      "P12-FT-003",
+      "P12-CT-003",
+      "P12-IT-003"
+    ],
+    "task_ids": [
+      "P12-TASK-011",
+      "P12-TASK-012",
+      "P12-TASK-013",
+      "P12-TASK-014",
+      "P12-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 12,
+    "i": 4,
+    "id": "FUNC-P12-004",
+    "name": "제작·연금·연구·분해",
+    "method": "CraftingService.start(command: CraftCommand) -> CraftOrder",
+    "tables": [
+      "craft_order",
+      "craft_material_reservation",
+      "scheduled_action",
+      "inventory_stack",
+      "item_instance"
+    ],
+    "rules": [
+      "50종기본레시피와제작/연금/연구/분해경로를동일정의로실행한다",
+      "시작시재료와시설시간선점·완료시품질/생산품1회확정·취소시시점별반환정책을사용한다",
+      "결과실패/부분성공도정의된소모와산출을원자적으로기록한다",
+      "조합순환과분해→재제작무위험증식을정적검사및가격시뮬레이션으로검증한다"
+    ],
+    "normal": [
+      "철괴3 필요·현재5·제작2시간",
+      "가용2/예약3·2게임시간후산출1개"
+    ],
+    "edge": [
+      "같은재료로동시2주문각3",
+      "두번째MaterialUnavailable"
+    ],
+    "failure": [
+      "완료직전프로세스종료",
+      "로드후완료receipt기준산출1개·재료중복차감0"
+    ],
+    "kw": [
+      "제작",
+      "연금",
+      "레시피",
+      "연구",
+      "분해",
+      "공방",
+      "재료",
+      "craft"
+    ],
+    "state": "DRAFT → RESERVED → RUNNING → COMPLETE/FAILED/CANCELLED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      850,
+      851,
+      852,
+      853,
+      854,
+      855,
+      856,
+      857,
+      858,
+      859,
+      860,
+      861,
+      862,
+      863,
+      864,
+      865,
+      866,
+      867,
+      868,
+      869,
+      870,
+      871,
+      872,
+      873,
+      874,
+      875,
+      876,
+      877,
+      878,
+      879,
+      880,
+      881,
+      882,
+      883,
+      884,
+      885,
+      886,
+      887,
+      888,
+      889,
+      890,
+      891,
+      892,
+      893,
+      894,
+      895,
+      896,
+      897,
+      898,
+      899,
+      900,
+      901,
+      902,
+      903,
+      904,
+      905,
+      906,
+      907,
+      908,
+      909,
+      910,
+      911,
+      912,
+      913,
+      914,
+      915,
+      916,
+      917,
+      918,
+      919,
+      920,
+      921,
+      922,
+      923,
+      924,
+      925,
+      926,
+      927,
+      928,
+      929
+    ],
+    "test_ids": [
+      "P12-UT-004",
+      "P12-BT-004",
+      "P12-FT-004",
+      "P12-CT-004",
+      "P12-IT-004"
+    ],
+    "task_ids": [
+      "P12-TASK-016",
+      "P12-TASK-017",
+      "P12-TASK-018",
+      "P12-TASK-019",
+      "P12-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 13,
+    "i": 1,
+    "id": "FUNC-P13-001",
+    "name": "파티 구성·출전·교대·헌장",
+    "method": "PartyService.changeRoster(command: PartyRosterCommand) -> PartyDelta",
+    "tables": [
+      "party",
+      "party_member",
+      "deployment",
+      "party_charter",
+      "scheduled_action"
+    ],
+    "rules": [
+      "조직10명과출전6명·고용/정식/예비/치료지위를분리한다",
+      "플레이어가리더가아닌경우도헌장권한으로동일하게검사한다",
+      "원정중구성변경/교대는허용안전경계에서만실행한다",
+      "교대가NPC장비/스킬을복사하거나기존출전예약을남기지않게한다"
+    ],
+    "normal": [
+      "정식8+고용2·출전6",
+      "유효조직10·출전6"
+    ],
+    "edge": [
+      "조직11명또는출전7명",
+      "CapacityExceeded·원본명단유지"
+    ],
+    "failure": [
+      "교대도중저장실패",
+      "기존출전6명그대로·중복출전0"
+    ],
+    "kw": [
+      "파티",
+      "구성",
+      "출전",
+      "예비",
+      "교대",
+      "로테이션",
+      "헌장",
+      "지위",
+      "가입"
+    ],
+    "state": "FORMING → REGISTERED → DEPLOYED → RETURNED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      28,
+      29,
+      30,
+      263,
+      264,
+      265,
+      266,
+      267,
+      268,
+      269,
+      270,
+      271,
+      272,
+      273,
+      1537,
+      1538,
+      1539,
+      1540,
+      1541,
+      1543,
+      1544,
+      1546,
+      1547,
+      1548,
+      1550,
+      1556,
+      1557,
+      1562,
+      1563,
+      1564,
+      1565,
+      1566,
+      1568,
+      1569,
+      1570,
+      1572,
+      1583,
+      1691,
+      1692,
+      1693,
+      1694,
+      1698,
+      1699,
+      1700,
+      1704,
+      1711,
+      1714,
+      1716,
+      1717,
+      1718,
+      1719,
+      1721,
+      1727,
+      1728,
+      1731,
+      1732,
+      1735,
+      1736,
+      1737
+    ],
+    "test_ids": [
+      "P13-UT-001",
+      "P13-BT-001",
+      "P13-FT-001",
+      "P13-CT-001",
+      "P13-IT-001"
+    ],
+    "task_ids": [
+      "P13-TASK-001",
+      "P13-TASK-002",
+      "P13-TASK-003",
+      "P13-TASK-004",
+      "P13-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 13,
+    "i": 2,
+    "id": "FUNC-P13-002",
+    "name": "분배·공동자금·투표·공정성",
+    "method": "PartyGovernanceService.resolve(command: PartyDecision) -> DecisionReceipt",
+    "tables": [
+      "party_charter",
+      "party_proposal",
+      "party_vote",
+      "money_account",
+      "party_distribution"
+    ],
+    "rules": [
+      "균등/기여/순번/직업/리더/경매분배를헌장version snapshot으로정한다",
+      "투표유권자는제안시점자격snapshot이며중복표/만료후표를막는다",
+      "금화정수나눗셈잔액은정렬된수령순번또는공동기금정책에보존한다",
+      "공동자금과개인자금은계정별소유주를분리하고승인한도안에서만차감한다"
+    ],
+    "normal": [
+      "100금3인균등·잔액공동기금정책",
+      "각33금·공동기금1금·합100"
+    ],
+    "edge": [
+      "동일멤버투표2번",
+      "정책상수정또는거절·유권자수증가0"
+    ],
+    "failure": [
+      "분배중한수령자없음",
+      "전체분배보류·다른멤버만지급하지않음"
+    ],
+    "kw": [
+      "헌장",
+      "분배",
+      "공동",
+      "자금",
+      "투표",
+      "공정성",
+      "승인",
+      "재산"
+    ],
+    "state": "PROPOSED → VOTING → APPROVED/REJECTED → EXECUTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1542,
+      1555,
+      1559,
+      1560,
+      1561,
+      1567,
+      1712,
+      1713,
+      1720,
+      1722
+    ],
+    "test_ids": [
+      "P13-UT-002",
+      "P13-BT-002",
+      "P13-FT-002",
+      "P13-CT-002",
+      "P13-IT-002"
+    ],
+    "task_ids": [
+      "P13-TASK-006",
+      "P13-TASK-007",
+      "P13-TASK-008",
+      "P13-TASK-009",
+      "P13-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 13,
+    "i": 3,
+    "id": "FUNC-P13-003",
+    "name": "만족·갈등·리더교체·분열·승계",
+    "method": "PartyPoliticsService.apply(command: PartyPoliticalAction) -> PoliticalDelta",
+    "tables": [
+      "party",
+      "party_member",
+      "party_proposal",
+      "party_history",
+      "relationship_memory"
+    ],
+    "rules": [
+      "결속/사기/전술신뢰/개인만족/리더정당성을분리한다",
+      "예비출전률불만과개인목표충돌은사건기억및실제활동에서계산한다",
+      "분열/합병은구성원동의·재산분할·공동부채·이름역사를원자적으로재배정한다",
+      "은퇴/후계변경으로파티ID/정체성이무조건리셋되지않도록한다"
+    ],
+    "normal": [
+      "구성원10명파티가6/4로합의분열",
+      "구성원총10·자산총액/부채총액보존·history연결"
+    ],
+    "edge": [
+      "리더퇴임·적격후보0",
+      "대행/선거대기·파티삭제없음"
+    ],
+    "failure": [
+      "분열후자산합원본과불일치",
+      "InvariantViolation·분열rollback"
+    ],
+    "kw": [
+      "정치",
+      "만족",
+      "갈등",
+      "리더",
+      "정당성",
+      "분열",
+      "합병",
+      "승계",
+      "은퇴",
+      "상성"
+    ],
+    "state": "STABLE → DISPUTED → VOTE → REFORMED/SPLIT/MERGED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1545,
+      1549,
+      1551,
+      1552,
+      1553,
+      1554,
+      1558,
+      1571,
+      1584,
+      1695,
+      1696,
+      1697,
+      1701,
+      1702,
+      1703,
+      1705,
+      1706,
+      1707,
+      1708,
+      1709,
+      1710,
+      1715,
+      1723,
+      1724,
+      1725,
+      1726,
+      1733,
+      1734
+    ],
+    "test_ids": [
+      "P13-UT-003",
+      "P13-BT-003",
+      "P13-FT-003",
+      "P13-CT-003",
+      "P13-IT-003"
+    ],
+    "task_ids": [
+      "P13-TASK-011",
+      "P13-TASK-012",
+      "P13-TASK-013",
+      "P13-TASK-014",
+      "P13-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 13,
+    "i": 4,
+    "id": "FUNC-P13-004",
+    "name": "파티 공식 랭킹·연속1위",
+    "method": "PartyRankingService.closeDay(input: RankingDay) -> RankingSnapshot",
+    "tables": [
+      "ranking_snapshot",
+      "ranking_streak",
+      "party_history"
+    ],
+    "rules": [
+      "8항목4000/1800/1000/900/700/600/500/500점으로합10000을제한한다",
+      "주력6인전력과예비전력지속성항목을분리하고저등급반복성과를감쇠한다",
+      "동일일마감은1회만반영하고30일연속1위/기여조건을proof후보로발행한다",
+      "상세공식미정계수는balance profile로격리해일괄승인후공식랭킹활성화한다"
+    ],
+    "normal": [
+      "29일연속1위·다음날마감1위",
+      "streak30·후보event1개"
+    ],
+    "edge": [
+      "30일도중하루2위",
+      "streak0;순간1위복귀만으로증표없음"
+    ],
+    "failure": [
+      "같은dayCloseId재실행",
+      "점수/연속일/후보event추가0"
+    ],
+    "kw": [
+      "랭킹",
+      "점수",
+      "주력",
+      "성과",
+      "1위",
+      "증표"
+    ],
+    "state": "UNRANKED → DAILY_RANKED → STREAKING → PROOF_CANDIDATE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1573,
+      1574,
+      1575,
+      1576,
+      1577,
+      1578,
+      1579,
+      1580,
+      1581,
+      1582,
+      1729,
+      1730
+    ],
+    "test_ids": [
+      "P13-UT-004",
+      "P13-BT-004",
+      "P13-FT-004",
+      "P13-CT-004",
+      "P13-IT-004"
+    ],
+    "task_ids": [
+      "P13-TASK-016",
+      "P13-TASK-017",
+      "P13-TASK-018",
+      "P13-TASK-019",
+      "P13-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 14,
+    "i": 1,
+    "id": "FUNC-P14-001",
+    "name": "도시 시장지수·재고·수요공급",
+    "method": "MarketEngine.close(input: MarketBoundary) -> MarketDelta",
+    "tables": [
+      "market_index",
+      "market_stock",
+      "money_account",
+      "economic_ledger"
+    ],
+    "rules": [
+      "도시별품목수요/공급/재고/시장지수에위기·생산·운송·수입을반영한다",
+      "NPC/길드재정은실제계정에서지출하고무제한금화를주입하지않는다",
+      "매수/매도가격·수수료·최소재고·가격변동cap을분리한다",
+      "환율없는기본금화원장을사용하고일주월경계를중복처리하지않는다"
+    ],
+    "normal": [
+      "포션재고10·구매2·금100·단가10",
+      "재고8·금80·상인매출20"
+    ],
+    "edge": [
+      "재고0 구매1",
+      "OutOfStock·금변경0"
+    ],
+    "failure": [
+      "같은도시일마감2회",
+      "시장지수1회갱신·원장중복0"
+    ],
+    "kw": [
+      "경제",
+      "시장",
+      "지수",
+      "수요",
+      "공급",
+      "가격",
+      "재고",
+      "수입",
+      "지출",
+      "예비금"
+    ],
+    "state": "OPEN → TRANSACTING → BOUNDARY_CLOSE → OPEN",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      47,
+      48,
+      111,
+      1305,
+      1318,
+      1385,
+      1386,
+      1387,
+      1388,
+      1389,
+      1390,
+      1391,
+      1392,
+      1395,
+      1397,
+      1398,
+      1399,
+      1400,
+      1401,
+      1402,
+      1403,
+      1404,
+      1405,
+      1406,
+      1408,
+      1409,
+      1410,
+      1412,
+      1413,
+      1414,
+      1415,
+      1416,
+      1417,
+      1418,
+      1419
+    ],
+    "test_ids": [
+      "P14-UT-001",
+      "P14-BT-001",
+      "P14-FT-001",
+      "P14-CT-001",
+      "P14-IT-001"
+    ],
+    "task_ids": [
+      "P14-TASK-001",
+      "P14-TASK-002",
+      "P14-TASK-003",
+      "P14-TASK-004",
+      "P14-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 14,
+    "i": 2,
+    "id": "FUNC-P14-002",
+    "name": "구매·판매·흥정·경매",
+    "method": "TradingService.execute(command: TradeCommand) -> TradeReceipt",
+    "tables": [
+      "trade_receipt",
+      "auction",
+      "auction_bid",
+      "market_stock",
+      "money_account",
+      "item_instance"
+    ],
+    "rules": [
+      "견적은가격version/수량/유효게임시각을포함하고실행시다시확인한다",
+      "경매입찰금은보증/예약계정으로옮겨중복사용을막는다",
+      "마감시가격동률은입찰확정순서로판정하고소유권·낙찰금·환불을원자처리한다",
+      "동일물품즉시구매판매시수수료포함순이익이양수가되는정적차익을차단한다"
+    ],
+    "normal": [
+      "입찰A100/B120·마감",
+      "B만소유권획득·A예약금반환·판매자순대금"
+    ],
+    "edge": [
+      "마감시각과같은입찰",
+      "마감exclusive정책으로거절"
+    ],
+    "failure": [
+      "낙찰중프로세스종료",
+      "이전경매미정산또는완전정산만복원"
+    ],
+    "kw": [
+      "구매",
+      "판매",
+      "흥정",
+      "거래",
+      "경매",
+      "입찰",
+      "상점",
+      "암시장"
+    ],
+    "state": "QUOTED/LISTED → RESERVED/BIDDING → SETTLED/EXPIRED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1304,
+      1393,
+      1394,
+      1396,
+      1411
+    ],
+    "test_ids": [
+      "P14-UT-002",
+      "P14-BT-002",
+      "P14-FT-002",
+      "P14-CT-002",
+      "P14-IT-002"
+    ],
+    "task_ids": [
+      "P14-TASK-006",
+      "P14-TASK-007",
+      "P14-TASK-008",
+      "P14-TASK-009",
+      "P14-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 14,
+    "i": 3,
+    "id": "FUNC-P14-003",
+    "name": "장비 대여·회수·손상·보험",
+    "method": "LoanService.change(command: LoanCommand) -> LoanDelta",
+    "tables": [
+      "loan_contract",
+      "item_instance",
+      "equipment_slot",
+      "money_account"
+    ],
+    "rules": [
+      "ownerId와custodianId/장착자를분리하고대여중강화·정련·판매·분해권한을계약별검사한다",
+      "만료/퇴출/은퇴시안전거점회수또는반환예약을만든다",
+      "내구손상/미반환위약/보험청구는원인사건receipt로한번청구한다",
+      "보호핵심장비는패배로영구소실하지않는다"
+    ],
+    "normal": [
+      "길드소유I1을NPC N1대여",
+      "owner=길드 유지·custodian=N1"
+    ],
+    "edge": [
+      "대여I1 판매시도",
+      "OwnershipDenied·금/아이템변경0"
+    ],
+    "failure": [
+      "반환receipt재시도",
+      "소유권/보증금반환1회"
+    ],
+    "kw": [
+      "대여",
+      "회수",
+      "미반환",
+      "손상",
+      "보험",
+      "소유"
+    ],
+    "state": "AVAILABLE → LOANED → RETURN_PENDING → RETURNED/OVERDUE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1294,
+      1299,
+      1300,
+      1301,
+      1302,
+      1303,
+      1306,
+      1307,
+      1308,
+      1309,
+      1323,
+      1330,
+      1332,
+      1334,
+      1407
+    ],
+    "test_ids": [
+      "P14-UT-003",
+      "P14-BT-003",
+      "P14-FT-003",
+      "P14-CT-003",
+      "P14-IT-003"
+    ],
+    "task_ids": [
+      "P14-TASK-011",
+      "P14-TASK-012",
+      "P14-TASK-013",
+      "P14-TASK-014",
+      "P14-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 14,
+    "i": 4,
+    "id": "FUNC-P14-004",
+    "name": "창고·운송·원정보급·분실복구",
+    "method": "LogisticsService.dispatch(command: ShipmentCommand) -> ShipmentPlan",
+    "tables": [
+      "storage_location",
+      "shipment",
+      "shipment_item",
+      "item_instance",
+      "inventory_stack",
+      "scheduled_action"
+    ],
+    "rules": [
+      "통합검색은물리위치와실제가용시각을함께표시하고원격창고물품을즉시사용하지못하게한다",
+      "운송중아이템은단일IN_TRANSIT위치에두고출발/도착창고와동시보유하지않는다",
+      "운송위험·호송·보험·캠프보급은예약서비스와공통전투결과를이용한다",
+      "분실/회수대기/반환은실제아이템ID를유지하고보호물품소프트락을막는다"
+    ],
+    "normal": [
+      "창고A I1→B운송6시간",
+      "이동중사용불가·6게임시간후B단일위치"
+    ],
+    "edge": [
+      "같은운송도착2번",
+      "물품/스택1회인도"
+    ],
+    "failure": [
+      "도착창고용량부족",
+      "도착임시보관함유지·아이템삭제0"
+    ],
+    "kw": [
+      "창고",
+      "운송",
+      "물류",
+      "보급",
+      "보관",
+      "무게",
+      "인벤토리",
+      "캠프",
+      "회수",
+      "위치"
+    ],
+    "state": "RESERVED → IN_TRANSIT → ARRIVED/HOLD/RETURNED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1293,
+      1295,
+      1296,
+      1297,
+      1298,
+      1310,
+      1311,
+      1312,
+      1313,
+      1314,
+      1315,
+      1316,
+      1317,
+      1319,
+      1320,
+      1321,
+      1322,
+      1324,
+      1325,
+      1326,
+      1327,
+      1328,
+      1329,
+      1331,
+      1333,
+      1335
+    ],
+    "test_ids": [
+      "P14-UT-004",
+      "P14-BT-004",
+      "P14-FT-004",
+      "P14-CT-004",
+      "P14-IT-004"
+    ],
+    "task_ids": [
+      "P14-TASK-016",
+      "P14-TASK-017",
+      "P14-TASK-018",
+      "P14-TASK-019",
+      "P14-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 15,
+    "i": 1,
+    "id": "FUNC-P15-001",
+    "name": "지식·관측·소문·정보 공개",
+    "method": "KnowledgeService.observe(input: Observation) -> KnowledgeDelta",
+    "tables": [
+      "knowledge_fact",
+      "observation",
+      "rumor",
+      "knowledge_projection"
+    ],
+    "rules": [
+      "실제WorldFact와관측/추정/소문을분리하고source·confidence·observedAt·expiresAt을보존한다",
+      "정보발견은용병동행/스카우트/길드기록/던전조사조건으로발생한다",
+      "미공개값은필터정렬/추천점수설명/접근성/정상로그까지projection만사용한다",
+      "모순소문은원본사실을덮어쓰지않고새정보에따라신뢰도를갱신한다"
+    ],
+    "normal": [
+      "숨은잠재력20/90 두NPC의공개정보동일",
+      "공개DTO·검색정렬결과동일"
+    ],
+    "edge": [
+      "정보유효시각만료",
+      "추정/오래된정보표시·정확값으로승격없음"
+    ],
+    "failure": [
+      "관측원인ID없음",
+      "관측거절·진실데이터변경0"
+    ],
+    "kw": [
+      "정보",
+      "지식",
+      "관측",
+      "스카우트",
+      "소문",
+      "비공개",
+      "공개",
+      "추정",
+      "감정"
+    ],
+    "state": "UNKNOWN → RUMORED → OBSERVED → VERIFIED/STALE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1188,
+      1202,
+      1210,
+      1211,
+      1213,
+      1218,
+      1222,
+      1223,
+      1224,
+      1225,
+      1226,
+      1227,
+      1228,
+      1229,
+      1230,
+      1231,
+      1232,
+      1233,
+      1234,
+      1235,
+      1236,
+      1237,
+      1238,
+      1239,
+      1240,
+      1241,
+      1242,
+      1243,
+      1244,
+      1245,
+      1246,
+      1247,
+      1248,
+      1249,
+      1250,
+      1251,
+      1252,
+      1253,
+      1254,
+      1255,
+      1256,
+      1257,
+      1258,
+      1259,
+      1260,
+      1261,
+      1262,
+      1263,
+      1264,
+      1274,
+      1277,
+      1284,
+      1287,
+      1288,
+      2168,
+      2172,
+      2173,
+      2174,
+      2175,
+      2176,
+      2213,
+      2215
+    ],
+    "test_ids": [
+      "P15-UT-001",
+      "P15-BT-001",
+      "P15-FT-001",
+      "P15-CT-001",
+      "P15-IT-001"
+    ],
+    "task_ids": [
+      "P15-TASK-001",
+      "P15-TASK-002",
+      "P15-TASK-003",
+      "P15-TASK-004",
+      "P15-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 15,
+    "i": 2,
+    "id": "FUNC-P15-002",
+    "name": "평판·법률·계약 신뢰·지역기여",
+    "method": "ReputationService.apply(event: ReputationEvent) -> ReputationDelta",
+    "tables": [
+      "reputation_score",
+      "reputation_event",
+      "legal_case"
+    ],
+    "rules": [
+      "용병등급/지역평판/조직명성/계약신뢰를단일호감도로합치지않는다",
+      "범죄/징계/부당퇴출판정은증거와관할/규약을참조한다",
+      "같은사건평판효과중복과자기거래평판농사를eventId/cooldown으로막는다",
+      "벌금/시설접근제한이귀환필수열쇠나후계자경로를영구차단하지않게대안복구를둔다"
+    ],
+    "normal": [
+      "동일구조event를조합과도시에서중복수신",
+      "각평판dimension의정해진효과1회"
+    ],
+    "edge": [
+      "평판최대치추가보너스",
+      "cap이상증가없음·원사건기록유지"
+    ],
+    "failure": [
+      "판결증거누락",
+      "미확정case·벌금자동차감0"
+    ],
+    "kw": [
+      "평판",
+      "명성",
+      "법률",
+      "범죄",
+      "신뢰",
+      "처벌",
+      "벌금",
+      "등급"
+    ],
+    "state": "NEUTRAL → CHANGED → REVIEWED/APPEALED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      38,
+      1178,
+      1179,
+      1180,
+      1181,
+      1182,
+      1183,
+      1184,
+      1185,
+      1186,
+      1187,
+      1189,
+      1190,
+      1192,
+      1193,
+      1194,
+      1195,
+      1196,
+      1197,
+      1198,
+      1199,
+      1200,
+      1201,
+      1203,
+      1204,
+      1205,
+      1206,
+      1208,
+      1209,
+      1212,
+      1214,
+      1215,
+      1216,
+      1217,
+      1219,
+      1220,
+      1221,
+      2184
+    ],
+    "test_ids": [
+      "P15-UT-002",
+      "P15-BT-002",
+      "P15-FT-002",
+      "P15-CT-002",
+      "P15-IT-002"
+    ],
+    "task_ids": [
+      "P15-TASK-006",
+      "P15-TASK-007",
+      "P15-TASK-008",
+      "P15-TASK-009",
+      "P15-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 15,
+    "i": 3,
+    "id": "FUNC-P15-003",
+    "name": "다축 관계·기억·호흡·연애",
+    "method": "RelationshipService.apply(event: SocialEvent) -> RelationshipDelta",
+    "tables": [
+      "relationship",
+      "relationship_memory",
+      "relationship_stage"
+    ],
+    "rules": [
+      "호감/신뢰/존경/친밀/갈등과관계단계를별도로저장한다",
+      "공동전투/분배/약속/갈등의기억은중요도와감쇠곡선을따른다",
+      "친구/라이벌/연인/부부/동료태그는상호배타여부를정의하고일부동시보유를허용한다",
+      "NPC의사/연령/기존관계조건을검사하며관계수치가높다고결혼을자동강제하지않는다"
+    ],
+    "normal": [
+      "동일약속이행event2회",
+      "신뢰상승1회·기억1개"
+    ],
+    "edge": [
+      "대상관계거절플래그",
+      "연애제안거절·정상동료기능유지"
+    ],
+    "failure": [
+      "기억압축중실패",
+      "원본기억유지·관계총합불변"
+    ],
+    "kw": [
+      "관계",
+      "호감",
+      "신뢰",
+      "존경",
+      "친밀",
+      "갈등",
+      "기억",
+      "연애",
+      "결혼",
+      "호흡"
+    ],
+    "state": "STRANGER → ACQUAINTANCE → COMPANION/FRIEND/RIVAL/PARTNER",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      44,
+      1191,
+      1207,
+      1265,
+      1266,
+      1267,
+      1268,
+      1269,
+      1270,
+      1271,
+      1272,
+      1273,
+      1275,
+      1276,
+      1278,
+      1279,
+      1280,
+      1281,
+      1282,
+      1283,
+      1285,
+      1286,
+      1289,
+      1290,
+      1291,
+      1292,
+      2194,
+      2201,
+      2205,
+      2206
+    ],
+    "test_ids": [
+      "P15-UT-003",
+      "P15-BT-003",
+      "P15-FT-003",
+      "P15-CT-003",
+      "P15-IT-003"
+    ],
+    "task_ids": [
+      "P15-TASK-011",
+      "P15-TASK-012",
+      "P15-TASK-013",
+      "P15-TASK-014",
+      "P15-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 15,
+    "i": 4,
+    "id": "FUNC-P15-004",
+    "name": "성격·특성·매력·개인 목표",
+    "method": "PersonalityService.evaluate(input: SocialDecisionContext) -> SocialIntent",
+    "tables": [
+      "personality_state",
+      "trait_binding",
+      "personal_goal"
+    ],
+    "rules": [
+      "성격축·특성60종·매력/첫인상·개인목표와스킬적성을구별한다",
+      "성격은의사결정가중치/말투/선호로작동하며포트레이트번호와연결하지않는다",
+      "극단축/특성충돌은배타태그와가중분포를검사한다",
+      "사후경험에따른변화는사건원장으로추적하고매번전체성격을재생성하지않는다"
+    ],
+    "normal": [
+      "같은성격·다른portraitKey 두NPC",
+      "동일상황의성격점수동일"
+    ],
+    "edge": [
+      "배타trait동시선택",
+      "생성검증실패또는후보재선택기록"
+    ],
+    "failure": [
+      "목표대상던전소멸",
+      "목표를실패/대안상태로전환·영구대기없음"
+    ],
+    "kw": [
+      "성격",
+      "특성",
+      "매력",
+      "성향",
+      "목표",
+      "기질",
+      "Personality",
+      "상성"
+    ],
+    "state": "GENERATED → EXPERIENCED → MODIFIED → ARCHIVED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2157,
+      2158,
+      2159,
+      2160,
+      2161,
+      2162,
+      2163,
+      2164,
+      2165,
+      2166,
+      2167,
+      2169,
+      2170,
+      2171,
+      2177,
+      2178,
+      2179,
+      2180,
+      2181,
+      2182,
+      2183,
+      2185,
+      2186,
+      2187,
+      2188,
+      2189,
+      2190,
+      2191,
+      2192,
+      2193,
+      2195,
+      2196,
+      2197,
+      2198,
+      2199,
+      2200,
+      2202,
+      2203,
+      2204,
+      2207,
+      2208,
+      2209,
+      2210,
+      2211,
+      2212,
+      2214,
+      2216,
+      2217
+    ],
+    "test_ids": [
+      "P15-UT-004",
+      "P15-BT-004",
+      "P15-FT-004",
+      "P15-CT-004",
+      "P15-IT-004"
+    ],
+    "task_ids": [
+      "P15-TASK-016",
+      "P15-TASK-017",
+      "P15-TASK-018",
+      "P15-TASK-019",
+      "P15-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 16,
+    "i": 1,
+    "id": "FUNC-P16-001",
+    "name": "길드 가입·직위·승계·권한",
+    "method": "GuildMembershipService.change(command: GuildMembershipCommand) -> GuildDelta",
+    "tables": [
+      "guild",
+      "guild_member",
+      "guild_office",
+      "guild_history"
+    ],
+    "rules": [
+      "플레이어는기존길드가입→기여→간부/길드장승계경로를사용하며직접신규창설하지않는다",
+      "NPC길드신설/해체/합병과플레이어가입권한을분리한다",
+      "개인가입/파티단위가입/혼합소속규약을검사한다",
+      "길드장이라도개인장비몰수/무단재산소모/타길드원강제영입권한을얻지않는다"
+    ],
+    "normal": [
+      "간부자격충족플레이어가길드장선거승리",
+      "직위변경·길드ID/역사유지"
+    ],
+    "edge": [
+      "플레이어 CreateGuild 직접명령",
+      "UnsupportedPlayerAction·금/길드생성0"
+    ],
+    "failure": [
+      "선출확정중DB실패",
+      "이전길드장또는완전새길드장·공백중간상태없음"
+    ],
+    "kw": [
+      "가입",
+      "직위",
+      "간부",
+      "길드장",
+      "승계",
+      "선거",
+      "창설",
+      "해체",
+      "이적"
+    ],
+    "state": "OUTSIDER → MEMBER → OFFICER → LEADER/FORMER",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      41,
+      219,
+      220,
+      221,
+      222,
+      223,
+      225,
+      226,
+      227,
+      228,
+      230,
+      231,
+      233,
+      235,
+      236,
+      238,
+      239,
+      242,
+      243,
+      245,
+      246,
+      248,
+      249,
+      250,
+      251,
+      252,
+      253,
+      254,
+      256,
+      257,
+      259,
+      260,
+      262,
+      1336,
+      1338,
+      1340,
+      1342,
+      1344,
+      1345,
+      1346,
+      1347,
+      1348,
+      1349,
+      1350,
+      1351,
+      1352,
+      1358,
+      1359,
+      1360,
+      1361,
+      1366,
+      1652,
+      1662,
+      1675,
+      1679,
+      1684,
+      1685,
+      1686
+    ],
+    "test_ids": [
+      "P16-UT-001",
+      "P16-BT-001",
+      "P16-FT-001",
+      "P16-CT-001",
+      "P16-IT-001"
+    ],
+    "task_ids": [
+      "P16-TASK-001",
+      "P16-TASK-002",
+      "P16-TASK-003",
+      "P16-TASK-004",
+      "P16-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 16,
+    "i": 2,
+    "id": "FUNC-P16-002",
+    "name": "길드 재정·시설·인재·간부 운영",
+    "method": "GuildOperationsService.execute(command: GuildOperation) -> OperationReceipt",
+    "tables": [
+      "guild_budget",
+      "guild_facility",
+      "guild_assignment",
+      "money_account",
+      "scheduled_action"
+    ],
+    "rules": [
+      "길드장핵심월간결정3~8개와NPC간부일상실행을분리한다",
+      "시설·장비대여·신입훈련·인재유지·물류비는실제예산계정에서집행한다",
+      "정책승인과집행한도/기간/담당자/취소규칙을snapshot으로고정한다",
+      "적자/급여미지급은일시적운영제한과구조조정사건으로이어지되자동무한보조금은없다"
+    ],
+    "normal": [
+      "시설예산1000·공사600·기금900",
+      "600예약·잔여가용300·게임시간후시설완료"
+    ],
+    "edge": [
+      "예산한도초과공사",
+      "BudgetDenied·자금변경0"
+    ],
+    "failure": [
+      "간부교체중기존미완료업무",
+      "assignment ID유지·새담당자에게한번인계"
+    ],
+    "kw": [
+      "시설",
+      "재정",
+      "예산",
+      "간부",
+      "훈련",
+      "인재",
+      "내부",
+      "운영",
+      "물류",
+      "급여"
+    ],
+    "state": "PROPOSED → BUDGETED → ASSIGNED → COMPLETED/PAUSED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      42,
+      229,
+      247,
+      255,
+      258,
+      1337,
+      1341,
+      1362,
+      1363,
+      1364,
+      1655,
+      1663,
+      1664,
+      1665,
+      1667,
+      1668,
+      1670,
+      1671,
+      1672,
+      1673,
+      1674,
+      1676,
+      1677,
+      1678,
+      1688
+    ],
+    "test_ids": [
+      "P16-UT-002",
+      "P16-BT-002",
+      "P16-FT-002",
+      "P16-CT-002",
+      "P16-IT-002"
+    ],
+    "task_ids": [
+      "P16-TASK-006",
+      "P16-TASK-007",
+      "P16-TASK-008",
+      "P16-TASK-009",
+      "P16-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 16,
+    "i": 3,
+    "id": "FUNC-P16-003",
+    "name": "파벌·정책·정당성·길드 공략대",
+    "method": "GuildPoliticsService.resolve(command: GuildPolicyDecision) -> GuildPoliticalDelta",
+    "tables": [
+      "guild_faction",
+      "guild_proposal",
+      "guild_vote",
+      "raid_assignment",
+      "guild_history"
+    ],
+    "rules": [
+      "파벌은정책선호기반이며길드장정당성은실적/신뢰로관리한다",
+      "유권자/소집/동률/임기만료/대행규칙은guild charter에고정한다",
+      "여러공식파티공략대는각파티출전6명과통합전투엔진을사용한다",
+      "구성원피로·가족·계약·물류조건을무시하고자동출전시키지않는다"
+    ],
+    "normal": [
+      "정책찬성6/반대4·과반규약",
+      "가결1회·집행은예산재확인후진행"
+    ],
+    "edge": [
+      "투표마감뒤자격신규획득",
+      "해당회차투표권자동추가없음"
+    ],
+    "failure": [
+      "공략대파티한곳준비실패",
+      "출발보류/명시부분출정선택·몰래전력제외없음"
+    ],
+    "kw": [
+      "파벌",
+      "정치",
+      "정책",
+      "공략대",
+      "투표",
+      "정당성",
+      "연합"
+    ],
+    "state": "AGENDA → DEBATE → VOTE → ENACTED/REJECTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      237,
+      240,
+      241,
+      244,
+      1343,
+      1660,
+      1680,
+      1681,
+      1682,
+      1683
+    ],
+    "test_ids": [
+      "P16-UT-003",
+      "P16-BT-003",
+      "P16-FT-003",
+      "P16-CT-003",
+      "P16-IT-003"
+    ],
+    "task_ids": [
+      "P16-TASK-011",
+      "P16-TASK-012",
+      "P16-TASK-013",
+      "P16-TASK-014",
+      "P16-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 16,
+    "i": 4,
+    "id": "FUNC-P16-004",
+    "name": "길드 공식10000점·일마감·기여",
+    "method": "GuildRankingService.closeDay(input: GuildRankingDay) -> RankingSnapshot",
+    "tables": [
+      "ranking_snapshot",
+      "ranking_component",
+      "ranking_streak",
+      "contribution_ledger",
+      "return_proof"
+    ],
+    "rules": [
+      "항목상한2500/1400/1200/900/800/800/700/600/600/500을보존한다",
+      "전체인원합대신핵심12명/공식파티최대3개를전력근거로사용한다",
+      "최근180일성과와반복저등급감쇠·재정건전성·내부안정을평가한다",
+      "30연속일별마감1위와실제플레이어기여를함께검사하며증표발행은P20공통proof service에위임한다"
+    ],
+    "normal": [
+      "모든항목각상한",
+      "총점10000·10001불가"
+    ],
+    "edge": [
+      "인원만2배·핵심12/성과동일",
+      "단순인원합전력보너스없음"
+    ],
+    "failure": [
+      "30일1위지만플레이어기여부족",
+      "랭킹1위유지·증표미발행·부족근거공개범위표시"
+    ],
+    "kw": [
+      "랭킹",
+      "점수",
+      "10000",
+      "1위",
+      "핵심",
+      "성과",
+      "기여",
+      "증표"
+    ],
+    "state": "CALCULATED → DAILY_CLOSED → QUALIFIED/NOT_QUALIFIED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      43,
+      108,
+      224,
+      232,
+      234,
+      261,
+      1339,
+      1353,
+      1354,
+      1355,
+      1356,
+      1357,
+      1365,
+      1497,
+      1498,
+      1499,
+      1500,
+      1501,
+      1502,
+      1503,
+      1504,
+      1505,
+      1506,
+      1507,
+      1508,
+      1509,
+      1510,
+      1511,
+      1512,
+      1513,
+      1514,
+      1515,
+      1516,
+      1517,
+      1518,
+      1519,
+      1520,
+      1521,
+      1522,
+      1523,
+      1524,
+      1525,
+      1526,
+      1527,
+      1528,
+      1529,
+      1530,
+      1531,
+      1532,
+      1533,
+      1534,
+      1535,
+      1536,
+      1646,
+      1647,
+      1648,
+      1649,
+      1650,
+      1651,
+      1653,
+      1654,
+      1656,
+      1657,
+      1658,
+      1659,
+      1661,
+      1666,
+      1669,
+      1687,
+      1689,
+      1690
+    ],
+    "test_ids": [
+      "P16-UT-004",
+      "P16-BT-004",
+      "P16-FT-004",
+      "P16-CT-004",
+      "P16-IT-004"
+    ],
+    "task_ids": [
+      "P16-TASK-016",
+      "P16-TASK-017",
+      "P16-TASK-018",
+      "P16-TASK-019",
+      "P16-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 17,
+    "i": 1,
+    "id": "FUNC-P17-001",
+    "name": "NPC 목표·행동 Utility·경제 의사결정",
+    "method": "NpcPlanner.plan(input: NpcDayContext) -> NpcActionPlan",
+    "tables": [
+      "npc_activity",
+      "personal_goal",
+      "personality_state",
+      "scheduled_action"
+    ],
+    "rules": [
+      "생존/휴식/가족/성장/수익/명성우선순위와성격가중치를사용한다",
+      "실제가용자금·장비·부상·위험인지·이동시간을반영한다",
+      "계획은의뢰/던전/강화/구매/고용기존command를호출하고별도무상NPC규칙을만들지않는다",
+      "후보0은휴식/정보탐색등합법행동으로처리하고실패원인을기록한다"
+    ],
+    "normal": [
+      "중상NPC·가용치료비충분",
+      "치료후보우선·위험원정강제선택없음"
+    ],
+    "edge": [
+      "금0·필수비용활동만존재",
+      "무료합법대안·잔액음수없음"
+    ],
+    "failure": [
+      "목표대상아이템삭제",
+      "재계획·무한재시도없이목표상태변경"
+    ],
+    "kw": [
+      "AI",
+      "Utility",
+      "목표",
+      "행동",
+      "구매",
+      "강화",
+      "제작",
+      "성장",
+      "위험",
+      "판단"
+    ],
+    "state": "NEEDS_PLAN → PLANNED → RESERVED → ACTING → RESOLVED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      39,
+      930,
+      934,
+      935,
+      936,
+      937,
+      938,
+      939,
+      940,
+      941,
+      942,
+      943,
+      944,
+      945,
+      946,
+      947,
+      948,
+      949,
+      950,
+      951,
+      952,
+      953,
+      954,
+      956,
+      957,
+      958,
+      959,
+      960,
+      962,
+      964,
+      965,
+      966,
+      967,
+      968,
+      969,
+      970,
+      972,
+      976,
+      977,
+      978,
+      979,
+      980,
+      981,
+      983,
+      1589,
+      1590,
+      1599,
+      1600,
+      1602,
+      1604,
+      1605,
+      1607,
+      1616,
+      1617,
+      1618,
+      1623,
+      1625,
+      1627,
+      1628,
+      1631,
+      3072
+    ],
+    "test_ids": [
+      "P17-UT-001",
+      "P17-BT-001",
+      "P17-FT-001",
+      "P17-CT-001",
+      "P17-IT-001"
+    ],
+    "task_ids": [
+      "P17-TASK-001",
+      "P17-TASK-002",
+      "P17-TASK-003",
+      "P17-TASK-004",
+      "P17-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 17,
+    "i": 2,
+    "id": "FUNC-P17-002",
+    "name": "상세/축약 시뮬레이션·승격·강등",
+    "method": "NpcSimulationRouter.advance(command: NpcBoundary) -> NpcBatchDelta",
+    "tables": [
+      "npc_activity",
+      "npc_summary",
+      "simulation_cursor",
+      "world_event"
+    ],
+    "rules": [
+      "중요도등급별상세/축약행동을구분하고플레이어관련결과는실제규칙과일치시킨다",
+      "NPC마다DAO조회하지않고활성batch snapshot으로평가한다",
+      "상세승격은마지막완료경계/미완료행동/누적보상ledger를인계해이중처리를막는다",
+      "축약결과는위험도와인원/자원범위를검사하고영구전투사망을생성하지않는다"
+    ],
+    "normal": [
+      "축약던전완료후동일시각플레이어조우로승격",
+      "보상1회·진행중상태동일"
+    ],
+    "edge": [
+      "NPC2000명이같은일경계",
+      "안정된entityId순서·batch크기와결과무관"
+    ],
+    "failure": [
+      "특정NPC에잘못된핵심상태",
+      "해당경계commit중단·오류NPC식별·정상행동인척skip금지"
+    ],
+    "kw": [
+      "상세",
+      "축약",
+      "중요도",
+      "배치",
+      "승격",
+      "강등",
+      "S0",
+      "S1",
+      "S2",
+      "S3",
+      "S4"
+    ],
+    "state": "ABSTRACT ↔ DETAIL_PENDING ↔ DETAILED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      110,
+      932,
+      933,
+      975,
+      1595,
+      1629,
+      1632,
+      1633
+    ],
+    "test_ids": [
+      "P17-UT-002",
+      "P17-BT-002",
+      "P17-FT-002",
+      "P17-CT-002",
+      "P17-IT-002"
+    ],
+    "task_ids": [
+      "P17-TASK-006",
+      "P17-TASK-007",
+      "P17-TASK-008",
+      "P17-TASK-009",
+      "P17-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 17,
+    "i": 3,
+    "id": "FUNC-P17-003",
+    "name": "용병 유입·은퇴·복귀·직업전환",
+    "method": "PopulationEngine.closePeriod(input: PopulationBoundary) -> PopulationDelta",
+    "tables": [
+      "population_cohort",
+      "character_state",
+      "npc_summary",
+      "mercenary_registry"
+    ],
+    "rules": [
+      "현역중심1900/정상1500~2200은유도대역이지고정개체수보정이아니다",
+      "신규성인/외지유입/휴업/복귀/은퇴/이주/비용병전환을서로다른흐름으로계산한다",
+      "일반민간인전체를NPC화하지않고코호트에서관계있는개체만승격한다",
+      "전투패배로등록NPC를영구삭제하지않으며자연수명/은퇴는별도이력으로남긴다"
+    ],
+    "normal": [
+      "현역1900+등록20-은퇴15-이주5",
+      "현역1900·각흐름원장40건"
+    ],
+    "edge": [
+      "장기위기로현역1450",
+      "1450그대로·원인/대응event;50명순간강제생성금지"
+    ],
+    "failure": [
+      "동일출생코호트성인편입2회",
+      "성인입력중복0"
+    ],
+    "kw": [
+      "인구",
+      "유입",
+      "은퇴",
+      "복귀",
+      "직업",
+      "전환",
+      "코호트",
+      "이주",
+      "출생",
+      "등록"
+    ],
+    "state": "CIVILIAN → ACTIVE → ON_LEAVE/RETIRED/MIGRATED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      931,
+      963,
+      971,
+      1585,
+      1586,
+      1587,
+      1588,
+      1591,
+      1592,
+      1593,
+      1594,
+      1596,
+      1597,
+      1598,
+      1603,
+      1606,
+      1608,
+      1610,
+      1611,
+      1612,
+      1613,
+      1614,
+      1615,
+      1619,
+      1620,
+      1621,
+      1622,
+      1624,
+      1630,
+      1634,
+      1635,
+      1636,
+      1637,
+      1638,
+      1639,
+      1640,
+      1641,
+      1644,
+      1645
+    ],
+    "test_ids": [
+      "P17-UT-003",
+      "P17-BT-003",
+      "P17-FT-003",
+      "P17-CT-003",
+      "P17-IT-003"
+    ],
+    "task_ids": [
+      "P17-TASK-011",
+      "P17-TASK-012",
+      "P17-TASK-013",
+      "P17-TASK-014",
+      "P17-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 17,
+    "i": 4,
+    "id": "FUNC-P17-004",
+    "name": "장기 정체성·압축·사회 순환 검증",
+    "method": "NpcHistoryCompactor.compact(input: NpcRetentionPlan) -> CompactionResult",
+    "tables": [
+      "npc_summary",
+      "relationship_memory",
+      "party_history",
+      "guild_history",
+      "portrait_reservation"
+    ],
+    "rules": [
+      "기본잠재력/수정자/가족/핵심관계/경력/대표장비와원본NPC ID는강등해도보존한다",
+      "초상영구예약/장기쿨다운은인물중요도와참조상태로갱신한다",
+      "이전주인공·라이벌·가족은단순저빈도NPC와같이삭제하지않는다",
+      "10/50/100/300년검증은플레이어입력없이진행된실제게임시간으로측정하고자산/인구원장을감사한다"
+    ],
+    "normal": [
+      "은퇴NPC가가계도/전설장비원소유자로참조됨",
+      "상세일지압축가능·인물/핵심참조보존"
+    ],
+    "edge": [
+      "portrait free pool0",
+      "명시reuse규칙·신규NPC생성실패없음"
+    ],
+    "failure": [
+      "압축중checksum실패",
+      "원본남김·참조변경0"
+    ],
+    "kw": [
+      "장기",
+      "100년",
+      "300년",
+      "압축",
+      "기억",
+      "순환",
+      "기록",
+      "초상"
+    ],
+    "state": "DETAIL_HISTORY → SUMMARY_STAGED → VERIFIED → COMPACTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      36,
+      955,
+      961,
+      973,
+      974,
+      982,
+      1601,
+      1609,
+      1626,
+      1642,
+      1643
+    ],
+    "test_ids": [
+      "P17-UT-004",
+      "P17-BT-004",
+      "P17-FT-004",
+      "P17-CT-004",
+      "P17-IT-004"
+    ],
+    "task_ids": [
+      "P17-TASK-016",
+      "P17-TASK-017",
+      "P17-TASK-018",
+      "P17-TASK-019",
+      "P17-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 18,
+    "i": 1,
+    "id": "FUNC-P18-001",
+    "name": "가족·출생·입양·성장·교육",
+    "method": "FamilyService.apply(command: FamilyAction) -> FamilyDelta",
+    "tables": [
+      "lineage",
+      "family_member",
+      "education_plan",
+      "population_cohort",
+      "money_account"
+    ],
+    "rules": [
+      "0~6/7~12/13~17/18+성장단계를게임생년월일로계산한다",
+      "출생/입양/제자관계는relationType으로구분하고부모스탯을복사하지않는다",
+      "교육은초기스탯/기본스킬/숙련/진로선택에영향을주며잠재력대폭상승을기본보상으로하지않는다",
+      "교육비/기간/가문성씨/미성년출전금지와비용병진로를명시한다"
+    ],
+    "normal": [
+      "17세359일→18세0일·360일달력",
+      "성인단계전환1회·진로선택가능"
+    ],
+    "edge": [
+      "부모스탯100·자녀생성",
+      "스탯직접100복사없음·승인성장보정만"
+    ],
+    "failure": [
+      "교육비납부중실패",
+      "교육시작/차감rollback·기존진로유지"
+    ],
+    "kw": [
+      "가족",
+      "자녀",
+      "출생",
+      "입양",
+      "교육",
+      "유년",
+      "기초",
+      "진로",
+      "성인"
+    ],
+    "state": "CHILD → BASIC_EDUCATION → VOCATIONAL → ADULT",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      45,
+      2047,
+      2048,
+      2049,
+      2050,
+      2051,
+      2052,
+      2053,
+      2054,
+      2055,
+      2056,
+      2057,
+      2070,
+      2071,
+      2074,
+      2076,
+      2079
+    ],
+    "test_ids": [
+      "P18-UT-001",
+      "P18-BT-001",
+      "P18-FT-001",
+      "P18-CT-001",
+      "P18-IT-001"
+    ],
+    "task_ids": [
+      "P18-TASK-001",
+      "P18-TASK-002",
+      "P18-TASK-003",
+      "P18-TASK-004",
+      "P18-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 18,
+    "i": 2,
+    "id": "FUNC-P18-002",
+    "name": "후계자 후보·의사·지정·부재 안전장치",
+    "method": "SuccessionPlanner.nominate(command: NominateSuccessor) -> SuccessionPlan",
+    "tables": [
+      "lineage",
+      "family_member",
+      "succession_plan",
+      "character_state"
+    ],
+    "rules": [
+      "성인/생존상태/용병진로/승계수락조건을검사한다",
+      "친자녀/입양/제자/지정후계자의원문경로를모두지원한다",
+      "후보부재는후계확보이벤트/성인지정후계자경로로캠페인소프트락을막는다",
+      "노쇠로강제승계가필요하면P0긴급중단하고임의NPC로몰래교체하지않는다"
+    ],
+    "normal": [
+      "성인22세제자·승계의사있음",
+      "적격후계지정·아직플레이어교체없음"
+    ],
+    "edge": [
+      "17세후보또는수락거절",
+      "IneligibleSuccessor·지정불가"
+    ],
+    "failure": [
+      "현재후계이주/부적격변경",
+      "계획NEEDS_REVIEW·시간진행강제승계전에중단"
+    ],
+    "kw": [
+      "후계",
+      "후보",
+      "지정",
+      "부재",
+      "승계",
+      "의사",
+      "안전장치"
+    ],
+    "state": "NO_CANDIDATE → CANDIDATES → NOMINATED → READY/NEEDS_REVIEW",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2058,
+      2059,
+      2060,
+      2065,
+      2066,
+      2072,
+      2075,
+      2078
+    ],
+    "test_ids": [
+      "P18-UT-002",
+      "P18-BT-002",
+      "P18-FT-002",
+      "P18-CT-002",
+      "P18-IT-002"
+    ],
+    "task_ids": [
+      "P18-TASK-006",
+      "P18-TASK-007",
+      "P18-TASK-008",
+      "P18-TASK-009",
+      "P18-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 18,
+    "i": 3,
+    "id": "FUNC-P18-003",
+    "name": "원자적 세대 교체·자산·증표 유지",
+    "method": "SuccessionService.execute(command: ExecuteSuccession) -> SuccessionReceipt",
+    "tables": [
+      "lineage",
+      "succession_receipt",
+      "character_state",
+      "money_account",
+      "storage_location",
+      "return_proof",
+      "party_history",
+      "guild_history"
+    ],
+    "rules": [
+      "가문자산/창고/귀환기록/세계상태는계승하고개인레벨/스킬숙련/개인관계는복사하지않는다",
+      "세대번호/현재플레이어ID/권한인계/구주인공NPC화/연대기는단일transaction이다",
+      "파티리더/길드장직위는사회규약상승계가별도로필요하며혈연만으로자동이전하지않는다",
+      "전환중저장실패는구세대전체또는신세대전체만보존한다"
+    ],
+    "normal": [
+      "1대Lv80→후계Lv20·가문금1000·증표2",
+      "2대Lv20·가문금1000·증표2·구주인공NPC유지"
+    ],
+    "edge": [
+      "같은successionId2회",
+      "세대증가1·개인자산중복이전0"
+    ],
+    "failure": [
+      "플레이어ID변경뒤쓰기실패",
+      "1대그대로복원·가문금/증표일치"
+    ],
+    "kw": [
+      "계승",
+      "세대",
+      "교체",
+      "승계",
+      "자산",
+      "유물",
+      "이전",
+      "주인공",
+      "NPC"
+    ],
+    "state": "PRECHECKED → SWITCHING → COMMITTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      9,
+      2061,
+      2062,
+      2063,
+      2064
+    ],
+    "test_ids": [
+      "P18-UT-003",
+      "P18-BT-003",
+      "P18-FT-003",
+      "P18-CT-003",
+      "P18-IT-003"
+    ],
+    "task_ids": [
+      "P18-TASK-011",
+      "P18-TASK-012",
+      "P18-TASK-013",
+      "P18-TASK-014",
+      "P18-TASK-015"
+    ],
+    "related_sources": [
+      9,
+      2535
+    ]
+  },
+  {
+    "p": 18,
+    "i": 4,
+    "id": "FUNC-P18-004",
+    "name": "가문 목표·유물·세대 기여·기록 UI",
+    "method": "LineageProjection.build(input: LineageViewRequest) -> LineageView",
+    "tables": [
+      "lineage",
+      "family_member",
+      "lineage_contribution",
+      "item_instance",
+      "return_proof"
+    ],
+    "rules": [
+      "가문명성/개인명성/세대기여와보유증표를분리해표시한다",
+      "가문유물은소유권/대여상태에따라실사용권한을검사한다",
+      "가계도참조는은퇴/자연수명종료후에도안정적인ID와이름/portrait를유지한다",
+      "후계상세는관측가능능력과동의상태만표시하며잠재력정확값은숨긴다"
+    ],
+    "normal": [
+      "3대가1대획득유물조회",
+      "원소유자/획득던전/현재보관위치연결"
+    ],
+    "edge": [
+      "친가족이아닌지정후계자",
+      "관계유형명시·가문기록에서제외하지않음"
+    ],
+    "failure": [
+      "참조된NPC상세압축됨",
+      "요약생애표시·링크crash없음"
+    ],
+    "kw": [
+      "가문",
+      "목표",
+      "유물",
+      "명성",
+      "기록",
+      "화면",
+      "기여",
+      "가계도"
+    ],
+    "state": "HISTORY_READY → PROJECTED",
+    "kind": "read",
+    "refs": [],
+    "sources": [
+      2067,
+      2068,
+      2069,
+      2073,
+      2077
+    ],
+    "test_ids": [
+      "P18-UT-004",
+      "P18-BT-004",
+      "P18-FT-004",
+      "P18-CT-004",
+      "P18-IT-004"
+    ],
+    "task_ids": [
+      "P18-TASK-016",
+      "P18-TASK-017",
+      "P18-TASK-018",
+      "P18-TASK-019",
+      "P18-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 19,
+    "i": 1,
+    "id": "FUNC-P19-001",
+    "name": "NPC 사건·등장인물·자동 해결",
+    "method": "NpcEventDirector.select(input: EventSelectionContext) -> EventPlan",
+    "tables": [
+      "event_instance",
+      "event_participant",
+      "event_receipt",
+      "relationship_memory"
+    ],
+    "rules": [
+      "130종NPC사건을개인/파티/길드계층으로운영한다",
+      "등장인물조건/관계/위치/현재활동/가시성을검사한다",
+      "비플레이어사건은NPC성격과동일도메인명령으로해결하고플레이어참여사건만선택지로중단한다",
+      "사후발견은실제발생시각과알게된시각을분리한다"
+    ],
+    "normal": [
+      "플레이어미관측도시의NPC이직사건",
+      "세계에는이직반영·플레이어즉시전지적뉴스없음"
+    ],
+    "edge": [
+      "적격참가자0",
+      "선택안함·기한없는미완료event생성0"
+    ],
+    "failure": [
+      "effect3개중2번째실패",
+      "동일사건effect전체rollback·부분관계변경없음"
+    ],
+    "kw": [
+      "NPC",
+      "이벤트",
+      "등장",
+      "인물",
+      "대표",
+      "발언",
+      "자동",
+      "해결",
+      "사건",
+      "가시성"
+    ],
+    "state": "CANDIDATE → SELECTED → RESOLVING → RESOLVED/EXPIRED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1831,
+      1832,
+      1833,
+      1834,
+      1835,
+      1836,
+      1837,
+      1838,
+      1839,
+      1840,
+      1841,
+      1842,
+      1843,
+      1844,
+      1845,
+      1846,
+      1847,
+      1848,
+      1849,
+      1850,
+      1851,
+      1852,
+      1854,
+      1855,
+      1856,
+      1858,
+      1859,
+      1860,
+      1861,
+      1862,
+      1863,
+      2083,
+      2084,
+      2086,
+      2087,
+      2088,
+      2089,
+      2091,
+      2092,
+      2093,
+      2094,
+      2095,
+      2096,
+      2097,
+      2098,
+      2099,
+      2101,
+      2102,
+      2103,
+      2104,
+      2105,
+      2106,
+      2107,
+      2108,
+      2109,
+      2110,
+      2111,
+      2112,
+      2113,
+      2114,
+      2115,
+      2117,
+      2118,
+      2119,
+      2120,
+      2121,
+      2122,
+      2123,
+      2124,
+      2125,
+      2126,
+      2127,
+      2128,
+      2129,
+      2133,
+      2134,
+      2135,
+      2136,
+      2137,
+      2139,
+      2140,
+      2141,
+      2142,
+      2143,
+      2144,
+      2145,
+      2146,
+      2148,
+      2150,
+      2151,
+      2154,
+      2155
+    ],
+    "test_ids": [
+      "P19-UT-001",
+      "P19-BT-001",
+      "P19-FT-001",
+      "P19-CT-001",
+      "P19-IT-001"
+    ],
+    "task_ids": [
+      "P19-TASK-001",
+      "P19-TASK-002",
+      "P19-TASK-003",
+      "P19-TASK-004",
+      "P19-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 19,
+    "i": 2,
+    "id": "FUNC-P19-002",
+    "name": "연쇄 사건·조건·쿨다운·대안 경로",
+    "method": "EventChainEngine.advance(command: ChainChoice) -> ChainDelta",
+    "tables": [
+      "event_chain",
+      "event_chain_step",
+      "event_instance",
+      "event_receipt"
+    ],
+    "rules": [
+      "60종연쇄와204종던전사건의진입/분기/중단/실패/재진입조건을명시한다",
+      "단계condition은공통AST로평가하고재시도수/쿨다운/배타그룹을사용한다",
+      "핵심NPC이주/던전소멸시대체배역/대체단서/안전종결을정의한다",
+      "연쇄보상은chainInstanceId/stepId단위멱등이며원본사건이력을보존한다"
+    ],
+    "normal": [
+      "step2 NPC이주·대체기록단서정의있음",
+      "대체step로이동·메인귀환단서획득가능"
+    ],
+    "edge": [
+      "완료step선택재전송",
+      "AlreadyResolved·보상0"
+    ],
+    "failure": [
+      "분기조건순환·중단조건없음",
+      "validator오류·배포차단"
+    ],
+    "kw": [
+      "연쇄",
+      "체인",
+      "분기",
+      "반복",
+      "쿨다운",
+      "단서",
+      "DungeonEvent"
+    ],
+    "state": "STARTED → STEP_n → BRANCHED → COMPLETED/FAILED/SAFE_CLOSED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1857,
+      2116,
+      2130,
+      2131,
+      2153
+    ],
+    "test_ids": [
+      "P19-UT-002",
+      "P19-BT-002",
+      "P19-FT-002",
+      "P19-CT-002",
+      "P19-IT-002"
+    ],
+    "task_ids": [
+      "P19-TASK-006",
+      "P19-TASK-007",
+      "P19-TASK-008",
+      "P19-TASK-009",
+      "P19-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 19,
+    "i": 3,
+    "id": "FUNC-P19-003",
+    "name": "AdventureDirector·장기 목표·전설화",
+    "method": "AdventureDirector.plan(input: DirectorContext) -> DirectorPlan",
+    "tables": [
+      "director_state",
+      "director_budget",
+      "personal_goal",
+      "legendary_record"
+    ],
+    "rules": [
+      "재미정체/정보갈증/장기목표/위기밀도를관측해사건노출을조절한다",
+      "보상예산/개입상한/쿨다운/반복감쇠를사용하고플레이어레벨에세계전체를자동스케일링하지않는다",
+      "전설장비/라이벌/군락위기는기존세계대상과기억을재사용하며결과보장을하지않는다",
+      "추천은공개정보근거와불확실성을표시한다"
+    ],
+    "normal": [
+      "같은저등급던전반복중·희귀단서예산남음",
+      "단서후보노출가능·전설장비확정지급없음"
+    ],
+    "edge": [
+      "개입예산0",
+      "추가개입0·기존세계시뮬레이션계속"
+    ],
+    "failure": [
+      "director보조추천계산실패",
+      "추천숨김·핵심시간/전투진행정상·진단로그"
+    ],
+    "kw": [
+      "Director",
+      "재미",
+      "목표",
+      "내비게이터",
+      "전설",
+      "라이벌",
+      "군락",
+      "위기",
+      "보정",
+      "예산"
+    ],
+    "state": "OBSERVING → BUDGETED → PROPOSING → COOLDOWN",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1853,
+      2080,
+      2081,
+      2082,
+      2085,
+      2090,
+      2100,
+      2132,
+      2147,
+      2149,
+      2152,
+      2156,
+      3073
+    ],
+    "test_ids": [
+      "P19-UT-003",
+      "P19-BT-003",
+      "P19-FT-003",
+      "P19-CT-003",
+      "P19-IT-003"
+    ],
+    "task_ids": [
+      "P19-TASK-011",
+      "P19-TASK-012",
+      "P19-TASK-013",
+      "P19-TASK-014",
+      "P19-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 19,
+    "i": 4,
+    "id": "FUNC-P19-004",
+    "name": "전술 실험실·전략 회의·행동 자동화",
+    "method": "StrategyAssistant.evaluate(input: StrategyRequest) -> StrategyAdvice; StrategyAutomationService.execute(command: StrategyAutomationCommand) -> StrategyAutomationDelta",
+    "tables": [
+      "strategy_plan",
+      "automation_rule",
+      "director_state"
+    ],
+    "rules": [
+      "전술실험은별도snapshot에서실제전투엔진을호출하고live RNG/아이템/시간을변경하지않는다",
+      "전략회의는참가자정보범위/성격/위험선호를반영하며NPC의견은확정정답이아니다",
+      "자동화는조건AST·예산·중단정책·행동권한을통과한사용자위임만실행한다",
+      "플래너가실제위험을숨기거나승계/최종귀환/P0오류를자동넘기지않는다"
+    ],
+    "normal": [
+      "전술A/B각100seed 비교",
+      "실세계stateHash/RNG변경0·분산/성공률표시"
+    ],
+    "edge": [
+      "자동화금상한50·다음행동60",
+      "실행중단·추가소비0"
+    ],
+    "failure": [
+      "실험도중사용자취소",
+      "실험scope종료·live world유지"
+    ],
+    "kw": [
+      "전술",
+      "실험",
+      "전략",
+      "회의",
+      "자동화",
+      "플래너",
+      "추천",
+      "대기"
+    ],
+    "state": "REQUESTED → SIMULATING → ADVISED 또는 CANCELLED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      2138
+    ],
+    "test_ids": [
+      "P19-UT-004",
+      "P19-BT-004",
+      "P19-FT-004",
+      "P19-CT-004",
+      "P19-IT-004"
+    ],
+    "task_ids": [
+      "P19-TASK-016",
+      "P19-TASK-017",
+      "P19-TASK-018",
+      "P19-TASK-019",
+      "P19-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 20,
+    "i": 1,
+    "id": "FUNC-P20-001",
+    "name": "균열 탐사·7핵 봉인·발생원 차단",
+    "method": "RiftCampaignService.seal(command: SealRiftCore) -> CampaignDelta",
+    "tables": [
+      "return_campaign",
+      "rift_core",
+      "dungeon_instance",
+      "world_event"
+    ],
+    "rules": [
+      "화염/냉기/정신/생명/대지/시간/공간7핵과발견/접근/공략/봉인조건을관리한다",
+      "핵공략순서는원문대로유연하게허용하고세대별공략기여를보존한다",
+      "봉인실패는재료/위험/시간의정의된손실을남기지만영구진행불가로만들지않는다",
+      "모든발생원차단후자연던전발생률0을실제생성엔진에반영한다"
+    ],
+    "normal": [
+      "7핵모두봉인·원천봉쇄완료",
+      "naturalSpawnRate0·이후생성시도새던전0"
+    ],
+    "edge": [
+      "이미봉인한core재봉인",
+      "AlreadySealed·소모/진척추가0"
+    ],
+    "failure": [
+      "봉인정산중저장실패",
+      "기존core상태·발생률·재료일치복원"
+    ],
+    "kw": [
+      "균열",
+      "핵",
+      "봉인",
+      "원천",
+      "단서",
+      "발견",
+      "차원문",
+      "발생"
+    ],
+    "state": "UNKNOWN → DISCOVERED → ACCESSIBLE → CLEARED → SEALED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1790,
+      1791,
+      1792,
+      1793,
+      1794,
+      1795,
+      1796,
+      1797,
+      1798,
+      1799,
+      1800,
+      1801,
+      1802,
+      1803,
+      1810,
+      1811,
+      1812
+    ],
+    "test_ids": [
+      "P20-UT-001",
+      "P20-BT-001",
+      "P20-FT-001",
+      "P20-CT-001",
+      "P20-IT-001"
+    ],
+    "task_ids": [
+      "P20-TASK-001",
+      "P20-TASK-002",
+      "P20-TASK-003",
+      "P20-TASK-004",
+      "P20-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 20,
+    "i": 2,
+    "id": "FUNC-P20-002",
+    "name": "악마 전쟁·잔존세력·90일 종전",
+    "method": "DemonWarService.closeDay(input: CampaignDay) -> WarDelta",
+    "tables": [
+      "demon_faction",
+      "demon_base",
+      "demon_gate",
+      "demon_presence",
+      "return_campaign"
+    ],
+    "rules": [
+      "지휘거점/차원문/정착군단/세계위험네임드4범주를실제entity원장으로집계한다",
+      "모두0이어도90일간새거점/문/대규모악마행동0을일마감으로검증한다",
+      "재출현시검증일수를리셋하고사건원인을추적가능하게한다",
+      "다른길드/NPC의공략기여를세계전쟁기록에반영한다"
+    ],
+    "normal": [
+      "잔존4범주0·무사건89일→90일",
+      "종전proof자격1회"
+    ],
+    "edge": [
+      "무사건89일째새문생성",
+      "카운터0·종전확정안함"
+    ],
+    "failure": [
+      "잔존집계와실제base수가다름",
+      "검증실패·귀환차단·숨겨진거점자동삭제금지"
+    ],
+    "kw": [
+      "악마",
+      "전쟁",
+      "종전",
+      "잔당",
+      "군단",
+      "장군",
+      "대공",
+      "90일"
+    ],
+    "state": "WAR → REMNANTS → OBSERVATION_90D → ENDED/REOPENED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      112,
+      1804,
+      1805,
+      1806,
+      1807,
+      1808,
+      1809
+    ],
+    "test_ids": [
+      "P20-UT-002",
+      "P20-BT-002",
+      "P20-FT-002",
+      "P20-CT-002",
+      "P20-IT-002"
+    ],
+    "task_ids": [
+      "P20-TASK-006",
+      "P20-TASK-007",
+      "P20-TASK-008",
+      "P20-TASK-009",
+      "P20-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 20,
+    "i": 3,
+    "id": "FUNC-P20-003",
+    "name": "영구증표·랭킹·잔존던전·귀환 판정",
+    "method": "ReturnEligibilityService.evaluate(input: ReturnEvaluation) -> ReturnEligibility",
+    "tables": [
+      "return_proof",
+      "return_campaign",
+      "ranking_streak",
+      "lineage_contribution",
+      "dungeon_instance"
+    ],
+    "rules": [
+      "개인/파티/길드/봉인/종전증표를가문귀환인장에영구기록한다",
+      "원문의6필수조건과5증표표시를분리하여잔존던전0조건을삭제하지않는다",
+      "개인/파티/길드랭킹은30연속일별마감과유형별기여조건을사용한다",
+      "과거증표를보유해도현재안전조건이깨지면의식을차단하되증표자체를회수하지않는다"
+    ],
+    "normal": [
+      "증표5·활성잔존던전1",
+      "귀환불가·해당잔존조건표시"
+    ],
+    "edge": [
+      "증표5·던전0·발생차단90일·전쟁안전",
+      "귀환가능·자동종료아님"
+    ],
+    "failure": [
+      "동일proofsource 재수신",
+      "증표1개·세대기여중복0"
+    ],
+    "kw": [
+      "증표",
+      "최고",
+      "1위",
+      "조건",
+      "귀환",
+      "판정",
+      "잔존",
+      "영구성",
+      "세대"
+    ],
+    "state": "PROGRESSING → PROOFS_COMPLETE → SAFE_AND_ELIGIBLE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      3,
+      113,
+      1783,
+      1784,
+      1785,
+      1786,
+      1787,
+      1788,
+      1789,
+      1813,
+      1814,
+      1815,
+      1816,
+      1817,
+      1818
+    ],
+    "test_ids": [
+      "P20-UT-003",
+      "P20-BT-003",
+      "P20-FT-003",
+      "P20-CT-003",
+      "P20-IT-003"
+    ],
+    "task_ids": [
+      "P20-TASK-011",
+      "P20-TASK-012",
+      "P20-TASK-013",
+      "P20-TASK-014",
+      "P20-TASK-015"
+    ],
+    "related_sources": [
+      3,
+      1737,
+      1787,
+      1788,
+      1789,
+      1811,
+      1813
+    ]
+  },
+  {
+    "p": 20,
+    "i": 4,
+    "id": "FUNC-P20-004",
+    "name": "귀환·잔류·후일담·캠페인 종료",
+    "method": "EndingService.choose(command: EndingChoice) -> EndingRecord",
+    "tables": [
+      "ending_record",
+      "return_campaign",
+      "lineage_contribution",
+      "chronicle_event"
+    ],
+    "rules": [
+      "귀환은명시확인후이세계체류/세대/의뢰/던전/몬스터/증표기여를snapshot한다",
+      "잔류선택은세계정비와던전없는시대경제를계속진행하며되돌릴수없는종료로오인시키지않는다",
+      "가족/파티/길드/NPC후일담은실제역사와공개관측에기반한다",
+      "종료직전immutable checkpoint를남기고엔딩연출실패가진행기록을파괴하지않게한다"
+    ],
+    "normal": [
+      "귀환가능상태에서잔류",
+      "캠페인ACTIVE_STAY·플레이계속"
+    ],
+    "edge": [
+      "귀환확인후엔딩UI강제종료",
+      "ENDING_COMMITTED기록으로동일요약재표시"
+    ],
+    "failure": [
+      "조건검사후새위기발생version변경",
+      "재검사·귀환확정차단·세이브유지"
+    ],
+    "kw": [
+      "엔딩",
+      "귀환",
+      "잔류",
+      "후일담",
+      "종료",
+      "요약"
+    ],
+    "state": "ELIGIBLE → STAYING 또는 ENDING_COMMITTED → PRESENTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      4,
+      1819,
+      1820,
+      1821,
+      1822,
+      1823,
+      1824,
+      1825,
+      1826,
+      1827,
+      1828,
+      1829,
+      1830
+    ],
+    "test_ids": [
+      "P20-UT-004",
+      "P20-BT-004",
+      "P20-FT-004",
+      "P20-CT-004",
+      "P20-IT-004"
+    ],
+    "task_ids": [
+      "P20-TASK-016",
+      "P20-TASK-017",
+      "P20-TASK-018",
+      "P20-TASK-019",
+      "P20-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 21,
+    "i": 1,
+    "id": "FUNC-P21-001",
+    "name": "용병·장비·파티·세계 연대기",
+    "method": "ChronicleService.consume(event: DomainEvent) -> ChronicleDelta",
+    "tables": [
+      "chronicle_event",
+      "chronicle_link",
+      "chronicle_snapshot",
+      "world_event"
+    ],
+    "rules": [
+      "인물/장비/파티/길드/가문/세계의동일사건을중복원본이아닌다중링크로연결한다",
+      "eventId/발생시각/관측시각/참여자/중요도/출처version을보존한다",
+      "주요기록은원본을영구유지하고사용자즐겨찾기는자동압축제외한다",
+      "UI연출/서술실패는기본템플릿으로복구하되원사건을삭제하지않는다"
+    ],
+    "normal": [
+      "보스첫정복event가인물/파티/장비에연결",
+      "원본1개·링크3개·각타임라인조회가능"
+    ],
+    "edge": [
+      "삭제된일반장비의중요획득기록",
+      "요약item identity로링크유지"
+    ],
+    "failure": [
+      "consumer중단후event재소비",
+      "같은chronicle1개·중복문장0"
+    ],
+    "kw": [
+      "연대기",
+      "역사",
+      "Chronicle",
+      "인물",
+      "기록",
+      "생애",
+      "장비",
+      "세계"
+    ],
+    "state": "EVENT_COMMITTED → PROJECTED → LINKED → DISPLAYABLE",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1738,
+      1739,
+      1740,
+      1741,
+      1742,
+      1743,
+      1744,
+      1745,
+      1746,
+      1747,
+      1748,
+      1749,
+      1750,
+      1751,
+      1752,
+      1753,
+      1754,
+      1755,
+      1756,
+      1757,
+      1764,
+      1767,
+      1768,
+      1769,
+      1770,
+      1771,
+      1772,
+      1773,
+      1774,
+      1775,
+      1776,
+      1777,
+      1778,
+      1780,
+      1781,
+      1782,
+      1864,
+      1865,
+      1866,
+      1867,
+      1868,
+      1870,
+      1872,
+      1873,
+      1874,
+      1876,
+      1877,
+      1878,
+      1884,
+      1886,
+      1887,
+      1889,
+      1891,
+      1892,
+      1893,
+      1894,
+      1896,
+      1897,
+      1899,
+      1900,
+      1901,
+      1902,
+      1903,
+      1906,
+      1907,
+      1908,
+      1909,
+      1911,
+      1912,
+      1915,
+      1918,
+      1926,
+      1928,
+      1929,
+      1930,
+      1931,
+      1932,
+      1933,
+      1934,
+      1935,
+      1943,
+      1944,
+      1947,
+      1962,
+      1963,
+      1965,
+      1966,
+      1967,
+      1968,
+      1969,
+      1971,
+      1973,
+      1982,
+      1983,
+      1984,
+      1986,
+      1987,
+      1989,
+      1990,
+      3055,
+      3097,
+      3098
+    ],
+    "test_ids": [
+      "P21-UT-001",
+      "P21-BT-001",
+      "P21-FT-001",
+      "P21-CT-001",
+      "P21-IT-001"
+    ],
+    "task_ids": [
+      "P21-TASK-001",
+      "P21-TASK-002",
+      "P21-TASK-003",
+      "P21-TASK-004",
+      "P21-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 21,
+    "i": 2,
+    "id": "FUNC-P21-002",
+    "name": "일월연 통계·기여·추세·랭킹 이력",
+    "method": "StatisticsProjector.apply(event: DomainEvent) -> AggregateDelta",
+    "tables": [
+      "statistics_aggregate",
+      "aggregate_receipt",
+      "ranking_snapshot",
+      "lineage_contribution"
+    ],
+    "rules": [
+      "일/月/년통계는원본eventId 중복receipt로한번누적한다",
+      "플레이시간초와세계시간분을구별하고기간필터는게임달력360일기준이다",
+      "전투/소득/부상/의뢰/공략/사회/세대분석은실제원장필드에서집계한다",
+      "집계재빌드는새projectionVersion에staging하여검증후교체한다",
+      "EventCodec registry로 보존 중인 모든 versioned EventCodecId를 decode/upcast한 뒤 projection을 재생성한다"
+    ],
+    "normal": [
+      "피해10/20 event와event20중복",
+      "합30·건수2"
+    ],
+    "edge": [
+      "12월30일23:59→다음년1월1일",
+      "정확한일월년bucket변경"
+    ],
+    "failure": [
+      "집계재생성중실패",
+      "이전집계계속읽기·재빌드중상태표시"
+    ],
+    "kw": [
+      "통계",
+      "집계",
+      "추세",
+      "지표",
+      "리포트",
+      "랭킹",
+      "이력",
+      "수입",
+      "그래프"
+    ],
+    "state": "SOURCE → AGGREGATED → VERIFIED → ACTIVE_PROJECTION",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1758,
+      1759,
+      1760,
+      1761,
+      1762,
+      1763,
+      1875,
+      1880,
+      1881,
+      1882,
+      1883,
+      1885,
+      1888,
+      1898,
+      1904,
+      1905,
+      1910,
+      1913,
+      1914,
+      1916,
+      1917,
+      1919,
+      1920,
+      1921,
+      1922,
+      1923,
+      1924,
+      1925,
+      1927,
+      1936,
+      1937,
+      1938,
+      1939,
+      1940,
+      1941,
+      1942,
+      1945,
+      1946,
+      1948,
+      1949,
+      1950,
+      1951,
+      1952,
+      1953,
+      1954,
+      1955,
+      1956,
+      1957,
+      1958,
+      1959,
+      1960,
+      1961,
+      1970,
+      1972,
+      1974,
+      1975,
+      1976,
+      1977,
+      1978,
+      1979,
+      1980,
+      1985,
+      1988
+    ],
+    "test_ids": [
+      "P21-UT-002",
+      "P21-BT-002",
+      "P21-FT-002",
+      "P21-CT-002",
+      "P21-IT-002"
+    ],
+    "task_ids": [
+      "P21-TASK-006",
+      "P21-TASK-007",
+      "P21-TASK-008",
+      "P21-TASK-009",
+      "P21-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 21,
+    "i": 3,
+    "id": "FUNC-P21-003",
+    "name": "공개정보 검색·필터·페이지·북마크",
+    "method": "SearchService.search(query: PublicSearchQuery) -> SearchPage; BookmarkService.change(command: BookmarkCommand) -> BookmarkDelta",
+    "tables": [
+      "search_document",
+      "bookmark",
+      "search_cursor",
+      "knowledge_projection"
+    ],
+    "rules": [
+      "FTS5/일반색인은관측가능문서만색인하고hidden값필터/정렬을금지한다",
+      "한글부분검색tokenizer와정규화전략은P0/21실험후고정한다",
+      "stable sortKey+entityId keyset으로중복/누락없는페이지를제공한다",
+      "인물→던전→장비→연대기딥링크는IDroute와필터스크롤복원으로연결한다"
+    ],
+    "normal": [
+      "같은이름NPC3명·페이지크기2",
+      "다음페이지중복0·소속/연령으로구별"
+    ],
+    "edge": [
+      "잠재력 exact정렬요청",
+      "UnsupportedSort·전체NPC숨은값반환0"
+    ],
+    "failure": [
+      "검색색인손상",
+      "재구축중제한검색·원사건/세이브유지"
+    ],
+    "kw": [
+      "검색",
+      "필터",
+      "정렬",
+      "FTS",
+      "페이지",
+      "북마크",
+      "즐겨찾기",
+      "링크"
+    ],
+    "state": "QUERY → NORMALIZED → AUTHORIZED → PAGED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      1869,
+      1871,
+      1890,
+      1964,
+      3054,
+      3090
+    ],
+    "test_ids": [
+      "P21-UT-003",
+      "P21-BT-003",
+      "P21-FT-003",
+      "P21-CT-003",
+      "P21-IT-003"
+    ],
+    "task_ids": [
+      "P21-TASK-011",
+      "P21-TASK-012",
+      "P21-TASK-013",
+      "P21-TASK-014",
+      "P21-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 21,
+    "i": 4,
+    "id": "FUNC-P21-004",
+    "name": "보존·압축·뉴스·정보 알림",
+    "method": "RetentionService.apply(plan: RetentionPlan) -> RetentionResult",
+    "tables": [
+      "chronicle_event",
+      "chronicle_snapshot",
+      "statistics_aggregate",
+      "notification",
+      "world_event"
+    ],
+    "rules": [
+      "중요도70+원본영구/40~69요약/20~39연간집계를기본으로하고북마크와역사참조를보호한다",
+      "오래된전투/생활/시장상세는집계일치검증후압축한다",
+      "뉴스중복묶음/중요도별중단과읽음상태를관리하며P0오류는설정으로끄지못한다",
+      "원본삭제와요약생성은동일정합성경계이고잔존참조를검사한다"
+    ],
+    "normal": [
+      "중요도80·즐겨찾기true·100년경과",
+      "원본문장/출처영구보존"
+    ],
+    "edge": [
+      "중요도25일일기록100개",
+      "연간집계합계일치확인후상세압축"
+    ],
+    "failure": [
+      "압축중저장실패",
+      "원본100개또는완전요약만·양쪽소실없음"
+    ],
+    "kw": [
+      "압축",
+      "보존",
+      "뉴스",
+      "알림",
+      "중요도",
+      "저널",
+      "요약"
+    ],
+    "state": "ELIGIBLE → SUMMARIZED → VERIFIED → PRUNED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      109,
+      1765,
+      1766,
+      1779,
+      1879,
+      1895,
+      1981
+    ],
+    "test_ids": [
+      "P21-UT-004",
+      "P21-BT-004",
+      "P21-FT-004",
+      "P21-CT-004",
+      "P21-IT-004"
+    ],
+    "task_ids": [
+      "P21-TASK-016",
+      "P21-TASK-017",
+      "P21-TASK-018",
+      "P21-TASK-019",
+      "P21-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 22,
+    "i": 1,
+    "id": "FUNC-P22-001",
+    "name": "정보구조·화면 계약·Navigation",
+    "method": "NavigationCoordinator.handle(intent: NavigationIntent) -> RouteResult",
+    "tables": [
+      "ui_preference"
+    ],
+    "rules": [
+      "7상위영역과5기본하단탭을사용하고원문의모든화면항목을화면레지스트리에매핑한다",
+      "각화면은Route/Input/PublicViewState/UserAction/UiEffect/empty/error/permission표를갖는다",
+      "entity전체를route에넣지않고ID만전달한다",
+      "탐색/전투중도시행동은잠금/확인하며이미확정명령을Back으로취소하지않는다"
+    ],
+    "normal": [
+      "연대기→NPC→던전→Back2회",
+      "NPC목록/기록의필터·스크롤복원"
+    ],
+    "edge": [
+      "로그인/서버응답없는비행기모드",
+      "모든핵심route가로컬에서동작"
+    ],
+    "failure": [
+      "없는NPC ID딥링크",
+      "기록요약/없음화면·앱crash없음"
+    ],
+    "kw": [
+      "화면",
+      "네비게이션",
+      "정보구조",
+      "Bottom",
+      "Navigation",
+      "뒤로",
+      "상위",
+      "메뉴"
+    ],
+    "state": "ROUTE_REQUEST → GUARD → DISPLAYED/REDIRECTED",
+    "kind": "read",
+    "refs": [],
+    "sources": [
+      114,
+      115,
+      2536,
+      2537,
+      2538,
+      2539,
+      2540,
+      2541,
+      2542,
+      2543,
+      2544,
+      2545,
+      2546,
+      2547,
+      2548,
+      2549,
+      2550,
+      2551,
+      2552,
+      2553,
+      2554,
+      2556,
+      2557,
+      2558,
+      2559,
+      2560,
+      2561,
+      2562,
+      2563,
+      2565,
+      2568,
+      2569,
+      2570,
+      2571,
+      2572,
+      2574,
+      2575,
+      2577,
+      2578,
+      2580,
+      2581,
+      2582,
+      2583,
+      2584,
+      2585,
+      2586,
+      2587,
+      2589,
+      2590,
+      2591,
+      2592,
+      2593,
+      2594,
+      2595,
+      2596,
+      2597,
+      2598,
+      2599,
+      2600,
+      2601,
+      2602,
+      2603,
+      2604,
+      2605,
+      2606,
+      2607,
+      2609,
+      2610,
+      2611,
+      2612,
+      2613,
+      2614,
+      2616,
+      2617,
+      2618,
+      2619,
+      2620,
+      2621,
+      2624,
+      2625,
+      2626,
+      2627,
+      2630,
+      2632,
+      2635,
+      2636,
+      2638,
+      2639,
+      2642,
+      2645,
+      2646,
+      2647,
+      2648,
+      2649,
+      2650,
+      2651,
+      2652,
+      2653,
+      2654,
+      2655,
+      2656,
+      2657,
+      2658,
+      2659,
+      2660,
+      2661,
+      2662,
+      2663,
+      2664,
+      2665,
+      2666,
+      2667,
+      2668,
+      2669,
+      2670,
+      2675,
+      2676,
+      2677,
+      2678,
+      2679,
+      2680,
+      2681,
+      2682,
+      2683,
+      2684,
+      2685,
+      2686,
+      2687,
+      2688,
+      2689,
+      2690,
+      2691,
+      2692,
+      2693,
+      2694,
+      2695,
+      2696,
+      2697,
+      2698,
+      2699,
+      2700,
+      2702,
+      2703,
+      2704,
+      2705,
+      2706,
+      2708,
+      3035,
+      3036,
+      3040,
+      3041,
+      3102
+    ],
+    "test_ids": [
+      "P22-UT-001",
+      "P22-BT-001",
+      "P22-FT-001",
+      "P22-CT-001",
+      "P22-IT-001"
+    ],
+    "task_ids": [
+      "P22-TASK-001",
+      "P22-TASK-002",
+      "P22-TASK-003",
+      "P22-TASK-004",
+      "P22-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 22,
+    "i": 2,
+    "id": "FUNC-P22-002",
+    "name": "디자인 토큰·컴포넌트·이미지",
+    "method": "DesignSystemValidator.validate(spec: ComponentSpec) -> UiCheckReport",
+    "tables": [
+      "asset_image",
+      "ui_preference"
+    ],
+    "rules": [
+      "V28색상/타이포/간격/모서리/상태배지토큰을원문값으로등록한다",
+      "용병/아이템/던전카드와확률분해/상태칩/정보미확인표시를재사용한다",
+      "동일portraitKey의화면별crop을적용하고장비변경으로portrait를재생성하지않는다",
+      "로딩/실패/누락상태에서도텍스트행동과레이아웃을유지한다"
+    ],
+    "normal": [
+      "NPC-W-03147 목록/상세/대화/전투",
+      "같은assetKey·서로다른crop profile"
+    ],
+    "edge": [
+      "이미지로드실패",
+      "fallback표시·이름/행동버튼사용가능"
+    ],
+    "failure": [
+      "토큰외임의색/폰트가추가됨",
+      "디자인lint/review경고·승인없이기준선변경금지"
+    ],
+    "kw": [
+      "디자인",
+      "색상",
+      "토큰",
+      "Typography",
+      "Card",
+      "Sheet",
+      "이미지",
+      "아이콘",
+      "버튼"
+    ],
+    "state": "TOKENIZED → IMPLEMENTED → REVIEWED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      2555,
+      2576,
+      2588,
+      2608,
+      2623,
+      2629,
+      2631,
+      2637,
+      2671,
+      2673,
+      2820,
+      2821,
+      2822,
+      2823,
+      2824,
+      2825,
+      2826,
+      2827,
+      2828,
+      2829,
+      2830,
+      2831,
+      2832,
+      2833,
+      2834,
+      2835,
+      2836,
+      2837,
+      2838,
+      2839,
+      2840,
+      2841,
+      2842,
+      2843,
+      2844,
+      2845,
+      2846,
+      2847,
+      2848,
+      2849,
+      2850,
+      2851,
+      2852,
+      2853,
+      2854,
+      2855,
+      2856,
+      2857,
+      2858,
+      2859,
+      2860,
+      2861,
+      2862,
+      2863,
+      2864,
+      2865,
+      2866,
+      2867,
+      2868,
+      2869,
+      2870,
+      2871,
+      2872,
+      2873,
+      2874,
+      2875,
+      2876,
+      2877,
+      2878,
+      2879,
+      2880,
+      2881,
+      2882,
+      2883,
+      2884,
+      2885,
+      2886,
+      2887,
+      2888,
+      2889,
+      2890,
+      2891,
+      2892,
+      2893,
+      2894,
+      2895,
+      2896,
+      2897,
+      2898,
+      2899,
+      2900,
+      2901,
+      2902,
+      2903,
+      2904,
+      2905,
+      2906,
+      2907,
+      2908,
+      2909,
+      2910,
+      2911,
+      2912,
+      2913,
+      2914,
+      2915,
+      2916,
+      2917,
+      2918,
+      2919,
+      2920,
+      2921,
+      2922,
+      2923,
+      2924,
+      2925,
+      2926,
+      2927,
+      2928,
+      2929,
+      2930,
+      2931,
+      3038
+    ],
+    "test_ids": [
+      "P22-UT-002",
+      "P22-BT-002",
+      "P22-FT-002",
+      "P22-CT-002",
+      "P22-IT-002"
+    ],
+    "task_ids": [
+      "P22-TASK-006",
+      "P22-TASK-007",
+      "P22-TASK-008",
+      "P22-TASK-009",
+      "P22-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 22,
+    "i": 3,
+    "id": "FUNC-P22-003",
+    "name": "Adaptive·큰글자·TalkBack·터치",
+    "method": "AccessibilityVerifier.run(input: UiFixtureMatrix) -> AccessibilityReport",
+    "tables": [
+      "ui_preference"
+    ],
+    "rules": [
+      "Compact1열/600dp+다중패널을동일domain state로표현한다",
+      "텍스트배율1.0/1.3/2.0과한국어긴이름/큰금액/긴부상목록에서줄바꿈을검증한다",
+      "TalkBack semantics는공개정보만사용하고색만으로위험을구별하지않는다",
+      "모달초점/뒤로/닫기/스크린리더읽기순서와터치타깃을검사한다"
+    ],
+    "normal": [
+      "폭360dp·글자2배·NPC긴이름",
+      "주요확인/취소버튼잘림0·스크롤접근가능"
+    ],
+    "edge": [
+      "숨은스탯화면TalkBack읽기",
+      "미확인만읽음·내부수치없음"
+    ],
+    "failure": [
+      "회전/리사이즈중모달열림",
+      "선택내용유지·명령중복0"
+    ],
+    "kw": [
+      "접근성",
+      "Adaptive",
+      "반응형",
+      "폭",
+      "태블릿",
+      "글자",
+      "TalkBack",
+      "터치"
+    ],
+    "state": "FIXTURE_LOADED → INSPECTED → PASS/FAIL",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      2633,
+      2634,
+      2640,
+      2643,
+      2644,
+      2672,
+      2674,
+      3037,
+      3039
+    ],
+    "test_ids": [
+      "P22-UT-003",
+      "P22-BT-003",
+      "P22-FT-003",
+      "P22-CT-003",
+      "P22-IT-003"
+    ],
+    "task_ids": [
+      "P22-TASK-011",
+      "P22-TASK-012",
+      "P22-TASK-013",
+      "P22-TASK-014",
+      "P22-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 22,
+    "i": 4,
+    "id": "FUNC-P22-004",
+    "name": "화면 생명주기·일회성 효과·유저 여정",
+    "method": "UiLifecycleCoordinator.restore(input: SavedUiState) -> UiState",
+    "tables": [
+      "ui_preference",
+      "command_receipt"
+    ],
+    "rules": [
+      "ViewModel/StateFlow/UDF로화면상태를관리하고Snackbar/Navigation은UiEffect로분리한다",
+      "재생성시toast true같은장기플래그로이벤트를재실행하지않는다",
+      "저장/로드/전투복구/시간중단/후계승계/귀환전체여정을실제use case로연결한다",
+      "숨은정보검사와오작동취소/복구안내를release UI에서검증한다",
+      "PublicSnapshot의 sessionEpoch를 현재 세션과 대조하고 stateVersion을 단조 적용하며 generationId로 durable 복구 출처를 식별한다"
+    ],
+    "normal": [
+      "구매성공직후Activity재생성",
+      "보유품1개·금1회차감·성공안내중복과도표시없음"
+    ],
+    "edge": [
+      "전투중Back",
+      "허용메뉴또는확인·계산결과삭제없음"
+    ],
+    "failure": [
+      "process death후SavedStateHandle만존재",
+      "권위세이브로드후projection재생성·UI값으로월드복구금지"
+    ],
+    "kw": [
+      "생명주기",
+      "상태",
+      "ViewModel",
+      "Flow",
+      "복원",
+      "오류",
+      "튜토리얼",
+      "유저",
+      "여정"
+    ],
+    "state": "CREATED → STARTED → STOPPED → RESTORED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      2564,
+      2566,
+      2567,
+      2573,
+      2579,
+      2615,
+      2622,
+      2628,
+      2641,
+      2701,
+      2707,
+      3033,
+      3034
+    ],
+    "test_ids": [
+      "P22-UT-004",
+      "P22-BT-004",
+      "P22-FT-004",
+      "P22-CT-004",
+      "P22-IT-004"
+    ],
+    "task_ids": [
+      "P22-TASK-016",
+      "P22-TASK-017",
+      "P22-TASK-018",
+      "P22-TASK-019",
+      "P22-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 23,
+    "i": 1,
+    "id": "FUNC-P23-001",
+    "name": "Validation Center·공통 검사 실행",
+    "method": "ValidationRunner.run(request: ValidationRunRequest) -> ValidationRun",
+    "tables": [
+      "validation_run",
+      "validation_case_result",
+      "validation_artifact"
+    ],
+    "rules": [
+      "원문ValidationCenter검사종류를등록하고Schema/Content/Assets/Name/Portrait/Save/Simulation/RNG를같은런메타데이터로실행한다",
+      "실제프로덕션엔진과저장모듈을test scope에서호출하며별도가짜모형으로대체하지않는다",
+      "테스트세이브디렉터리를강제격리하고실게임경로입력을거절한다",
+      "결과에는seed·버전·fixture·기기·duration·expected/actual·증거파일hash를포함한다"
+    ],
+    "normal": [
+      "seed42·고정fixture·2회검사",
+      "결과stateHash동일·runId서로다름"
+    ],
+    "edge": [
+      "실게임DB경로입력",
+      "UnsafeTestPath로시작거절"
+    ],
+    "failure": [
+      "runner중단",
+      "run=ABORTED·완료된case증거보존·PASS표시금지"
+    ],
+    "kw": [
+      "Validation",
+      "검증",
+      "실행",
+      "검사",
+      "유형",
+      "UI",
+      "CLI",
+      "Result"
+    ],
+    "state": "QUEUED → RUNNING → PASSED/FAILED/ABORTED",
+    "kind": "mutation",
+    "refs": [],
+    "sources": [
+      636,
+      637,
+      640,
+      641,
+      642,
+      643,
+      644,
+      645,
+      646,
+      647,
+      648,
+      649,
+      650,
+      651,
+      652,
+      655,
+      656,
+      657,
+      658,
+      662,
+      663,
+      665,
+      668,
+      669,
+      670,
+      671,
+      672,
+      673,
+      674,
+      679,
+      681,
+      682,
+      683,
+      684,
+      2253,
+      2254,
+      2255,
+      2256,
+      2257,
+      2258,
+      2259,
+      2260,
+      2261,
+      2262,
+      2263,
+      2264,
+      2265,
+      2266,
+      2267,
+      2271,
+      2272,
+      2273,
+      2275,
+      2276,
+      2277,
+      2278,
+      2280,
+      2281,
+      2282,
+      2283,
+      2284,
+      2285,
+      2286,
+      2287,
+      2288,
+      2289,
+      2291,
+      2292,
+      2294,
+      2295,
+      2296,
+      2297,
+      2298,
+      2299,
+      2300,
+      2301,
+      2302,
+      2303,
+      2305,
+      2306,
+      2307,
+      2308,
+      2309,
+      2310,
+      2311,
+      2312,
+      2313,
+      2315,
+      2321,
+      2322,
+      2323,
+      2326,
+      2327,
+      2328,
+      2329,
+      2330,
+      2331,
+      2332,
+      2333,
+      2335,
+      2336,
+      2339,
+      2341,
+      2342,
+      2343,
+      2344,
+      2345,
+      2346,
+      2347,
+      2348,
+      2349,
+      2351,
+      2352,
+      2353,
+      2354,
+      2356,
+      2357,
+      2358,
+      2359,
+      2360,
+      2362,
+      2363,
+      2364,
+      2365,
+      2366,
+      2367,
+      2368,
+      2369,
+      2370,
+      2374,
+      2375,
+      2377,
+      2378,
+      2379,
+      2384,
+      2385,
+      2387,
+      2389,
+      2390,
+      2391,
+      2392,
+      2393,
+      2397,
+      2398,
+      2399,
+      2402,
+      2403,
+      2404,
+      2405,
+      2406,
+      2407,
+      2408,
+      2409,
+      2410,
+      2414,
+      2415,
+      2416,
+      2417,
+      2419,
+      3099,
+      3100,
+      3101,
+      3105,
+      3106,
+      3107
+    ],
+    "test_ids": [
+      "P23-UT-001",
+      "P23-BT-001",
+      "P23-FT-001",
+      "P23-CT-001",
+      "P23-IT-001"
+    ],
+    "task_ids": [
+      "P23-TASK-001",
+      "P23-TASK-002",
+      "P23-TASK-003",
+      "P23-TASK-004",
+      "P23-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 23,
+    "i": 2,
+    "id": "FUNC-P23-002",
+    "name": "불변식·속성·퍼즈·장기 월드",
+    "method": "InvariantSuite.verify(input: SimulationRun) -> InvariantReport",
+    "tables": [
+      "validation_case_result",
+      "validation_artifact"
+    ],
+    "rules": [
+      "인구/금화/소유권/파티10/6/예약/RNG/가문/귀환의불변식을매경계검사한다;0/1/최대/상한초과와잘못된enum/FK/시간/중복명령을생성한다;10/50/100/300년·같은seed다른batch크기·도중저장로드를비교한다",
+      "실패시최소재현명령시퀀스로축소하되원실패seed도보존한다"
+    ],
+    "normal": [
+      "아이템동일ID2장착fixture",
+      "소유권불변식정확한ID와함께FAIL"
+    ],
+    "edge": [
+      "실행순서/로그level만변경",
+      "최종canonical hash동일"
+    ],
+    "failure": [
+      "300년중실패seed1개",
+      "전체PASS금지·최초실패경계/축소fixture저장"
+    ],
+    "kw": [
+      "Invariant",
+      "속성",
+      "퍼즈",
+      "Fuzz",
+      "Stress",
+      "100년",
+      "300년",
+      "LongRun",
+      "RNG"
+    ],
+    "state": "GENERATE → EXECUTE → ASSERT → SHRINK/REPORT",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      2290,
+      2293,
+      2314,
+      2334,
+      2337,
+      2338,
+      2340,
+      2350,
+      2376,
+      2411
+    ],
+    "test_ids": [
+      "P23-UT-002",
+      "P23-BT-002",
+      "P23-FT-002",
+      "P23-CT-002",
+      "P23-IT-002"
+    ],
+    "task_ids": [
+      "P23-TASK-006",
+      "P23-TASK-007",
+      "P23-TASK-008",
+      "P23-TASK-009",
+      "P23-TASK-010"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 23,
+    "i": 3,
+    "id": "FUNC-P23-003",
+    "name": "확률·수치·드롭·경제 밸런스 비교",
+    "method": "BalanceExperiment.run(input: BalanceExperimentSpec) -> ExperimentReport",
+    "tables": [
+      "balance_baseline",
+      "validation_run",
+      "validation_artifact"
+    ],
+    "rules": [
+      "단일예제승패가아니라seed집합·표본수·추정오차·신뢰구간으로승률/드롭/강화/경제를비교한다",
+      "몬스터/장비/스킬/던전/파티전력의구간별목표와원문prototype/alpha/full규모를검사한다",
+      "rare1%강화/각인같은희귀사건은강제RNG경계시험과통계시험을구분한다",
+      "결과가좋다는이유로baseline을자동갱신하지않고리뷰승인/버전을기록한다"
+    ],
+    "normal": [
+      "Bernoulli p=.01·N100000",
+      "성공률·Wilson95%CI와기대분포보고·정해진허용구간검사"
+    ],
+    "edge": [
+      "성공0건인N10",
+      "확률0으로단정하지않고표본부족표시"
+    ],
+    "failure": [
+      "기준선에없는미정계수",
+      "NOT_READY·임의수치로출시승인하지않음"
+    ],
+    "kw": [
+      "밸런스",
+      "확률",
+      "통계",
+      "승률",
+      "표본",
+      "기준선",
+      "비교",
+      "드롭",
+      "강화",
+      "경제"
+    ],
+    "state": "SPECIFIED → SAMPLED → COMPARED → REVIEWED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      625,
+      638,
+      639,
+      653,
+      654,
+      659,
+      660,
+      661,
+      664,
+      666,
+      667,
+      675,
+      676,
+      677,
+      678,
+      680,
+      685,
+      686,
+      2251,
+      2252,
+      2268,
+      2269,
+      2270,
+      2274,
+      2279,
+      2304,
+      2316,
+      2317,
+      2318,
+      2319,
+      2320,
+      2324,
+      2325,
+      2361,
+      2371,
+      2372,
+      2373,
+      2380,
+      2381,
+      2382,
+      2388,
+      2400,
+      2412
+    ],
+    "test_ids": [
+      "P23-UT-003",
+      "P23-BT-003",
+      "P23-FT-003",
+      "P23-CT-003",
+      "P23-IT-003"
+    ],
+    "task_ids": [
+      "P23-TASK-011",
+      "P23-TASK-012",
+      "P23-TASK-013",
+      "P23-TASK-014",
+      "P23-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 23,
+    "i": 4,
+    "id": "FUNC-P23-004",
+    "name": "재현 패키지·리뷰·결함·승인",
+    "method": "ReproductionService.export(input: FailedValidation) -> ReproBundle",
+    "tables": [
+      "validation_artifact",
+      "validation_case_result",
+      "review_decision"
+    ],
+    "rules": [
+      "최소snapshot+content binding+RNG+명령열+실패assertion을묶어별도기기에서재현한다",
+      "debug명령/치트/검증센터는release노출정책을명확히구분한다",
+      "검토자는원문규칙/보완안/코드/Test/실제증거를연결해승인한다",
+      "결함은우선순위/책임자/재현율/영향saveversion/차단gate를기록한다"
+    ],
+    "normal": [
+      "실패fixture를다른JVM에서import",
+      "같은최초불변식오류재현"
+    ],
+    "edge": [
+      "증거파일checksum불일치",
+      "재현패키지거절·원본검사결과보존"
+    ],
+    "failure": [
+      "reviewer미지정",
+      "검토대기·DoD완료로표시하지않음"
+    ],
+    "kw": [
+      "재현",
+      "Replay",
+      "리포트",
+      "승인",
+      "리뷰",
+      "결함",
+      "Export",
+      "debug"
+    ],
+    "state": "FAILED → PACKAGED → REPRODUCED → FIXED → REVIEWED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      2355,
+      2383,
+      2386,
+      2394,
+      2395,
+      2396,
+      2401,
+      2413,
+      2418
+    ],
+    "test_ids": [
+      "P23-UT-004",
+      "P23-BT-004",
+      "P23-FT-004",
+      "P23-CT-004",
+      "P23-IT-004"
+    ],
+    "task_ids": [
+      "P23-TASK-016",
+      "P23-TASK-017",
+      "P23-TASK-018",
+      "P23-TASK-019",
+      "P23-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 24,
+    "i": 1,
+    "id": "FUNC-P24-001",
+    "name": "실측 성능·이미지·목록·DB 예산",
+    "method": "PerformanceHarness.measure(input: BenchmarkMatrix) -> BenchmarkReport",
+    "tables": [
+      "performance_run"
+    ],
+    "rules": [
+      "실제release기기에서시작/저장로드/시간진행/전투/스크롤/검색p50/p95/p99를측정한다;10k초상은한번에decode하지않고현재화면/파티작은범위만preload한다;중간급Android기기RAM4GB·arm64·API26/현행기기matrix를설계보완목표로두고실기기ID를결과에기록한다;예산미달시자료구조/할당/배치/인덱스부터개선하고측정없이NDK전환하지않는다"
+    ],
+    "normal": [
+      "NPC2200/아이템100000/연대기1000000fixture",
+      "측정값/DB크기/PSS/기기정보모두보고"
+    ],
+    "edge": [
+      "화면목록스크롤100회",
+      "화면밖bitmap domain참조0"
+    ],
+    "failure": [
+      "benchmark에debug build사용",
+      "비교불가표시·release승인증거로인정하지않음"
+    ],
+    "kw": [
+      "성능",
+      "Profiler",
+      "Benchmark",
+      "이미지",
+      "캐시",
+      "메모리",
+      "목록",
+      "DB",
+      "NDK"
+    ],
+    "state": "BASELINED → PROFILED → OPTIMIZED → RECHECKED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      3103,
+      3118,
+      3120,
+      3121,
+      3124,
+      3125
+    ],
+    "test_ids": [
+      "P24-UT-001",
+      "P24-BT-001",
+      "P24-FT-001",
+      "P24-CT-001",
+      "P24-IT-001"
+    ],
+    "task_ids": [
+      "P24-TASK-001",
+      "P24-TASK-002",
+      "P24-TASK-003",
+      "P24-TASK-004",
+      "P24-TASK-005"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 24,
+    "i": 2,
+    "id": "FUNC-P24-002",
+    "name": "누수·취소·배터리·앱 중단",
+    "method": "LifecycleStress.run(input: StressScenario) -> StressReport",
+    "tables": [
+      "performance_run"
+    ],
+    "rules": [
+      "slot전환/화면회전/장기진행취소/앱stop을반복해world session·job·file handle을회수한다;Coroutine은구조화scope를사용하고Main에서DB/시뮬레이션을수행하지않는다;백그라운드월드진행/주기적NPC작업/불필요wake lock을금지한다;프로세스강제종료는콜백없이발생한다고가정하고커밋경계복구를검사한다"
+    ],
+    "normal": [
+      "슬롯A/B전환100회",
+      "활성WorldSession1·닫힌sessionjob0"
+    ],
+    "edge": [
+      "앱종료현실7일후재개",
+      "세계GameClock/RNG진행0"
+    ],
+    "failure": [
+      "취소중DBcommit완료",
+      "receipt조회로확정상태복원·임의재실행없음"
+    ],
+    "kw": [
+      "누수",
+      "Thread",
+      "Coroutine",
+      "배터리",
+      "종료",
+      "취소",
+      "lifecycle"
+    ],
+    "state": "RUNNING → CANCELLING → DRAINED → CLOSED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [],
+    "test_ids": [
+      "P24-UT-002",
+      "P24-BT-002",
+      "P24-FT-002",
+      "P24-CT-002",
+      "P24-IT-002"
+    ],
+    "task_ids": [
+      "P24-TASK-006",
+      "P24-TASK-007",
+      "P24-TASK-008",
+      "P24-TASK-009",
+      "P24-TASK-010"
+    ],
+    "related_sources": [
+      2472,
+      2473,
+      3086,
+      3088,
+      3089
+    ]
+  },
+  {
+    "p": 24,
+    "i": 3,
+    "id": "FUNC-P24-003",
+    "name": "저장공간·장기 압축·실패 격리",
+    "method": "ResilienceVerifier.inject(input: FaultScenario) -> FaultReport",
+    "tables": [
+      "performance_run",
+      "recovery_journal"
+    ],
+    "rules": [
+      "disk-full/SQLite busy/I/O/메모리압박/손상파일/consumer실패를주입한다",
+      "장식이미지/통계projection/알림실패는핵심게임과격리하되상태손상은안전정지한다",
+      "immutable세대/참조GC/장기압축이보호원본을삭제하지않는지실제로복구한다;비상시사용자수동save삭제보다cache정리/내보내기안내/쓰기중단을우선한다"
+    ],
+    "normal": [
+      "이미지20%손상+전투1회",
+      "fallback·동일전투hash·NPC원portraitKey유지"
+    ],
+    "edge": [
+      "디스크잔여0에서강화",
+      "새명령commit안됨·이전세이브유효"
+    ],
+    "failure": [
+      "참조중checkpoint chunk GC후보",
+      "삭제거절·세대복원성유지"
+    ],
+    "kw": [
+      "안정화",
+      "실패",
+      "장애",
+      "공간",
+      "저장",
+      "손상",
+      "압축",
+      "격리",
+      "복구"
+    ],
+    "state": "FAULT_INJECTED → DETECTED → ISOLATED/SAFE_STOP → RECOVERED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      3119
+    ],
+    "test_ids": [
+      "P24-UT-003",
+      "P24-BT-003",
+      "P24-FT-003",
+      "P24-CT-003",
+      "P24-IT-003"
+    ],
+    "task_ids": [
+      "P24-TASK-011",
+      "P24-TASK-012",
+      "P24-TASK-013",
+      "P24-TASK-014",
+      "P24-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 24,
+    "i": 4,
+    "id": "FUNC-P24-004",
+    "name": "최적화 동치·인덱스·R8·프로필",
+    "method": "OptimizationGate.compare(input: OptimizationCandidate) -> EquivalenceReport",
+    "tables": [
+      "performance_run",
+      "balance_baseline"
+    ],
+    "rules": [
+      "최적화전후동일seed명령열의stateHash/eventTrace/게임시간/금화/증표를비교한다",
+      "인덱스추가전후query plan/쓰기부담/마이그레이션을검사한다",
+      "R8minify·serialization·Room생성코드·로컬asset경로를release에서검사한다;BaselineProfile은측정여정에기반해작성하고결정론을희생한근사연산은별도게임규칙변경으로심의한다"
+    ],
+    "normal": [
+      "Array최적화전후1000seed",
+      "모든권위hash동일·성능수치만변화"
+    ],
+    "edge": [
+      "컬렉션순서를HashMap iteration에의존",
+      "동치실패·merge차단"
+    ],
+    "failure": [
+      "R8후DTOserialization필드누락",
+      "release회귀실패·keep/serializer수정후재검증"
+    ],
+    "kw": [
+      "최적화",
+      "인덱스",
+      "R8",
+      "Baseline",
+      "동치",
+      "allocation",
+      "자료구조"
+    ],
+    "state": "CANDIDATE → EQUIVALENCE_CHECK → PERFORMANCE_CHECK → ACCEPTED/REJECTED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      3104
+    ],
+    "test_ids": [
+      "P24-UT-004",
+      "P24-BT-004",
+      "P24-FT-004",
+      "P24-CT-004",
+      "P24-IT-004"
+    ],
+    "task_ids": [
+      "P24-TASK-016",
+      "P24-TASK-017",
+      "P24-TASK-018",
+      "P24-TASK-019",
+      "P24-TASK-020"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 25,
+    "i": 1,
+    "id": "FUNC-P25-001",
+    "name": "전체 End-to-End·회귀·출시 범위 검수",
+    "method": "ReleaseAcceptance.run(input: ReleaseCandidate) -> AcceptanceReport",
+    "tables": [
+      "release_manifest",
+      "review_decision"
+    ],
+    "rules": [
+      "요구사항bundle→기능→Task→Test→실제결과의전체추적성을확인한다;새게임/던전/강화/경제/길드/100년/승계/귀환/저장복구여정을통합검증한다",
+      "원문Full콘텐츠의실제행수/효과완성/이미지존재를검수한다;Prototype/Alpha의축소profile은Full완료로표시하지않고모든필수gate완료만출시승인한다"
+    ],
+    "normal": [
+      "모든필수case PASS·결함P0/P1 0·검토승인완료",
+      "RC출시승인가능"
+    ],
+    "edge": [
+      "테스트목록만있고실행증거없음",
+      "NOT_RUN·승인불가"
+    ],
+    "failure": [
+      "원문요구사항1개매핑없음",
+      "traceability FAIL·출시차단"
+    ],
+    "kw": [
+      "통합",
+      "E2E",
+      "Regression",
+      "인수",
+      "검수",
+      "완료",
+      "Full"
+    ],
+    "state": "RC_CREATED → TESTING → REVIEW → ACCEPTED/REJECTED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [],
+    "test_ids": [
+      "P25-UT-001",
+      "P25-BT-001",
+      "P25-FT-001",
+      "P25-CT-001",
+      "P25-IT-001"
+    ],
+    "task_ids": [
+      "P25-TASK-001",
+      "P25-TASK-002",
+      "P25-TASK-003",
+      "P25-TASK-004",
+      "P25-TASK-005"
+    ],
+    "related_sources": [
+      123,
+      2419,
+      2535,
+      3133
+    ]
+  },
+  {
+    "p": 25,
+    "i": 2,
+    "id": "FUNC-P25-002",
+    "name": "업그레이드·마이그레이션·다운그레이드",
+    "method": "UpgradeVerifier.execute(input: UpgradeScenario) -> UpgradeReport",
+    "tables": [
+      "migration_history",
+      "release_manifest",
+      "recovery_journal"
+    ],
+    "rules": [
+      "P0 SchemaBaselineMode를 사용한다; GREENFIELD_V1은 fresh install/open/roundtrip과 migration 0개를 검증하고 LEGACY_CHAIN만 실제 released schema fixture를 단계 N→N+1 체인으로 검증한다",
+      "출시되지 않은 가상 schema/codec fixture를 만들지 않으며 LEGACY_CHAIN은 업그레이드 전 DB/manifest를 백업한다",
+      "앱롤백과데이터롤백을구분하며구앱으로신규schema를열거나강제파괴마이그레이션하지않는다;rollback은검증된구앱+업그레이드전별도세이브로수행하며업그레이드후진행손실을사용자에게명시한다",
+      "보존 중인 모든 versioned EventCodecId를 decode/upcast하고 구 event 기반 projection 재구축 결과를 검증한다"
+    ],
+    "normal": [
+      "GREENFIELD_V1 fresh save 또는 LEGACY_CHAIN oldest supported 실제 save",
+      "GREENFIELD fresh-open·migration 0개 또는 LEGACY 실제 chain·권위값 보존 계획"
+    ],
+    "edge": [
+      "current+1 schema 세이브를 current 앱에서 열기",
+      "호환불가·파일쓰기0"
+    ],
+    "failure": [
+      "실제 migration chain 중 한 단계 실패 주입",
+      "업그레이드전자산파일hash동일·오류기록"
+    ],
+    "kw": [
+      "Upgrade",
+      "Migration",
+      "Rollback",
+      "하위",
+      "호환",
+      "마이그레이션",
+      "버전"
+    ],
+    "state": "BACKED_UP → MIGRATING → VERIFIED/ROLLED_BACK",
+    "kind": "tool",
+    "refs": [],
+    "sources": [],
+    "test_ids": [
+      "P25-UT-002",
+      "P25-BT-002",
+      "P25-FT-002",
+      "P25-CT-002",
+      "P25-IT-002"
+    ],
+    "task_ids": [
+      "P25-TASK-006",
+      "P25-TASK-007",
+      "P25-TASK-008",
+      "P25-TASK-009",
+      "P25-TASK-010"
+    ],
+    "related_sources": [
+      2452,
+      2453,
+      2454,
+      2455,
+      2456,
+      2457,
+      3112,
+      3113,
+      3114
+    ]
+  },
+  {
+    "p": 25,
+    "i": 3,
+    "id": "FUNC-P25-003",
+    "name": "서명 Release·오프라인 설치·배포",
+    "method": "ReleasePipeline.build(input: SignedReleaseSpec) -> ReleaseManifest",
+    "tables": [
+      "release_manifest"
+    ],
+    "rules": [
+      "APK/AAB·mapping·symbols·SBOM/라이선스·콘텐츠hash·세이브schema·앱버전을함께봉인한다;release에는debug검증경로/강제아이템명령/실사용데이터수집이노출되지않게한다;설치후비행기모드에서최초새게임/이름초상/전투/세이브를검증하고필수다운로드를요구하지않는다;SDK/스토어정책은출시시점공식문서로재확인하며원문예시버전을영구현재정책으로단정하지않는다"
+    ],
+    "normal": [
+      "서명release신규설치후인터넷차단",
+      "필수콘텐츠이미포함·첫플레이완료"
+    ],
+    "edge": [
+      "필수asset팩미설치",
+      "설치완료검수실패·조용한네트워크의존금지"
+    ],
+    "failure": [
+      "서명키/manifest다름",
+      "배포차단·기존설치덮어쓰기강행금지"
+    ],
+    "kw": [
+      "배포",
+      "Release",
+      "R8",
+      "서명",
+      "AAB",
+      "APK",
+      "SDK",
+      "버전",
+      "네트워크",
+      "오프라인"
+    ],
+    "state": "BUILT → SIGNED → INSTALLED → VERIFIED → PUBLISHED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [
+      3108,
+      3109,
+      3110,
+      3111,
+      3127,
+      3128,
+      3129
+    ],
+    "test_ids": [
+      "P25-UT-003",
+      "P25-BT-003",
+      "P25-FT-003",
+      "P25-CT-003",
+      "P25-IT-003"
+    ],
+    "task_ids": [
+      "P25-TASK-011",
+      "P25-TASK-012",
+      "P25-TASK-013",
+      "P25-TASK-014",
+      "P25-TASK-015"
+    ],
+    "related_sources": []
+  },
+  {
+    "p": 25,
+    "i": 4,
+    "id": "FUNC-P25-004",
+    "name": "릴리즈 운영·결함 대응·문서 인계",
+    "method": "ReleaseRunbook.close(input: ReleaseReview) -> HandoffRecord",
+    "tables": [
+      "review_decision",
+      "release_manifest"
+    ],
+    "rules": [
+      "오프라인게임운영은콘텐츠/세이브호환/결함재현/업데이트/로컬진단중심이며서버데몬관리를신설하지않는다;문서revision·PR/commit·담당자·증거경로·known issue·복구절차를인계한다;이후변경은RequirementDelta→영향phase/task/test→migration→회귀gate순서로수행한다;사용자제공세이브진단은최소필드/명시동의/원본보존원칙으로처리한다"
+    ],
+    "normal": [
+      "출시후강화중복보고·repro bundle제공",
+      "영향버전/receipt/seed기준재현·원본세이브보존"
+    ],
+    "edge": [
+      "필수리뷰서명없음",
+      "HANDOFF_PENDING·완료율100%금지"
+    ],
+    "failure": [
+      "핫픽스에schema변경있음",
+      "P3/P25migration+회귀재개·단순파일교체출시금지"
+    ],
+    "kw": [
+      "운영",
+      "문서",
+      "인계",
+      "릴리즈",
+      "이슈",
+      "패치",
+      "검토"
+    ],
+    "state": "RELEASED → MONITORING → PATCH_PLANNED → REVALIDATED",
+    "kind": "tool",
+    "refs": [],
+    "sources": [],
+    "test_ids": [
+      "P25-UT-004",
+      "P25-BT-004",
+      "P25-FT-004",
+      "P25-CT-004",
+      "P25-IT-004"
+    ],
+    "task_ids": [
+      "P25-TASK-016",
+      "P25-TASK-017",
+      "P25-TASK-018",
+      "P25-TASK-019",
+      "P25-TASK-020"
+    ],
+    "related_sources": [
+      126,
+      3130,
+      3131,
+      3135
+    ]
+  }
+]

@@ -1,0 +1,139 @@
+# 88. 화면 ID · 상태 · Action · 전이 Matrix
+
+> 목적: P22의 방대한 UI/UX 규칙을 화면 단위 계약으로 고정한다. 화면 ID는 설계 보완안이며 route 실제 이름은 Navigation 구현 시 동일 의미를 유지하는 범위에서 조정할 수 있다.
+
+## 1. 공통 화면 상태
+
+```text
+LOADING → READY / EMPTY / ERROR
+READY → MUTATING → READY
+READY → NAVIGATING → DESTINATION
+MUTATING → ERROR(재시도/복구 가능)
+STOPPED → RESTORED
+```
+
+| 상태 | 의미 | UI 규칙 |
+|---|---|---|
+| `LOADING` | 초기 데이터 로딩 | Skeleton/Progress, 중복 command 금지 |
+| `READY` | 상호작용 가능 | 권위 snapshot version 표시/보관 |
+| `EMPTY` | 정상이나 데이터 없음 | 원인+다음 행동 제공 |
+| `MUTATING` | Command 처리 중 | 중복 탭 방지, 취소 가능성 표시 |
+| `ERROR` | 조회/명령 실패 | 기존 정상 상태 보존, 재시도/복구 |
+| `INTERRUPTED` | 시간/작업이 중요 사건으로 중단 | 중단 이유와 남은 목표 표시 |
+| `RESTORED` | Process death/Back 후 복원 | 필터/스크롤/편집중 draft 정책 준수 |
+
+## 2. Screen Registry 및 전이 Matrix
+
+| Screen ID | 화면 | Route | Owner | 상태 | 대표 Action | Destination | Guard | 실행 계약 |
+|---|---|---|---|---|---|---|---|---|
+| SCR-HOME-001 | 홈 | home | P22 | READY/LOADING/ERROR | 던전 카드 선택 | SCR-DUN-001 | - | `NAVIGATION` |
+| SCR-DUN-001 | 던전 목록 | dungeon/list | P8/P22 | LOADING/READY/EMPTY/ERROR | 필터/던전 선택 | SCR-DUN-002 | 공개정보 정책 | `QUERY` |
+| SCR-DUN-002 | 던전 상세 | dungeon/detail/{id} | P8/P22 | LOADING/READY/ERROR | 입장/등록/추적 | SCR-DUN-003 | 파티·거리·상태 Guard | `CMD-P9-F001` |
+| SCR-DUN-003 | 던전 탐색 | dungeon/explore/{id} | P9/P22 | READY/MUTATING/INTERRUPTED/ERROR | 이동/조사/휴식/전투 | SCR-DUN-004 또는 SCR-CMB-001 | 현재 방/통로/행동 가능 | `CMD-P9-F001` / `CMD-P9-F003` |
+| SCR-DUN-004 | 던전 지도 | dungeon/map/{id} | P9/P22 | READY/MUTATING/INTERRUPTED/EMPTY/ERROR | 방 선택/길찾기/주석 저장/안전 복귀 | SCR-DUN-003 | 발견 정보·현재 routeVersion·행동 가능 | `QUERY FUNC-P9-002` / `CMD-P9-F002` |
+| SCR-EVT-001 | 던전/월드 이벤트 | event/{id} | P19/P22 | READY/CHOICE_PENDING/RESOLVED | 선택지 선택 | 이전 화면 | 선택 가능 상태 | `CMD-P19-F002` |
+| SCR-CMB-001 | 전투 | combat/{id} | P6/P22 | RUNNING/PAUSED/FINISHED/ERROR | 속도/로그/후퇴 | SCR-CMB-002 | 후퇴 조건/전투 상태 | `LOCAL_UI` / `CMD-P6-F005` |
+| SCR-CMB-002 | 전투 결과 | combat/{id}/result | P6/P9 | READY | 보상 확인/계속 | SCR-DUN-003 또는 HOME | 정산 완료 | `LOCAL_UI` |
+| SCR-PTY-001 | 파티 홈 | party | P13/P22 | READY/EMPTY | 멤버/편성/전술/정치 | SCR-PTY-002 | - | `QUERY` |
+| SCR-PTY-002 | 출전 편성 | party/formation | P13/P22 | READY/DIRTY/ERROR | 6명 출전/교대 | SCR-PTY-001 | 조직/출전 상한 | `CMD-P13-F001` |
+| SCR-PTY-003 | 전술 편집 | party/tactics | P5/P13 | READY/DIRTY/INVALID | 조건식 편집/저장 | SCR-PTY-001 | 전술 validator | `LOCAL_DRAFT` / `CMD-P5-F003` |
+| SCR-PTY-004 | 파티 정치/투표 | party/politics | P13 | READY/VOTING/RESOLVED | 제안/투표 | SCR-PTY-001 | 헌장 권한 | `CMD-P13-F002` |
+| SCR-MER-001 | 용병 목록 | mercenaries | P4/P22 | LOADING/READY/EMPTY | 검색/필터/선택 | SCR-MER-002 | 공개 정보만 | `QUERY FUNC-P4-005` |
+| SCR-MER-002 | 용병 상세 | mercenary/{id} | P4/P15 | LOADING/READY/ERROR | 영입/대화/장비/관계 | SCR-DLG-001 또는 SCR-REC-001 | 정보 비대칭 정책 | `QUERY FUNC-P4-005` / `CMD-P11-F002` |
+| SCR-REC-001 | 모집 공고 | recruitment | P11 | READY/EMPTY | 공고등록/지원자 | SCR-REC-002 | 모집 조건 | `CMD-P11-F002` |
+| SCR-REC-002 | 협상 | recruitment/negotiate/{id} | P11 | PROPOSED/COUNTERED/ACCEPTED/REJECTED | 역제안/수락/거절 | SCR-PTY-001 | 계약 Guard | `CMD-P11-F002` |
+| SCR-DLG-001 | 대화 | dialogue/{npcId} | P11/P15 | OPEN/CHOICE_PENDING/RESOLVED | topic/선택 | 이전 | 관계/상태 | `CMD-P11-F004` |
+| SCR-ITM-001 | 장비/인벤토리 | inventory | P5/P22 | LOADING/READY/EMPTY | 필터/장착/상세 | SCR-ITM-002 | 소유권/보호 | `QUERY` / `CMD-P5-F001` |
+| SCR-ITM-002 | 장비 상세/비교 | item/{id} | P5 | READY | 장착/강화/정련 | SCR-ENH-001 | 아이템 상태 | `QUERY` / `CMD-P5-F001` |
+| SCR-SKL-001 | 스킬 | skills | P5 | READY/EMPTY | 장착/해제/상세 | SCR-SKL-002 | 슬롯 제한 | `QUERY` / `CMD-P5-F003` |
+| SCR-SKL-002 | 스킬 상세 | skill/{id} | P5 | READY | 장착/학습 | SCR-SKL-001 | 클래스/보유 조건 | `CMD-P5-F002` / `CMD-P5-F003` |
+| SCR-ENH-001 | 장비 강화 | enhancement/{itemId} | P12 | QUOTED/MUTATING/RESULT/ERROR | 촉매/보호석/강화 | SCR-ITM-002 | 비용·attempt·확률 | `CMD-P12-F001` |
+| SCR-CRF-001 | 제작/연금/연구 | craft | P12 | DRAFT/RESERVED/RUNNING/COMPLETE | 레시피/시작/취소 | SCR-CITY-002 | 재료 선점 | `LOCAL_DRAFT` / `CMD-P12-F004` |
+| SCR-CITY-001 | 도시 | city | P10/P22 | READY | 시설/이동/빠른정비 | SCR-CITY-002 | 영업/위치 | `QUERY` |
+| SCR-CITY-002 | 시설 | city/facility/{id} | P10 | READY/QUEUED/CLOSED | 이용/대기 | SCR-CITY-001 | 영업시간/점유 | `CMD-P10-F001` / `CMD-P10-F002` |
+| SCR-MNT-001 | 귀환 후 정비 | maintenance | P10 | QUOTED/EXECUTING/PARTIAL/COMPLETE | 자동정비 미리보기/실행 | HOME | 비용/시간 | `QUERY` / `CMD-P10-F004` |
+| SCR-MKT-001 | 시장 | market | P14 | OPEN/READY/ERROR | 구매/판매/흥정 | SCR-ITM-002 | 재고/금액 | `CMD-P14-F002` |
+| SCR-AUC-001 | 경매 | auction | P14 | LISTED/BIDDING/SETTLED/EXPIRED | 입찰/등록 | SCR-MKT-001 | 자금 선점 | `CMD-P14-F002` |
+| SCR-HOU-001 | 주거 | residence | P10 | ACTIVE/ARREARS/RELOCATING | 확장/이사/창고 | SCR-ITM-001 | 소유/임대 | `CMD-P10-F003` |
+| SCR-GIL-001 | 길드 홈 | guild | P16/P22 | READY/OUTSIDER | 가입/직위/시설 | SCR-GIL-002 | 권한 | `QUERY` / `CMD-P16-F001` / `CMD-P16-F002` |
+| SCR-GIL-002 | 길드 랭킹 | guild/ranking | P16 | READY | 상세/이력 | SCR-GIL-001 | 공식 일마감 | `QUERY` |
+| SCR-GIL-003 | 길드 결정 | guild/decision | P16 | AGENDA/DEBATE/VOTE/RESOLVED | 토론/투표 | SCR-GIL-001 | 직위/권한 | `CMD-P16-F003` |
+| SCR-GIL-004 | 길드 예산 | guild/budget | P16 | DRAFT/BUDGETED/ASSIGNED | 배정/승인 | SCR-GIL-001 | 재정 권한 | `CMD-P16-F002` |
+| SCR-STR-001 | 전술 실험실/자동화 | strategy | P19/P22 | IDLE/SIMULATING/DIRTY/MUTATING/ERROR | 실험/전략 저장/자동화 규칙/위임 실행 | 이전 화면 | 정보범위·예산·중단정책·행동권한 | `QUERY FUNC-P19-004` / `CMD-P19-F004` |
+| SCR-TIME-001 | 시간 진행 | time/advance | P2/P22 | IDLE/ADVANCING/INTERRUPTED/COMPLETED | 프리셋/대상/중단 | 이전 | interrupt policy | `CMD-P2-F004` |
+| SCR-TIME-002 | 일정/예약 | schedule | P2 | READY/EMPTY | 예약 상세/취소 | SCR-TIME-001 | 점유/자원 | `CMD-P2-F003` |
+| SCR-FAM-001 | 가문 | family | P18/P22 | READY | 가족/교육/후계 | SCR-FAM-002 | 공개 가족 상태 | `QUERY` |
+| SCR-FAM-002 | 후계자 | family/succession | P18 | CANDIDATES/NOMINATED/READY | 지정/승계 | SCR-FAM-001 | 적격/의사/안전장치 | `CMD-P18-F002` / `CMD-P18-F003` |
+| SCR-RECOR-001 | 연대기 | records/chronicle | P21/P22 | LOADING/READY/MUTATING/EMPTY/ERROR | 필터/상세/북마크 전환 | SCR-SEARCH-001 | 공개 정책·observer 권한 | `QUERY FUNC-P21-003` / `CMD-P21-F003` |
+| SCR-RECOR-002 | 통계 | records/stats | P21 | LOADING/READY | 기간/지표 | SCR-RECOR-001 | aggregate 검증 | `QUERY` |
+| SCR-SEARCH-001 | 전역 검색 | search | P21/P22 | IDLE/LOADING/READY/MUTATING/EMPTY/ERROR | 검색/필터/정렬/북마크 전환 | 대상 상세 | 공개정보 authorization·observer 권한 | `QUERY FUNC-P21-003` / `CMD-P21-F003` |
+| SCR-NOTI-001 | 알림 센터 | notifications | P22 | READY/EMPTY | 읽음/이동 | 딥링크 대상 | event visibility | `LOCAL_PROJECTION` / `NAVIGATION` |
+| SCR-SAVE-001 | 세이브/로드 | save | P3/P22 | READY/SAVING/LOADING/ERROR | 수동저장/로드/export/import | SCR-SAVE-002 | 세션/무결성 | `CMD-P3-F002` / `CMD-P3-F005` / `QUERY` |
+| SCR-SAVE-002 | 세이브 복구 | save/recovery | P3 | RECOVERABLE/CORRUPTED/RESTORED | 세대선택/복원 | HOME | checksum/version | `CMD-P3-F003` |
+| SCR-RET-001 | 귀환 조건 | return | P20 | PROGRESSING/ELIGIBLE | 증표/조건/귀환 | SCR-RET-002 | 모든 필수조건 | `QUERY` / `CMD-P20-F004` |
+| SCR-RET-002 | 귀환/후일담 | return/ending | P20 | ELIGIBLE/ENDING_COMMITTED/PRESENTED | 귀환/잔류/연대기 | 종료 또는 HOME | ending commit | `CMD-P20-F004` |
+| SCR-SET-001 | 설정/접근성 | settings | P22 | READY | theme/font/motion/TalkBack 지원값 | 이전 | - | `LOCAL_PREFERENCE` |
+| SCR-VAL-001 | Validation Center | validation | P23 | QUEUED/RUNNING/PASSED/FAILED | suite/seed/replay | SCR-VAL-002 | debug build | `TOOL FUNC-P23-001` |
+| SCR-VAL-002 | 검증 결과/재현 | validation/result/{id} | P23 | READY/FAILED/PACKAGED | trace/diff/replay | SCR-VAL-001 | artifact isolation | `TOOL_QUERY` |
+
+## 3. Bottom Navigation 계약
+
+| 기본 탭 | Root Screen | Back 규칙 |
+|---|---|---|
+| 홈 | `SCR-HOME-001` | 탭 root에서 Back은 앱 종료/상위 정책, 하위 route는 직전 상태 복원 |
+| 던전 | `SCR-DUN-001` | 탭 root에서 Back은 앱 종료/상위 정책, 하위 route는 직전 상태 복원 |
+| 파티 | `SCR-PTY-001` | 탭 root에서 Back은 앱 종료/상위 정책, 하위 route는 직전 상태 복원 |
+| 도시 | `SCR-CITY-001` | 탭 root에서 Back은 앱 종료/상위 정책, 하위 route는 직전 상태 복원 |
+| 기록 | `SCR-RECOR-001` | 탭 root에서 Back은 앱 종료/상위 정책, 하위 route는 직전 상태 복원 |
+
+기본은 위 5개다. 커스터마이즈 시에도 슬롯 수는 5개를 유지하며, 사용자는 도시/기록 슬롯을 의뢰·캐릭터·길드 등 등록된 상위 화면으로 교체할 수 있다. 나머지 화면은 홈 또는 등록된 상위 화면에서 진입한다.
+
+## 4. UiAction → Command 규칙
+
+1. 화면 버튼은 먼저 `UiAction`으로 들어가며, 실행 계약이 `CMD-*`인 mutation만 ViewModel/UseCase가 CommandEnvelope로 변환한다.
+2. `QUERY`, `NAVIGATION`, `LOCAL_*`, `TOOL*`은 authoritative WorldCommand나 gameplay command receipt를 만들지 않는다.
+3. 금화·아이템·시간·관계·랭킹·던전 상태뿐 아니라 지도 주석, 안전 복귀, 전략/자동화 설정·위임 실행, 북마크처럼 live save.db를 바꾸는 Action은 Command receipt를 요구한다.
+4. 동일 CTA 연타는 같은 commandId 재사용 또는 UI disable로 중복 효과를 막는다.
+5. 화면이 STOPPED된 뒤 늦게 도착한 이전 sessionEpoch 결과는 적용하지 않는다.
+
+## 5. 위험 Action Matrix
+
+| Action | UX 보호 | 되돌리기 |
+|---|---|---|
+| 강화 고단계 시도 | 확률/실패 하락/보호석/비용 명시 + 확인 | 결과 RNG commit 후 일반 Undo 금지 |
+| 파티원 퇴출/계약 해지 | 사유·위약금·관계영향 미리보기 | 실행 전 취소, 실행 후 규약에 따른 후속 처리 |
+| 세대 교체 | 상속/개인귀속/후계자 상태 최종 확인 | commit 전 취소, commit 후 SaveGeneration 복원 정책만 사용 |
+| 귀환 엔딩 | 조건·종료 영향·후일담 안내, Hold/Confirm | ENDING_COMMITTED 후 일반 Undo 금지 |
+| 세이브 삭제/Import | 대상 슬롯·백업/새 슬롯 정책 명시 | 기존 슬롯 자동 덮어쓰기 금지 |
+
+## 6. 정보 비대칭 표시 규칙
+
+- 미확인 던전/몬스터/잠재력/관계 수치를 authoritative 값 그대로 노출하지 않는다.
+- `?`, 미확인, 추정 범위, 신뢰도 등 Projection 정책을 사용한다.
+- debug Validation 화면만 별도 권한/빌드 조건에서 숨은 상태를 볼 수 있다.
+
+## 7. Adaptive/접근성 Matrix
+
+| 조건 | 모든 핵심 화면 요구 |
+|---|---|
+| 큰 글자 | CTA/수치 잘림 없음, 세로 확장 허용 |
+| TalkBack | EntityRow/버튼/Badge에 의미 있는 label과 traversal order |
+| 색각 | 등급/위험/관계를 색만으로 구분하지 않음 |
+| 태블릿 | 목록+상세 2-pane 가능, 동일 Command 계약 유지 |
+| 모션 감소 | 전설 이벤트/전투 연출도 정보 손실 없이 축소 |
+| Process death | 저장 가능한 편집/필터/스크롤 상태 복구, transient effect 중복 재생 금지 |
+
+## 8. 화면 Test 생성 규칙
+
+- 각 Screen ID마다 READY/EMPTY/ERROR 최소 3-state snapshot 또는 semantics test.
+- Mutation CTA는 정상/중복탭/DB실패/process death를 검증한다.
+- Back/딥링크는 Guard 실패 시 안전한 root로 redirect한다.
+- 2,000 NPC/1,000 inventory/100년 연대기 fixture로 목록 복귀와 성능을 검증한다.
+- 중요한 선택은 선택 결과가 화면 복원 후 중복 적용되지 않는지 receipt로 확인한다.
+
+## 9. Definition of Done
+
+- [ ] 현재 정의된 49개 Screen ID가 Navigation graph에 등록 또는 명시적으로 제외된다.
+- [ ] 각 Screen의 authoritative-changing Action이 실행 계약 열의 `CMD-*`를 통해 84 Mutation Registry에 연결된다.
+- [ ] 모든 Screen이 공통 Loading/Empty/Error/Restore 정책을 따른다.
+- [ ] P22 UI 자동화와 P25 E2E가 Screen ID를 공통 식별자로 사용한다.

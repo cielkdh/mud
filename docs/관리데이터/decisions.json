@@ -1,0 +1,325 @@
+[
+  {
+    "id": "C01",
+    "title": "파티6명/10명 혼용",
+    "status": "원문기준 해결",
+    "sources": "§28/§218/§1537/§1737",
+    "proposal": "조직10명·출전6명. 30/10 과거대화는 첨부본 기준에 적용하지 않음.",
+    "phases": [
+      0,
+      5,
+      7,
+      13,
+      22
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C02",
+    "title": "플레이어 길드창설 예시",
+    "status": "원문기준 해결",
+    "sources": "§125/§257/§1336",
+    "proposal": "플레이어 신규창설 금지·기존길드 가입/승계. NPC 길드생성은 유지.",
+    "phases": [
+      0,
+      16,
+      17,
+      20
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C03",
+    "title": "XP 지수식/후반 공식",
+    "status": "원문기준 해결",
+    "sources": "§21/§626/§634",
+    "proposal": "후반 100×L^1.70×구간보정, 레벨당자동1/자유1·10배수추가2 유지.",
+    "phases": [
+      0,
+      4,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C04",
+    "title": "귀걸이 카탈로그와 슬롯누락",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§50/§131/§142",
+    "proposal": "EAR 슬롯 추가, 손/발/목/손가락 alias 정규화. 모든105 귀걸이 보존.",
+    "phases": [
+      5,
+      12,
+      22,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C05",
+    "title": "피해증가 이중적용·회피 이중판정",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§349/§351/§357/§365",
+    "proposal": "피해증가는 한 계층에서 한 번; 명중에회피 포함후 별도 회피추첨 생략 후보.",
+    "phases": [
+      6,
+      7,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C06",
+    "title": "동시 HP/보호막/흡혈 배분",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§431~433",
+    "proposal": "동시 HP 합산·흡수기여 안정비례배분·잔여정수 stable tie-break; golden fixture 승인.",
+    "phases": [
+      6,
+      7,
+      9,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C07",
+    "title": "강화 하락·재성공 무한성장",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§146/§148~176/§183",
+    "proposal": "목표단계별 fail stack, 도달단계성장원장 비활성/재활성; 재추첨은정련만.",
+    "phases": [
+      12,
+      14,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C08",
+    "title": "200레벨 초과 및 재훈련 상세계수",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§626~686/§1454~1496",
+    "proposal": "200초과곡선/ceil정수화/재훈련손실/시간/비용 profile 승인. 시험예제0.90은제품확정아님.",
+    "phases": [
+      4,
+      17,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C09",
+    "title": "PERMANENT 초상 풀까지 전부소진",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§2767/§2801~2819",
+    "proposal": "보호키탈취금지·일반공유후 최후generic key 명시배정; 이름동명이인허용.",
+    "phases": [
+      1,
+      4,
+      17,
+      18
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C10",
+    "title": "퍼센트/%p 및 불완전 효과 데이터",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§128~140/§274~330 등",
+    "proposal": "unit=RATIO/BASIS_POINT/FLAT, typed effect AST; description-only effect를임의숫자로출시하지않음.",
+    "phases": [
+      1,
+      5,
+      6,
+      12,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C11",
+    "title": "개인랭킹·동률·기여계수 공백",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§108/§1497~1582/§1787",
+    "proposal": "개인공식, 동률1위 인정/단독순위, 기간/가중치 versioned profile에 확정.",
+    "phases": [
+      13,
+      16,
+      20,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C12",
+    "title": "6종 귀환조건과5증표 UI",
+    "status": "원문 해석+보완 승인 대기",
+    "sources": "§3/§1783~1830/§2485",
+    "proposal": "증표5와잔존던전0 gate 분리. 미발견마지막던전 추적단서경로 보완.",
+    "phases": [
+      19,
+      20,
+      21,
+      22
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C13",
+    "title": "한글 FTS 부분검색/tokenizer",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§2616/§3054/§3090",
+    "proposal": "정규화/토큰 전략 비교후선택; 성능·품질샘플과정보공개경계 동시검증.",
+    "phases": [
+      1,
+      21,
+      24
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C14",
+    "title": "기술버전·SDK 및 실제코드 미제공",
+    "status": "일부 공식문서 확인·빌드 미검증",
+    "sources": "§3022~3135",
+    "proposal": "P0 lock spike에서 toolchain·모듈/API 소유·app/headless 조립·SchemaBaselineMode=GREENFIELD_V1|LEGACY_CHAIN을 실제 증거로 잠근다. 그 전에는 P0 외 구현을 활성화하지 않고 672개 Task를 추적 후보로 두며 가상 migration을 만들지 않는다.",
+    "phases": [
+      0,
+      3,
+      25
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C15",
+    "title": "월드분과전투10ms 연결",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§7/§522/§3065~3066",
+    "proposal": "subMinuteMs 누적, 6×10초=1분; 동일시각월드 phase order 버전고정.",
+    "phases": [
+      2,
+      3,
+      6,
+      9
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C16",
+    "title": "세대번호만 존재하는 과거상태 복원",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§2427~2429/§2472~2475",
+    "proposal": "불변청크+완전manifest+정규화current projection 원자저장. GC root보호.",
+    "phases": [
+      3,
+      18,
+      21,
+      24,
+      25
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C17",
+    "title": "축약전투와상세전투 기대값 편차",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§110/§930~983/§1585~1645",
+    "proposal": "활동ID/정산receipt 통합, 구간별성공률/자산/부상모형을실제엔진표본으로교정.",
+    "phases": [
+      7,
+      17,
+      23
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C18",
+    "title": "미제공 이미지·콘텐츠 정의 및수량",
+    "status": "검수 필요",
+    "sources": "§123/§128~140/§2816/§3019",
+    "proposal": "10k 이미지와실제코드 미첨부. 수록catalog ID와실제효과완성률/목표수량을별도관리.",
+    "phases": [
+      1,
+      4,
+      23,
+      25
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C19",
+    "title": "장기성능/용량 목표와단말기준",
+    "status": "설계 보완안·측정 전",
+    "sources": "§2478/§2510/§3103/§3124",
+    "proposal": "문서의수치예산은초기목표. 실측하지않았고300년상수용량보장하지않음.",
+    "phases": [
+      17,
+      21,
+      24,
+      25
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C20",
+    "title": "SAFE_RECOVERY 반올림/거리시간",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§35/§1367~1384",
+    "proposal": "손실floor·복귀HP최소1 후보, 거리/깊이시간profile별승인. 구조/안전회귀비용중복금지.",
+    "phases": [
+      9,
+      10,
+      14
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C21",
+    "title": "장비 내구 단위 및 감소 기준",
+    "status": "설계 보완안·승인 대기",
+    "sources": "§35/§1379/§1303",
+    "proposal": "제안DB는0..100 정수내구. 원문절대내구가필요하면현재/최대필드분리migration;감소의현재/최대기준을승인.",
+    "phases": [
+      5,
+      9,
+      12,
+      14
+    ],
+    "owner": null,
+    "approved_at": null
+  },
+  {
+    "id": "C22",
+    "title": "암호화·checksum 보장범위",
+    "status": "원문 해석 확정",
+    "sources": "§2506~2509",
+    "proposal": "checksum은손상탐지,인증/치트방지아님. 기본로컬파일백업·사용자동의·원본보존.",
+    "phases": [
+      3,
+      25
+    ],
+    "owner": null,
+    "approved_at": null
+  }
+]

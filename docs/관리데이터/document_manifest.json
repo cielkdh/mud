@@ -1,0 +1,32 @@
+{
+  "version": "31.0",
+  "date": "2026-09-08",
+  "source_file": "원문/통합설계_v30_원본.md",
+  "source_sha256": "249f2b3f8e01d5436fcd85a6e506bf326118a5201f03bef48e8c927634297849",
+  "source_sections": 3135,
+  "source_lines": 64658,
+  "phases": 26,
+  "functions": 111,
+  "tasks": 672,
+  "phase_tests": 737,
+  "global_tests": 14,
+  "content_tasks": 91,
+  "catalog_rows": 3448,
+  "effort_person_days": 946.54,
+  "dependency_lower_bound_days": 140.97,
+  "global_design_docs": [],
+  "added_documents": [
+    "80_전체_도메인모델_ERD_설계서.md",
+    "81_전체_데이터사전.md",
+    "82_원자_요구사항_및_Assertion_추적표.md",
+    "83_전체_상태머신_설계서.md",
+    "84_전체_Command_Event_계약서.md",
+    "85_NFR_성능_용량_단말_기준서.md",
+    "86_밸런스_KPI_및_시뮬레이션_합격기준.md",
+    "87_콘텐츠_Effect_DSL_AST_상세명세.md",
+    "88_화면_ID_상태_Action_전이_Matrix.md"
+  ],
+  "atomic_assertion_count": 21443,
+  "schema_object_count": 172,
+  "screen_count": 49
+}

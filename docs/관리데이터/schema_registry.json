@@ -1,0 +1,3052 @@
+{
+  "content_manifest": {
+    "name": "content_manifest",
+    "fields": [
+      "content_version TEXT NOT NULL",
+      "balance_version TEXT NOT NULL",
+      "schema_version INTEGER NOT NULL",
+      "source_hash TEXT NOT NULL",
+      "bundle_hash TEXT NOT NULL",
+      "profile TEXT NOT NULL"
+    ],
+    "unique": [
+      "content_version"
+    ],
+    "indexes": [
+      "profile"
+    ],
+    "note": "",
+    "store": "content"
+  },
+  "content_template": {
+    "name": "content_template",
+    "fields": [
+      "kind TEXT NOT NULL",
+      "source_id TEXT NOT NULL",
+      "display_name TEXT NOT NULL",
+      "grade TEXT",
+      "min_level INTEGER",
+      "tags_json TEXT NOT NULL",
+      "definition_json TEXT NOT NULL",
+      "definition_version INTEGER NOT NULL"
+    ],
+    "unique": [
+      "source_id"
+    ],
+    "indexes": [
+      "kind,grade",
+      "display_name"
+    ],
+    "note": "definition_json은 아래 타입별 스키마를 통과한 AST. 미정 필드는 출시 활성화 불가.",
+    "store": "content"
+  },
+  "content_alias": {
+    "name": "content_alias",
+    "fields": [
+      "old_id TEXT NOT NULL",
+      "new_id TEXT",
+      "policy TEXT NOT NULL",
+      "reason TEXT NOT NULL"
+    ],
+    "unique": [
+      "old_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "content"
+  },
+  "asset_image": {
+    "name": "asset_image",
+    "fields": [
+      "relative_path TEXT NOT NULL",
+      "category TEXT NOT NULL",
+      "width INTEGER NOT NULL CHECK(width>0)",
+      "height INTEGER NOT NULL CHECK(height>0)",
+      "byte_size INTEGER NOT NULL CHECK(byte_size>=0)",
+      "sha256 TEXT NOT NULL",
+      "pool_version TEXT"
+    ],
+    "unique": [
+      "relative_path"
+    ],
+    "indexes": [
+      "category"
+    ],
+    "note": "",
+    "store": "content"
+  },
+  "asset_binding": {
+    "name": "asset_binding",
+    "fields": [
+      "entity_kind TEXT NOT NULL",
+      "template_id TEXT NOT NULL",
+      "usage_type TEXT NOT NULL",
+      "asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT",
+      "crop_profile TEXT NOT NULL",
+      "priority INTEGER NOT NULL"
+    ],
+    "unique": [
+      "entity_kind,template_id,usage_type,priority"
+    ],
+    "indexes": [
+      "asset_id"
+    ],
+    "note": "",
+    "store": "content"
+  },
+  "asset_fallback": {
+    "name": "asset_fallback",
+    "fields": [
+      "category TEXT NOT NULL",
+      "matcher TEXT NOT NULL",
+      "asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT",
+      "priority INTEGER NOT NULL"
+    ],
+    "unique": [
+      "category,matcher,priority"
+    ],
+    "indexes": [
+      "asset_id"
+    ],
+    "note": "",
+    "store": "content"
+  },
+  "world_state": {
+    "name": "world_state",
+    "fields": [
+      "total_game_minutes INTEGER NOT NULL CHECK(total_game_minutes>=0)",
+      "sub_minute_ms INTEGER NOT NULL CHECK(sub_minute_ms BETWEEN 0 AND 59999)",
+      "world_seed TEXT NOT NULL",
+      "session_epoch TEXT NOT NULL",
+      "branch_id TEXT NOT NULL",
+      "content_version TEXT NOT NULL",
+      "balance_version TEXT NOT NULL",
+      "rng_version TEXT NOT NULL",
+      "engine_order_version INTEGER NOT NULL",
+      "player_id TEXT",
+      "state_hash TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "session_epoch"
+    ],
+    "note": "1개 캠페인 DB에서 현재 materialized world는 한 행. Seed는 unsigned64를 고정16진수 TEXT로 직렬화.",
+    "store": "save"
+  },
+  "command_receipt": {
+    "name": "command_receipt",
+    "fields": [
+      "command_id TEXT NOT NULL",
+      "epoch TEXT NOT NULL",
+      "payload_hash TEXT NOT NULL",
+      "result_code TEXT NOT NULL",
+      "result_json TEXT NOT NULL",
+      "state_version INTEGER NOT NULL",
+      "game_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "epoch,command_id"
+    ],
+    "indexes": [
+      "state_version"
+    ],
+    "note": "같은 ID+다른 payload는 거절. generation snapshot에 함께 포함.",
+    "store": "save"
+  },
+  "world_event": {
+    "name": "world_event",
+    "fields": [
+      "source_id TEXT",
+      "source_event_id TEXT",
+      "source_epoch TEXT NOT NULL CHECK(length(source_epoch)>0)",
+      "source_command_id TEXT NOT NULL CHECK(length(source_command_id)>0)",
+      "source_version INTEGER NOT NULL CHECK(source_version>=0)",
+      "event_type TEXT NOT NULL",
+      "event_sequence INTEGER NOT NULL CHECK(event_sequence>=0)",
+      "game_minute INTEGER NOT NULL CHECK(game_minute>=0)",
+      "sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999)",
+      "visibility TEXT NOT NULL",
+      "importance INTEGER NOT NULL",
+      "payload_json TEXT NOT NULL",
+      "consumed_mask INTEGER NOT NULL DEFAULT 0"
+    ],
+    "unique": [
+      "source_epoch,source_command_id,event_sequence"
+    ],
+    "indexes": [
+      "game_minute,id",
+      "event_type,game_minute",
+      "source_epoch,source_command_id,event_sequence"
+    ],
+    "note": "권위 사건 원본/outbox. event_type은 <event-name>.v<schema-version> 형식의 versioned EventCodecId이며 decoder/upcaster를 보존 기간 동안 유지한다. event_sequence는 (source_epoch,source_command_id) 안에서 단조 증가하며 같은 두 열은 command_receipt 복합 FK다. 소비 플래그만 믿지 않고 consumer별 receipt 필요.",
+    "store": "save"
+  },
+  "rng_state": {
+    "name": "rng_state",
+    "fields": [
+      "stream_key TEXT NOT NULL",
+      "algorithm_version TEXT NOT NULL",
+      "state_hex TEXT NOT NULL",
+      "increment_hex TEXT NOT NULL",
+      "draw_counter INTEGER NOT NULL CHECK(draw_counter>=0)"
+    ],
+    "unique": [
+      "stream_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "scheduled_action": {
+    "name": "scheduled_action",
+    "fields": [
+      "actor_id TEXT",
+      "action_kind TEXT NOT NULL",
+      "start_minute INTEGER NOT NULL",
+      "due_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "reservation_group_id TEXT",
+      "payload_json TEXT NOT NULL",
+      "completion_event_id TEXT",
+      "CHECK(due_minute>=start_minute)"
+    ],
+    "unique": [
+      "completion_event_id"
+    ],
+    "indexes": [
+      "status,due_minute,id",
+      "actor_id,start_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "occupancy": {
+    "name": "occupancy",
+    "fields": [
+      "resource_key TEXT NOT NULL",
+      "action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT",
+      "start_minute INTEGER NOT NULL",
+      "end_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "CHECK(end_minute>start_minute)"
+    ],
+    "unique": [
+      "resource_key,action_id"
+    ],
+    "indexes": [
+      "resource_key,status,start_minute,end_minute"
+    ],
+    "note": "구간 겹침은 SQL UNIQUE로 불가능. 단일 writer에서 overlap 조회+삽입 원자 검사.",
+    "store": "save"
+  },
+  "resource_reservation": {
+    "name": "resource_reservation",
+    "fields": [
+      "resource_kind TEXT NOT NULL",
+      "resource_id TEXT NOT NULL",
+      "action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT",
+      "quantity INTEGER NOT NULL CHECK(quantity>0)",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "resource_kind,resource_id,action_id"
+    ],
+    "indexes": [
+      "resource_id,status",
+      "action_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "time_advance_state": {
+    "name": "time_advance_state",
+    "fields": [
+      "request_id TEXT NOT NULL",
+      "target_minute INTEGER NOT NULL",
+      "last_boundary_key TEXT",
+      "next_boundary_minute INTEGER",
+      "interrupt_policy_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "request_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "save_generation": {
+    "name": "save_generation",
+    "fields": [
+      "parent_id TEXT REFERENCES save_generation(id) ON DELETE RESTRICT",
+      "branch_id TEXT NOT NULL",
+      "generation_no INTEGER NOT NULL",
+      "game_minute INTEGER NOT NULL",
+      "schema_version INTEGER NOT NULL",
+      "content_version TEXT NOT NULL",
+      "balance_version TEXT NOT NULL",
+      "manifest_hash TEXT NOT NULL",
+      "status TEXT NOT NULL CHECK(status IN ('WRITING','COMMITTED','ABORTED'))"
+    ],
+    "unique": [
+      "branch_id,generation_no"
+    ],
+    "indexes": [
+      "status,generation_no"
+    ],
+    "note": "삭제 시 부모행 제거는 별도 참조 재기록/보존 정책. 부모는 provenance이며 복원 delta-chain에 의존하지 않음.",
+    "store": "save"
+  },
+  "checkpoint_chunk": {
+    "name": "checkpoint_chunk",
+    "fields": [
+      "sha256 TEXT NOT NULL",
+      "codec_version INTEGER NOT NULL",
+      "encoding TEXT NOT NULL",
+      "uncompressed_bytes INTEGER NOT NULL CHECK(uncompressed_bytes>=0)",
+      "payload BLOB NOT NULL"
+    ],
+    "unique": [
+      "sha256"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "generation_chunk": {
+    "name": "generation_chunk",
+    "fields": [
+      "generation_id TEXT NOT NULL REFERENCES save_generation(id) ON DELETE RESTRICT",
+      "domain_key TEXT NOT NULL",
+      "shard_no INTEGER NOT NULL",
+      "chunk_id TEXT NOT NULL REFERENCES checkpoint_chunk(id) ON DELETE RESTRICT"
+    ],
+    "unique": [
+      "generation_id,domain_key,shard_no"
+    ],
+    "indexes": [
+      "chunk_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "save_slot": {
+    "name": "save_slot",
+    "fields": [
+      "slot_kind TEXT NOT NULL",
+      "ordinal INTEGER NOT NULL",
+      "display_name TEXT NOT NULL",
+      "generation_id TEXT NOT NULL REFERENCES save_generation(id) ON DELETE RESTRICT",
+      "updated_at_real_ms INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "slot_kind,ordinal"
+    ],
+    "indexes": [
+      "generation_id"
+    ],
+    "note": "자동3/수동5는 서비스 정책. 수동동명이름 허용.",
+    "store": "save"
+  },
+  "recovery_checkpoint": {
+    "name": "recovery_checkpoint",
+    "fields": [
+      "checkpoint_kind TEXT NOT NULL",
+      "generation_id TEXT NOT NULL REFERENCES save_generation(id) ON DELETE RESTRICT",
+      "payload_codec TEXT NOT NULL",
+      "domain_payload BLOB NOT NULL",
+      "checksum TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "generation_id"
+    ],
+    "note": "전투/시간진행/대화 codec은 해당 Phase에서 등록. P3은 공통 envelope만 구현.",
+    "store": "save"
+  },
+  "migration_history": {
+    "name": "migration_history",
+    "fields": [
+      "from_version INTEGER NOT NULL",
+      "to_version INTEGER NOT NULL",
+      "migration_id TEXT NOT NULL",
+      "source_hash TEXT NOT NULL",
+      "result_hash TEXT",
+      "status TEXT NOT NULL",
+      "error_code TEXT"
+    ],
+    "unique": [
+      "source_hash,migration_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "recovery_journal": {
+    "name": "recovery_journal",
+    "fields": [
+      "operation_id TEXT NOT NULL",
+      "action_kind TEXT NOT NULL",
+      "source_generation_id TEXT",
+      "result_generation_id TEXT",
+      "error_code TEXT",
+      "detail_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "operation_id"
+    ],
+    "indexes": [
+      "source_generation_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "content_binding": {
+    "name": "content_binding",
+    "fields": [
+      "content_version TEXT NOT NULL",
+      "balance_version TEXT NOT NULL",
+      "source_bundle_hash TEXT NOT NULL",
+      "compatibility_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "content_version,balance_version"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "mercenary": {
+    "name": "mercenary",
+    "fields": [
+      "sex_code TEXT NOT NULL CHECK(sex_code IN ('M','W'))",
+      "given_name TEXT NOT NULL",
+      "family_name TEXT NOT NULL",
+      "display_name TEXT NOT NULL",
+      "name_generator_version TEXT NOT NULL",
+      "birth_game_day INTEGER NOT NULL",
+      "culture_id TEXT NOT NULL",
+      "portrait_image_key TEXT NOT NULL",
+      "portrait_pool_version TEXT NOT NULL",
+      "class_id TEXT NOT NULL",
+      "level INTEGER NOT NULL CHECK(level>=1)",
+      "experience INTEGER NOT NULL CHECK(experience>=0)",
+      "lifecycle_status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "lifecycle_status,level",
+      "display_name",
+      "portrait_image_key"
+    ],
+    "note": "portrait key 콘텐츠 FK는 애플리케이션 validator로 검사; 이름/얼굴 로드 재생성 금지.",
+    "store": "save"
+  },
+  "character_state": {
+    "name": "character_state",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "hp INTEGER NOT NULL CHECK(hp>=0)",
+      "mp INTEGER NOT NULL CHECK(mp>=0)",
+      "stamina INTEGER NOT NULL CHECK(stamina>=0)",
+      "fatigue INTEGER NOT NULL",
+      "location_id TEXT",
+      "activity_status TEXT NOT NULL",
+      "free_stat_points INTEGER NOT NULL CHECK(free_stat_points>=0)"
+    ],
+    "unique": [
+      "mercenary_id"
+    ],
+    "indexes": [
+      "location_id,activity_status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "character_stat": {
+    "name": "character_stat",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "stat_key TEXT NOT NULL",
+      "initial_value INTEGER NOT NULL",
+      "class_growth INTEGER NOT NULL",
+      "allocated_value INTEGER NOT NULL",
+      "permanent_value INTEGER NOT NULL",
+      "base_potential INTEGER NOT NULL",
+      "potential_modifier INTEGER NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id,stat_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "growth_ledger": {
+    "name": "growth_ledger",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "source_event_id TEXT NOT NULL",
+      "growth_kind TEXT NOT NULL",
+      "level_at_event INTEGER NOT NULL",
+      "stat_key TEXT NOT NULL DEFAULT 'NONE'",
+      "delta_value INTEGER NOT NULL",
+      "reversible INTEGER NOT NULL CHECK(reversible IN(0,1))"
+    ],
+    "unique": [
+      "mercenary_id,source_event_id,growth_kind,stat_key"
+    ],
+    "indexes": [
+      "mercenary_id,level_at_event"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "potential_event": {
+    "name": "potential_event",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "source_event_id TEXT NOT NULL",
+      "stat_key TEXT NOT NULL",
+      "modifier_value INTEGER NOT NULL",
+      "replaces_event_id TEXT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id,source_event_id,stat_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "mastery": {
+    "name": "mastery",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "domain_key TEXT NOT NULL",
+      "experience INTEGER NOT NULL CHECK(experience>=0)",
+      "mastery_level INTEGER NOT NULL CHECK(mastery_level>=0)"
+    ],
+    "unique": [
+      "mercenary_id,domain_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "name_registry": {
+    "name": "name_registry",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "normalized_full_name TEXT NOT NULL",
+      "active INTEGER NOT NULL CHECK(active IN(0,1))",
+      "allocation_attempts INTEGER NOT NULL",
+      "collision_mode TEXT NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id"
+    ],
+    "indexes": [
+      "active,normalized_full_name"
+    ],
+    "note": "이름중복 허용 fallback 때문에 이름에 hard UNIQUE 없음.",
+    "store": "save"
+  },
+  "portrait_reservation": {
+    "name": "portrait_reservation",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "portrait_key TEXT NOT NULL",
+      "status TEXT NOT NULL",
+      "reservation_mode TEXT NOT NULL",
+      "reusable_after_minute INTEGER",
+      "pool_version TEXT NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id"
+    ],
+    "indexes": [
+      "portrait_key,status",
+      "status,reusable_after_minute"
+    ],
+    "note": "일반 ACTIVE 중복 fallback을 지원하므로 portrait_key hard UNIQUE 금지. PERMANENT는 allocator에서 제외.",
+    "store": "save"
+  },
+  "knowledge_record": {
+    "name": "knowledge_record",
+    "fields": [
+      "observer_id TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "field_key TEXT NOT NULL",
+      "disclosure_level TEXT NOT NULL",
+      "known_value_json TEXT",
+      "observed_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "observer_id,subject_id,field_key"
+    ],
+    "indexes": [
+      "observer_id,subject_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "money_account": {
+    "name": "money_account",
+    "fields": [
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "purpose TEXT NOT NULL",
+      "balance INTEGER NOT NULL CHECK(balance>=0)",
+      "reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0 AND reserved<=balance)"
+    ],
+    "unique": [
+      "owner_kind,owner_id,purpose"
+    ],
+    "indexes": [
+      "owner_id"
+    ],
+    "note": "보유와 예약은 구분; 출금가능=balance-reserved. 정수금화 Long overflow 검증.",
+    "store": "save"
+  },
+  "storage_location": {
+    "name": "storage_location",
+    "fields": [
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "location_kind TEXT NOT NULL",
+      "parent_location_id TEXT",
+      "capacity INTEGER NOT NULL",
+      "weight_limit INTEGER NOT NULL",
+      "access_policy_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "owner_kind,owner_id",
+      "parent_location_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "item_instance": {
+    "name": "item_instance",
+    "fields": [
+      "template_id TEXT NOT NULL",
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "custodian_id TEXT",
+      "storage_id TEXT NOT NULL REFERENCES storage_location(id) ON DELETE RESTRICT",
+      "durability INTEGER NOT NULL CHECK(durability BETWEEN 0 AND 100)",
+      "grade TEXT NOT NULL",
+      "prefix_id TEXT",
+      "suffix_id TEXT",
+      "protection_flags INTEGER NOT NULL",
+      "lifecycle_status TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "owner_id",
+      "storage_id",
+      "template_id",
+      "source_event_id"
+    ],
+    "note": "단일 storage_id가 진실. 장착/운송은 해당 location kind와 연계. 장비 instance와 동질 스택 중복 생성 금지.",
+    "store": "save"
+  },
+  "inventory_stack": {
+    "name": "inventory_stack",
+    "fields": [
+      "storage_id TEXT NOT NULL REFERENCES storage_location(id) ON DELETE RESTRICT",
+      "template_id TEXT NOT NULL",
+      "stack_signature TEXT NOT NULL",
+      "quantity INTEGER NOT NULL CHECK(quantity>=0)",
+      "reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0 AND reserved<=quantity)"
+    ],
+    "unique": [
+      "storage_id,template_id,stack_signature"
+    ],
+    "indexes": [
+      "template_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "equipment_slot": {
+    "name": "equipment_slot",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "slot_key TEXT NOT NULL",
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT"
+    ],
+    "unique": [
+      "mercenary_id,slot_key",
+      "item_id"
+    ],
+    "indexes": [
+      "mercenary_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "skill_instance": {
+    "name": "skill_instance",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "template_id TEXT NOT NULL",
+      "prefix_id TEXT",
+      "suffix_id TEXT",
+      "source_event_id TEXT NOT NULL",
+      "mastery_exp INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "mercenary_id,template_id",
+      "source_event_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "skill_affinity": {
+    "name": "skill_affinity",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "skill_template_id TEXT NOT NULL",
+      "base_affinity INTEGER NOT NULL",
+      "modifier INTEGER NOT NULL",
+      "disclosed_level TEXT NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id,skill_template_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "loadout": {
+    "name": "loadout",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "name TEXT NOT NULL",
+      "status TEXT NOT NULL",
+      "definition_json TEXT NOT NULL",
+      "validation_version TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "mercenary_id,status"
+    ],
+    "note": "definition_json: passive[0..2],active[0..3],inscription[0..3], formationSlot. 강제 검증필수.",
+    "store": "save"
+  },
+  "tactic_rule": {
+    "name": "tactic_rule",
+    "fields": [
+      "loadout_id TEXT NOT NULL REFERENCES loadout(id) ON DELETE RESTRICT",
+      "priority INTEGER NOT NULL",
+      "condition_ast_json TEXT NOT NULL",
+      "action_json TEXT NOT NULL",
+      "enabled INTEGER NOT NULL CHECK(enabled IN(0,1))"
+    ],
+    "unique": [
+      "loadout_id,priority"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "loot_receipt": {
+    "name": "loot_receipt",
+    "fields": [
+      "source_event_id TEXT NOT NULL",
+      "claimant_id TEXT NOT NULL",
+      "reward_json TEXT NOT NULL",
+      "loot_version TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "source_event_id,claimant_id"
+    ],
+    "indexes": [
+      "claimant_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "combat_checkpoint": {
+    "name": "combat_checkpoint",
+    "fields": [
+      "run_id TEXT NOT NULL",
+      "combat_version TEXT NOT NULL",
+      "content_version TEXT NOT NULL",
+      "combat_ms INTEGER NOT NULL CHECK(combat_ms>=0)",
+      "combat_payload BLOB NOT NULL",
+      "rng_payload BLOB NOT NULL",
+      "checksum TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "run_id,combat_ms"
+    ],
+    "note": "전투 actor/action/status/queue/projectile의 완전 codec. Tick별 SQL하지 않음.",
+    "store": "save"
+  },
+  "combat_result": {
+    "name": "combat_result",
+    "fields": [
+      "run_id TEXT NOT NULL",
+      "encounter_id TEXT NOT NULL",
+      "result TEXT NOT NULL",
+      "duration_ms INTEGER NOT NULL",
+      "outcome_json TEXT NOT NULL",
+      "trace_hash TEXT NOT NULL",
+      "settlement_status TEXT NOT NULL"
+    ],
+    "unique": [
+      "encounter_id"
+    ],
+    "indexes": [
+      "run_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "status_effect": {
+    "name": "status_effect",
+    "fields": [
+      "subject_id TEXT NOT NULL",
+      "definition_id TEXT NOT NULL",
+      "source_id TEXT NOT NULL",
+      "time_domain TEXT NOT NULL CHECK(time_domain IN('COMBAT_MS','WORLD_MINUTE'))",
+      "applied_at INTEGER NOT NULL",
+      "expires_at INTEGER",
+      "stack_count INTEGER NOT NULL",
+      "payload_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "subject_id,definition_id"
+    ],
+    "note": "전투 내부 상태는 checkpoint codec, 월드 지속상태/중단 snapshot용 투영만 기록.",
+    "store": "save"
+  },
+  "monster_state": {
+    "name": "monster_state",
+    "fields": [
+      "dungeon_id TEXT NOT NULL",
+      "template_id TEXT NOT NULL",
+      "level INTEGER NOT NULL",
+      "grade TEXT NOT NULL",
+      "room_id TEXT",
+      "group_id TEXT",
+      "state_payload BLOB NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "dungeon_id,room_id",
+      "group_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "patrol_state": {
+    "name": "patrol_state",
+    "fields": [
+      "dungeon_id TEXT NOT NULL",
+      "group_id TEXT NOT NULL",
+      "current_room_id TEXT NOT NULL",
+      "next_due_minute INTEGER",
+      "route_json TEXT NOT NULL",
+      "blackboard_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "dungeon_id,group_id"
+    ],
+    "indexes": [
+      "next_due_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "boss_state": {
+    "name": "boss_state",
+    "fields": [
+      "dungeon_id TEXT NOT NULL",
+      "monster_id TEXT NOT NULL",
+      "phase_key TEXT NOT NULL",
+      "phase_sequence INTEGER NOT NULL",
+      "break_gauge INTEGER NOT NULL",
+      "flags_json TEXT NOT NULL",
+      "reward_claimed INTEGER NOT NULL CHECK(reward_claimed IN(0,1))"
+    ],
+    "unique": [
+      "monster_id"
+    ],
+    "indexes": [
+      "dungeon_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dungeon_instance": {
+    "name": "dungeon_instance",
+    "fields": [
+      "seed_hex TEXT NOT NULL",
+      "generator_version TEXT NOT NULL",
+      "grade TEXT NOT NULL",
+      "size_key TEXT NOT NULL",
+      "theme_id TEXT NOT NULL",
+      "lifecycle_status TEXT NOT NULL",
+      "spawn_minute INTEGER NOT NULL",
+      "deadline_minute INTEGER",
+      "conquest_status TEXT NOT NULL",
+      "graph_hash TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "lifecycle_status,deadline_minute",
+      "grade,spawn_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dungeon_room": {
+    "name": "dungeon_room",
+    "fields": [
+      "dungeon_id TEXT NOT NULL REFERENCES dungeon_instance(id) ON DELETE RESTRICT",
+      "zone_key TEXT NOT NULL",
+      "room_type TEXT NOT NULL",
+      "terrain_json TEXT NOT NULL",
+      "weight INTEGER NOT NULL",
+      "hidden INTEGER NOT NULL CHECK(hidden IN(0,1))",
+      "room_payload_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "dungeon_id,zone_key"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dungeon_connection": {
+    "name": "dungeon_connection",
+    "fields": [
+      "dungeon_id TEXT NOT NULL REFERENCES dungeon_instance(id) ON DELETE RESTRICT",
+      "from_room_id TEXT NOT NULL REFERENCES dungeon_room(id) ON DELETE RESTRICT",
+      "to_room_id TEXT NOT NULL REFERENCES dungeon_room(id) ON DELETE RESTRICT",
+      "travel_minutes INTEGER NOT NULL CHECK(travel_minutes>=0)",
+      "requirement_ast_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "dungeon_id,from_room_id,to_room_id"
+    ],
+    "indexes": [
+      "from_room_id",
+      "to_room_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dungeon_population": {
+    "name": "dungeon_population",
+    "fields": [
+      "dungeon_id TEXT NOT NULL REFERENCES dungeon_instance(id) ON DELETE RESTRICT",
+      "group_key TEXT NOT NULL",
+      "template_id TEXT NOT NULL",
+      "initial_count INTEGER NOT NULL",
+      "remaining_count INTEGER NOT NULL CHECK(remaining_count>=0)",
+      "reserved_budget INTEGER NOT NULL"
+    ],
+    "unique": [
+      "dungeon_id,group_key,template_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "dungeon_treasure": {
+    "name": "dungeon_treasure",
+    "fields": [
+      "dungeon_id TEXT NOT NULL REFERENCES dungeon_instance(id) ON DELETE RESTRICT",
+      "room_id TEXT NOT NULL REFERENCES dungeon_room(id) ON DELETE RESTRICT",
+      "loot_profile_id TEXT NOT NULL",
+      "lock_difficulty INTEGER NOT NULL",
+      "mimic_flag INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "claim_event_id TEXT"
+    ],
+    "unique": [
+      "claim_event_id"
+    ],
+    "indexes": [
+      "room_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dungeon_trap": {
+    "name": "dungeon_trap",
+    "fields": [
+      "room_id TEXT NOT NULL REFERENCES dungeon_room(id) ON DELETE RESTRICT",
+      "definition_id TEXT NOT NULL",
+      "hidden INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "trigger_event_id TEXT"
+    ],
+    "unique": [
+      "trigger_event_id"
+    ],
+    "indexes": [
+      "room_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "run_state": {
+    "name": "run_state",
+    "fields": [
+      "dungeon_id TEXT NOT NULL REFERENCES dungeon_instance(id) ON DELETE RESTRICT",
+      "party_id TEXT",
+      "current_room_id TEXT",
+      "started_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "supply_payload_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "dungeon_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "exploration_state": {
+    "name": "exploration_state",
+    "fields": [
+      "run_id TEXT NOT NULL REFERENCES run_state(id) ON DELETE RESTRICT",
+      "room_id TEXT NOT NULL REFERENCES dungeon_room(id) ON DELETE RESTRICT",
+      "discovery_state TEXT NOT NULL",
+      "progress_bp INTEGER NOT NULL CHECK(progress_bp BETWEEN 0 AND 10000)",
+      "info_bp INTEGER NOT NULL CHECK(info_bp BETWEEN 0 AND 10000)"
+    ],
+    "unique": [
+      "run_id,room_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "knowledge_fact": {
+    "name": "knowledge_fact",
+    "fields": [
+      "subject_kind TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "predicate TEXT NOT NULL",
+      "value_json TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "valid_until INTEGER"
+    ],
+    "unique": [
+      "subject_kind,subject_id,predicate"
+    ],
+    "indexes": [
+      "source_event_id"
+    ],
+    "note": "권위 사실. observer query DTO에 직접 사용 금지.",
+    "store": "save"
+  },
+  "map_annotation": {
+    "name": "map_annotation",
+    "fields": [
+      "dungeon_id TEXT NOT NULL",
+      "room_id TEXT",
+      "observer_id TEXT NOT NULL",
+      "annotation_kind TEXT NOT NULL",
+      "text TEXT NOT NULL",
+      "created_minute INTEGER NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "dungeon_id,observer_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "camp_state": {
+    "name": "camp_state",
+    "fields": [
+      "run_id TEXT NOT NULL REFERENCES run_state(id) ON DELETE RESTRICT",
+      "scheduled_action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT",
+      "guards_json TEXT NOT NULL",
+      "recovery_profile TEXT NOT NULL",
+      "elapsed_minutes INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "scheduled_action_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "recovery_receipt": {
+    "name": "recovery_receipt",
+    "fields": [
+      "defeat_id TEXT NOT NULL",
+      "destination_id TEXT NOT NULL",
+      "gold_lost INTEGER NOT NULL",
+      "elapsed_minutes INTEGER NOT NULL",
+      "durability_delta_json TEXT NOT NULL",
+      "injury_result_json TEXT NOT NULL",
+      "recovery_kind TEXT NOT NULL"
+    ],
+    "unique": [
+      "defeat_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "city_state": {
+    "name": "city_state",
+    "fields": [
+      "template_id TEXT NOT NULL",
+      "safety_index INTEGER NOT NULL",
+      "market_profile_id TEXT NOT NULL",
+      "flags_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "template_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "facility_state": {
+    "name": "facility_state",
+    "fields": [
+      "city_id TEXT NOT NULL REFERENCES city_state(id) ON DELETE RESTRICT",
+      "template_id TEXT NOT NULL",
+      "open_schedule_json TEXT NOT NULL",
+      "capacity INTEGER NOT NULL CHECK(capacity>=0)",
+      "service_level INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "city_id,template_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "injury": {
+    "name": "injury",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "definition_id TEXT NOT NULL",
+      "body_part TEXT NOT NULL",
+      "severity TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "state TEXT NOT NULL",
+      "treatment_due_minute INTEGER"
+    ],
+    "unique": [
+      "mercenary_id,source_event_id,body_part"
+    ],
+    "indexes": [
+      "mercenary_id,state"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "disease": {
+    "name": "disease",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "definition_id TEXT NOT NULL",
+      "exposure_event_id TEXT NOT NULL",
+      "onset_minute INTEGER",
+      "stage TEXT NOT NULL",
+      "severity INTEGER NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id,exposure_event_id,definition_id"
+    ],
+    "indexes": [
+      "onset_minute,stage"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "treatment_order": {
+    "name": "treatment_order",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "facility_id TEXT NOT NULL REFERENCES facility_state(id) ON DELETE RESTRICT",
+      "action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT",
+      "treatment_json TEXT NOT NULL",
+      "cost INTEGER NOT NULL",
+      "refund_policy TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "action_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "residence": {
+    "name": "residence",
+    "fields": [
+      "facility_id TEXT",
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "tenure TEXT NOT NULL",
+      "occupants_json TEXT NOT NULL",
+      "monthly_cost INTEGER NOT NULL",
+      "last_billing_month INTEGER",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "owner_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "maintenance_order": {
+    "name": "maintenance_order",
+    "fields": [
+      "batch_id TEXT NOT NULL",
+      "ordinal INTEGER NOT NULL",
+      "command_id TEXT NOT NULL",
+      "budget_limit INTEGER NOT NULL",
+      "actual_cost INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "batch_id,ordinal",
+      "command_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "contract": {
+    "name": "contract",
+    "fields": [
+      "template_id TEXT NOT NULL",
+      "issuer_id TEXT NOT NULL",
+      "assignee_id TEXT",
+      "deadline_minute INTEGER NOT NULL",
+      "accepted_minute INTEGER",
+      "status TEXT NOT NULL",
+      "reward_json TEXT NOT NULL",
+      "conditions_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "assignee_id,status",
+      "status,deadline_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "contract_objective": {
+    "name": "contract_objective",
+    "fields": [
+      "contract_id TEXT NOT NULL REFERENCES contract(id) ON DELETE RESTRICT",
+      "objective_key TEXT NOT NULL",
+      "target INTEGER NOT NULL",
+      "progress INTEGER NOT NULL CHECK(progress>=0)",
+      "matched_event_ids_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "contract_id,objective_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "contract_receipt": {
+    "name": "contract_receipt",
+    "fields": [
+      "contract_id TEXT NOT NULL REFERENCES contract(id) ON DELETE RESTRICT",
+      "settlement_no INTEGER NOT NULL",
+      "reward_json TEXT NOT NULL",
+      "game_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "contract_id,settlement_no"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "recruitment_post": {
+    "name": "recruitment_post",
+    "fields": [
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "criteria_public_json TEXT NOT NULL",
+      "conditions_json TEXT NOT NULL",
+      "deadline_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "status,deadline_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "employment_contract": {
+    "name": "employment_contract",
+    "fields": [
+      "employer_id TEXT NOT NULL",
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "terms_version INTEGER NOT NULL",
+      "terms_json TEXT NOT NULL",
+      "start_minute INTEGER NOT NULL",
+      "end_minute INTEGER",
+      "status TEXT NOT NULL",
+      "outstanding_wages INTEGER NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "mercenary_id,status",
+      "end_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dialogue_session": {
+    "name": "dialogue_session",
+    "fields": [
+      "speaker_id TEXT NOT NULL",
+      "topic_key TEXT NOT NULL",
+      "node_key TEXT NOT NULL",
+      "context_version INTEGER NOT NULL",
+      "last_choice_receipt_id TEXT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "speaker_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dialogue_memory": {
+    "name": "dialogue_memory",
+    "fields": [
+      "speaker_id TEXT NOT NULL",
+      "target_id TEXT NOT NULL",
+      "topic_key TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "last_game_minute INTEGER NOT NULL",
+      "repeat_count INTEGER NOT NULL",
+      "importance INTEGER NOT NULL"
+    ],
+    "unique": [
+      "speaker_id,target_id,source_event_id"
+    ],
+    "indexes": [
+      "speaker_id,target_id,topic_key"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "dialogue_template_binding": {
+    "name": "dialogue_template_binding",
+    "fields": [
+      "topic_key TEXT NOT NULL",
+      "voice_profile TEXT NOT NULL",
+      "template_id TEXT NOT NULL",
+      "content_version TEXT NOT NULL"
+    ],
+    "unique": [
+      "topic_key,voice_profile,template_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "enhancement_state": {
+    "name": "enhancement_state",
+    "fields": [
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "level INTEGER NOT NULL CHECK(level BETWEEN 0 AND 20)",
+      "attempt_count INTEGER NOT NULL CHECK(attempt_count>=0)",
+      "target_fail_stacks_json TEXT NOT NULL",
+      "stability_bp INTEGER NOT NULL CHECK(stability_bp BETWEEN 0 AND 500)",
+      "highest_level INTEGER NOT NULL CHECK(highest_level BETWEEN 0 AND 20)"
+    ],
+    "unique": [
+      "item_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "enhancement_attempt": {
+    "name": "enhancement_attempt",
+    "fields": [
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "attempt_no INTEGER NOT NULL",
+      "from_level INTEGER NOT NULL",
+      "target_level INTEGER NOT NULL",
+      "final_probability_ppm INTEGER NOT NULL CHECK(final_probability_ppm BETWEEN 0 AND 1000000)",
+      "result_json TEXT NOT NULL",
+      "cost_json TEXT NOT NULL",
+      "seed_hex TEXT NOT NULL",
+      "source_command_id TEXT NOT NULL"
+    ],
+    "unique": [
+      "item_id,attempt_no",
+      "source_command_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "enhancement_growth": {
+    "name": "enhancement_growth",
+    "fields": [
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "reached_level INTEGER NOT NULL",
+      "base_growth_bp INTEGER NOT NULL",
+      "random_growth_json TEXT NOT NULL",
+      "great_success INTEGER NOT NULL",
+      "active INTEGER NOT NULL"
+    ],
+    "unique": [
+      "item_id,reached_level"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "item_inscription": {
+    "name": "item_inscription",
+    "fields": [
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "ordinal INTEGER NOT NULL",
+      "skill_template_id TEXT NOT NULL",
+      "grade TEXT NOT NULL",
+      "value_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "item_id,ordinal"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "craft_order": {
+    "name": "craft_order",
+    "fields": [
+      "recipe_id TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "facility_id TEXT",
+      "action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT",
+      "recipe_version TEXT NOT NULL",
+      "quality_seed TEXT NOT NULL",
+      "result_json TEXT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "action_id"
+    ],
+    "indexes": [
+      "owner_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "craft_material_reservation": {
+    "name": "craft_material_reservation",
+    "fields": [
+      "order_id TEXT NOT NULL REFERENCES craft_order(id) ON DELETE RESTRICT",
+      "reservation_id TEXT NOT NULL REFERENCES resource_reservation(id) ON DELETE RESTRICT",
+      "template_id TEXT NOT NULL",
+      "quantity INTEGER NOT NULL CHECK(quantity>0)"
+    ],
+    "unique": [
+      "order_id,reservation_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "party": {
+    "name": "party",
+    "fields": [
+      "name TEXT NOT NULL",
+      "leader_id TEXT",
+      "charter_version INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "cohesion INTEGER NOT NULL",
+      "morale INTEGER NOT NULL",
+      "tactical_trust INTEGER NOT NULL",
+      "founded_minute INTEGER NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "party_member": {
+    "name": "party_member",
+    "fields": [
+      "party_id TEXT NOT NULL REFERENCES party(id) ON DELETE RESTRICT",
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "member_type TEXT NOT NULL",
+      "status TEXT NOT NULL",
+      "joined_minute INTEGER NOT NULL",
+      "satisfaction INTEGER NOT NULL",
+      "deployed_minutes INTEGER NOT NULL"
+    ],
+    "unique": [
+      "party_id,mercenary_id"
+    ],
+    "indexes": [
+      "mercenary_id,status"
+    ],
+    "note": "현역 멤버의 여러 고정파티 동시소속은 서비스/partial index 정책으로 차단.",
+    "store": "save"
+  },
+  "deployment": {
+    "name": "deployment",
+    "fields": [
+      "party_id TEXT NOT NULL REFERENCES party(id) ON DELETE RESTRICT",
+      "run_id TEXT NOT NULL",
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "formation_slot INTEGER NOT NULL CHECK(formation_slot BETWEEN 0 AND 5)",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "run_id,mercenary_id",
+      "run_id,party_id,formation_slot"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "party_charter": {
+    "name": "party_charter",
+    "fields": [
+      "party_id TEXT NOT NULL REFERENCES party(id) ON DELETE RESTRICT",
+      "charter_version INTEGER NOT NULL",
+      "rules_json TEXT NOT NULL",
+      "effective_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "party_id,charter_version"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "party_proposal": {
+    "name": "party_proposal",
+    "fields": [
+      "party_id TEXT NOT NULL REFERENCES party(id) ON DELETE RESTRICT",
+      "proposal_type TEXT NOT NULL",
+      "electorate_json TEXT NOT NULL",
+      "closes_minute INTEGER NOT NULL",
+      "policy_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "party_id,status,closes_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "party_vote": {
+    "name": "party_vote",
+    "fields": [
+      "proposal_id TEXT NOT NULL REFERENCES party_proposal(id) ON DELETE RESTRICT",
+      "voter_id TEXT NOT NULL",
+      "vote TEXT NOT NULL",
+      "voted_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "proposal_id,voter_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "party_distribution": {
+    "name": "party_distribution",
+    "fields": [
+      "party_id TEXT NOT NULL REFERENCES party(id) ON DELETE RESTRICT",
+      "source_event_id TEXT NOT NULL",
+      "charter_version INTEGER NOT NULL",
+      "shares_json TEXT NOT NULL",
+      "remainder_account_id TEXT",
+      "total_value INTEGER NOT NULL"
+    ],
+    "unique": [
+      "party_id,source_event_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "party_history": {
+    "name": "party_history",
+    "fields": [
+      "party_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "predecessor_party_ids_json TEXT NOT NULL",
+      "history_type TEXT NOT NULL",
+      "data_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "party_id,source_event_id"
+    ],
+    "indexes": [
+      "party_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "ranking_snapshot": {
+    "name": "ranking_snapshot",
+    "fields": [
+      "ranking_type TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "game_day INTEGER NOT NULL",
+      "total_score INTEGER NOT NULL CHECK(total_score BETWEEN 0 AND 10000)",
+      "rank_no INTEGER NOT NULL",
+      "formula_version TEXT NOT NULL",
+      "source_generation TEXT NOT NULL"
+    ],
+    "unique": [
+      "ranking_type,subject_id,game_day"
+    ],
+    "indexes": [
+      "ranking_type,game_day,rank_no"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "ranking_streak": {
+    "name": "ranking_streak",
+    "fields": [
+      "ranking_type TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "last_closed_day INTEGER NOT NULL",
+      "consecutive_days INTEGER NOT NULL CHECK(consecutive_days>=0)",
+      "contribution_eligible INTEGER NOT NULL"
+    ],
+    "unique": [
+      "ranking_type,subject_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "ranking_component": {
+    "name": "ranking_component",
+    "fields": [
+      "snapshot_id TEXT NOT NULL REFERENCES ranking_snapshot(id) ON DELETE RESTRICT",
+      "component_key TEXT NOT NULL",
+      "raw_score INTEGER NOT NULL",
+      "capped_score INTEGER NOT NULL",
+      "cap INTEGER NOT NULL",
+      "evidence_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "snapshot_id,component_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "market_index": {
+    "name": "market_index",
+    "fields": [
+      "city_id TEXT NOT NULL",
+      "category_key TEXT NOT NULL",
+      "demand_index INTEGER NOT NULL",
+      "supply_index INTEGER NOT NULL",
+      "price_index INTEGER NOT NULL",
+      "last_closed_day INTEGER NOT NULL"
+    ],
+    "unique": [
+      "city_id,category_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "market_stock": {
+    "name": "market_stock",
+    "fields": [
+      "city_id TEXT NOT NULL",
+      "vendor_id TEXT NOT NULL",
+      "template_id TEXT NOT NULL",
+      "quantity INTEGER NOT NULL CHECK(quantity>=0)",
+      "buy_price INTEGER NOT NULL CHECK(buy_price>=0)",
+      "sell_price INTEGER NOT NULL CHECK(sell_price>=0)",
+      "quoted_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "vendor_id,template_id"
+    ],
+    "indexes": [
+      "city_id,template_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "economic_ledger": {
+    "name": "economic_ledger",
+    "fields": [
+      "source_command_id TEXT NOT NULL",
+      "leg_no INTEGER NOT NULL",
+      "account_id TEXT NOT NULL REFERENCES money_account(id) ON DELETE RESTRICT",
+      "delta INTEGER NOT NULL",
+      "transfer_group TEXT NOT NULL",
+      "reason TEXT NOT NULL"
+    ],
+    "unique": [
+      "source_command_id,leg_no"
+    ],
+    "indexes": [
+      "account_id",
+      "transfer_group"
+    ],
+    "note": "이체는 debit+credit=0. 던전 생성금/생활비 소각은 SOURCE/SINK 별도 기록하며 세계 총통화량 자체가 항상 일정하다고 가정하지 않는다.",
+    "store": "save"
+  },
+  "trade_receipt": {
+    "name": "trade_receipt",
+    "fields": [
+      "source_command_id TEXT NOT NULL",
+      "quote_version INTEGER NOT NULL",
+      "buyer_id TEXT NOT NULL",
+      "seller_id TEXT NOT NULL",
+      "items_json TEXT NOT NULL",
+      "paid INTEGER NOT NULL",
+      "fee INTEGER NOT NULL"
+    ],
+    "unique": [
+      "source_command_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "auction": {
+    "name": "auction",
+    "fields": [
+      "seller_id TEXT NOT NULL",
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "opens_minute INTEGER NOT NULL",
+      "closes_minute INTEGER NOT NULL",
+      "minimum_bid INTEGER NOT NULL",
+      "winner_id TEXT",
+      "settled_event_id TEXT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "settled_event_id"
+    ],
+    "indexes": [
+      "status,closes_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "auction_bid": {
+    "name": "auction_bid",
+    "fields": [
+      "auction_id TEXT NOT NULL REFERENCES auction(id) ON DELETE RESTRICT",
+      "bidder_id TEXT NOT NULL",
+      "bid_sequence INTEGER NOT NULL",
+      "amount INTEGER NOT NULL CHECK(amount>0)",
+      "reservation_account_id TEXT NOT NULL REFERENCES money_account(id) ON DELETE RESTRICT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "auction_id,bid_sequence"
+    ],
+    "indexes": [
+      "auction_id,amount,bid_sequence"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "loan_contract": {
+    "name": "loan_contract",
+    "fields": [
+      "item_id TEXT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "owner_id TEXT NOT NULL",
+      "borrower_id TEXT NOT NULL",
+      "terms_json TEXT NOT NULL",
+      "deadline_minute INTEGER",
+      "deposit INTEGER NOT NULL CHECK(deposit>=0)",
+      "status TEXT NOT NULL",
+      "return_event_id TEXT"
+    ],
+    "unique": [
+      "return_event_id"
+    ],
+    "indexes": [
+      "item_id,status",
+      "borrower_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "shipment": {
+    "name": "shipment",
+    "fields": [
+      "sender_id TEXT NOT NULL",
+      "source_storage_id TEXT NOT NULL REFERENCES storage_location(id) ON DELETE RESTRICT",
+      "destination_storage_id TEXT NOT NULL REFERENCES storage_location(id) ON DELETE RESTRICT",
+      "transit_storage_id TEXT NOT NULL REFERENCES storage_location(id) ON DELETE RESTRICT",
+      "due_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "delivery_event_id TEXT"
+    ],
+    "unique": [
+      "delivery_event_id"
+    ],
+    "indexes": [
+      "status,due_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "shipment_item": {
+    "name": "shipment_item",
+    "fields": [
+      "shipment_id TEXT NOT NULL REFERENCES shipment(id) ON DELETE RESTRICT",
+      "item_id TEXT REFERENCES item_instance(id) ON DELETE RESTRICT",
+      "template_id TEXT",
+      "quantity INTEGER NOT NULL CHECK(quantity>0)",
+      "CHECK((item_id IS NOT NULL) != (template_id IS NOT NULL))"
+    ],
+    "unique": [],
+    "indexes": [
+      "shipment_id",
+      "item_id"
+    ],
+    "note": "스택 운송은 template+quantity, 장비는 item_id+quantity1. 둘 다 채우기 금지.",
+    "store": "save"
+  },
+  "observation": {
+    "name": "observation",
+    "fields": [
+      "observer_id TEXT NOT NULL",
+      "fact_id TEXT NOT NULL REFERENCES knowledge_fact(id) ON DELETE RESTRICT",
+      "source_event_id TEXT NOT NULL",
+      "confidence_bp INTEGER NOT NULL CHECK(confidence_bp BETWEEN 0 AND 10000)",
+      "observed_minute INTEGER NOT NULL",
+      "disclosed_value_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "observer_id,fact_id,source_event_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "rumor": {
+    "name": "rumor",
+    "fields": [
+      "subject_id TEXT NOT NULL",
+      "claim_json TEXT NOT NULL",
+      "source_npc_id TEXT",
+      "spread_region_id TEXT NOT NULL",
+      "created_minute INTEGER NOT NULL",
+      "credibility_bp INTEGER NOT NULL",
+      "expires_minute INTEGER"
+    ],
+    "unique": [],
+    "indexes": [
+      "subject_id",
+      "spread_region_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "knowledge_projection": {
+    "name": "knowledge_projection",
+    "fields": [
+      "observer_id TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "projection_version INTEGER NOT NULL",
+      "public_json TEXT NOT NULL",
+      "source_generation TEXT NOT NULL"
+    ],
+    "unique": [
+      "observer_id,subject_id"
+    ],
+    "indexes": [
+      "observer_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "reputation_score": {
+    "name": "reputation_score",
+    "fields": [
+      "subject_id TEXT NOT NULL",
+      "scope_kind TEXT NOT NULL",
+      "scope_id TEXT NOT NULL",
+      "dimension TEXT NOT NULL",
+      "score INTEGER NOT NULL"
+    ],
+    "unique": [
+      "subject_id,scope_kind,scope_id,dimension"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "reputation_event": {
+    "name": "reputation_event",
+    "fields": [
+      "subject_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "dimension TEXT NOT NULL",
+      "delta INTEGER NOT NULL",
+      "evidence_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "subject_id,source_event_id,dimension"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "legal_case": {
+    "name": "legal_case",
+    "fields": [
+      "jurisdiction_id TEXT NOT NULL",
+      "accused_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "evidence_json TEXT NOT NULL",
+      "judgment_json TEXT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "jurisdiction_id,accused_id,source_event_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "relationship": {
+    "name": "relationship",
+    "fields": [
+      "from_npc_id TEXT NOT NULL",
+      "to_npc_id TEXT NOT NULL",
+      "affection INTEGER NOT NULL",
+      "trust INTEGER NOT NULL",
+      "respect INTEGER NOT NULL",
+      "intimacy INTEGER NOT NULL",
+      "conflict INTEGER NOT NULL"
+    ],
+    "unique": [
+      "from_npc_id,to_npc_id"
+    ],
+    "indexes": [
+      "to_npc_id"
+    ],
+    "note": "방향성 관계는 양측 값이 다를 수 있다. 공통 사건은 양측 delta를 원자적으로 적용한다.",
+    "store": "save"
+  },
+  "relationship_memory": {
+    "name": "relationship_memory",
+    "fields": [
+      "from_npc_id TEXT NOT NULL",
+      "to_npc_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "effect_json TEXT NOT NULL",
+      "importance INTEGER NOT NULL",
+      "occurred_minute INTEGER NOT NULL",
+      "decay_profile TEXT NOT NULL"
+    ],
+    "unique": [
+      "from_npc_id,to_npc_id,source_event_id"
+    ],
+    "indexes": [
+      "from_npc_id,to_npc_id,occurred_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "relationship_stage": {
+    "name": "relationship_stage",
+    "fields": [
+      "relationship_id TEXT NOT NULL REFERENCES relationship(id) ON DELETE RESTRICT",
+      "stage_tag TEXT NOT NULL",
+      "established_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "relationship_id,stage_tag"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "personality_state": {
+    "name": "personality_state",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "axes_json TEXT NOT NULL",
+      "charisma INTEGER NOT NULL",
+      "voice_profile TEXT NOT NULL",
+      "source_version TEXT NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "trait_binding": {
+    "name": "trait_binding",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "trait_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "active INTEGER NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id,trait_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "personal_goal": {
+    "name": "personal_goal",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "goal_type TEXT NOT NULL",
+      "target_id TEXT",
+      "priority INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "progress_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "mercenary_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "guild": {
+    "name": "guild",
+    "fields": [
+      "name TEXT NOT NULL",
+      "leader_id TEXT",
+      "charter_json TEXT NOT NULL",
+      "founding_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "legitimacy INTEGER NOT NULL",
+      "profile_id TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "guild_member": {
+    "name": "guild_member",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "joined_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "loyalty INTEGER NOT NULL",
+      "contribution INTEGER NOT NULL"
+    ],
+    "unique": [
+      "guild_id,mercenary_id"
+    ],
+    "indexes": [
+      "mercenary_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "guild_office": {
+    "name": "guild_office",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "office_key TEXT NOT NULL",
+      "holder_id TEXT",
+      "term_end_minute INTEGER",
+      "authority_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "guild_id,office_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "guild_history": {
+    "name": "guild_history",
+    "fields": [
+      "guild_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "history_type TEXT NOT NULL",
+      "predecessor_ids_json TEXT NOT NULL",
+      "data_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "guild_id,source_event_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "guild_budget": {
+    "name": "guild_budget",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "fiscal_month INTEGER NOT NULL",
+      "purpose TEXT NOT NULL",
+      "limit_amount INTEGER NOT NULL",
+      "used_amount INTEGER NOT NULL",
+      "reserved_amount INTEGER NOT NULL"
+    ],
+    "unique": [
+      "guild_id,fiscal_month,purpose"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "guild_facility": {
+    "name": "guild_facility",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "facility_template_id TEXT NOT NULL",
+      "level INTEGER NOT NULL",
+      "status TEXT NOT NULL",
+      "completion_action_id TEXT"
+    ],
+    "unique": [
+      "guild_id,facility_template_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "guild_assignment": {
+    "name": "guild_assignment",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "officer_id TEXT",
+      "assignment_kind TEXT NOT NULL",
+      "budget_id TEXT REFERENCES guild_budget(id) ON DELETE RESTRICT",
+      "params_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "guild_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "guild_faction": {
+    "name": "guild_faction",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "name TEXT NOT NULL",
+      "preference_json TEXT NOT NULL",
+      "members_json TEXT NOT NULL",
+      "influence INTEGER NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "guild_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "guild_proposal": {
+    "name": "guild_proposal",
+    "fields": [
+      "guild_id TEXT NOT NULL REFERENCES guild(id) ON DELETE RESTRICT",
+      "proposal_type TEXT NOT NULL",
+      "electorate_json TEXT NOT NULL",
+      "closes_minute INTEGER NOT NULL",
+      "policy_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "guild_id,status,closes_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "guild_vote": {
+    "name": "guild_vote",
+    "fields": [
+      "proposal_id TEXT NOT NULL REFERENCES guild_proposal(id) ON DELETE RESTRICT",
+      "voter_id TEXT NOT NULL",
+      "vote TEXT NOT NULL",
+      "vote_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "proposal_id,voter_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "raid_assignment": {
+    "name": "raid_assignment",
+    "fields": [
+      "guild_id TEXT NOT NULL",
+      "run_id TEXT NOT NULL",
+      "party_id TEXT NOT NULL",
+      "assigned_members_json TEXT NOT NULL",
+      "role_key TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "run_id,party_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "contribution_ledger": {
+    "name": "contribution_ledger",
+    "fields": [
+      "subject_id TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "scope_kind TEXT NOT NULL",
+      "scope_id TEXT NOT NULL",
+      "points INTEGER NOT NULL",
+      "evidence_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "subject_id,source_event_id,scope_kind,scope_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "return_proof": {
+    "name": "return_proof",
+    "fields": [
+      "lineage_id TEXT NOT NULL",
+      "proof_type TEXT NOT NULL",
+      "awarded_game_minute INTEGER NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "contributing_generations_json TEXT NOT NULL",
+      "evidence_hash TEXT NOT NULL"
+    ],
+    "unique": [
+      "lineage_id,proof_type"
+    ],
+    "indexes": [
+      "source_event_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "npc_activity": {
+    "name": "npc_activity",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "activity_type TEXT NOT NULL",
+      "due_minute INTEGER NOT NULL",
+      "command_id TEXT NOT NULL",
+      "detail_level TEXT NOT NULL",
+      "status TEXT NOT NULL",
+      "plan_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "command_id"
+    ],
+    "indexes": [
+      "mercenary_id,status",
+      "due_minute,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "npc_summary": {
+    "name": "npc_summary",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "detail_level TEXT NOT NULL",
+      "last_resolved_boundary TEXT NOT NULL",
+      "summary_json TEXT NOT NULL",
+      "protected_references_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "mercenary_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "simulation_cursor": {
+    "name": "simulation_cursor",
+    "fields": [
+      "subsystem TEXT NOT NULL",
+      "shard_key TEXT NOT NULL",
+      "last_boundary_key TEXT NOT NULL",
+      "game_minute INTEGER NOT NULL",
+      "scheduler_version TEXT NOT NULL"
+    ],
+    "unique": [
+      "subsystem,shard_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "population_cohort": {
+    "name": "population_cohort",
+    "fields": [
+      "region_id TEXT NOT NULL",
+      "birth_year INTEGER NOT NULL",
+      "sex_code TEXT NOT NULL",
+      "occupation TEXT NOT NULL",
+      "population_count INTEGER NOT NULL CHECK(population_count>=0)",
+      "last_closed_year INTEGER NOT NULL"
+    ],
+    "unique": [
+      "region_id,birth_year,sex_code,occupation"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "mercenary_registry": {
+    "name": "mercenary_registry",
+    "fields": [
+      "mercenary_id TEXT NOT NULL REFERENCES mercenary(id) ON DELETE RESTRICT",
+      "registration_minute INTEGER NOT NULL",
+      "current_status TEXT NOT NULL",
+      "last_status_event_id TEXT NOT NULL",
+      "exit_reason TEXT"
+    ],
+    "unique": [
+      "mercenary_id"
+    ],
+    "indexes": [
+      "current_status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "lineage": {
+    "name": "lineage",
+    "fields": [
+      "name TEXT NOT NULL",
+      "generation_no INTEGER NOT NULL CHECK(generation_no>=1)",
+      "current_player_id TEXT NOT NULL",
+      "predecessor_player_id TEXT",
+      "reputation INTEGER NOT NULL",
+      "state TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "family_member": {
+    "name": "family_member",
+    "fields": [
+      "lineage_id TEXT NOT NULL REFERENCES lineage(id) ON DELETE RESTRICT",
+      "mercenary_id TEXT",
+      "cohort_ref TEXT",
+      "relation_type TEXT NOT NULL",
+      "parent_ids_json TEXT NOT NULL",
+      "education_stage TEXT NOT NULL",
+      "profession TEXT",
+      "adult_consent INTEGER NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "lineage_id",
+      "mercenary_id"
+    ],
+    "note": "중요 자녀는 출생부터 개체화할 수 있다. 미성년 전투출전/승계 적격성은 명령 guard로 차단한다.",
+    "store": "save"
+  },
+  "education_plan": {
+    "name": "education_plan",
+    "fields": [
+      "family_member_id TEXT NOT NULL REFERENCES family_member(id) ON DELETE RESTRICT",
+      "plan_type TEXT NOT NULL",
+      "start_year INTEGER NOT NULL",
+      "end_year INTEGER NOT NULL",
+      "paid_cost INTEGER NOT NULL",
+      "result_json TEXT",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "family_member_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "succession_plan": {
+    "name": "succession_plan",
+    "fields": [
+      "lineage_id TEXT NOT NULL REFERENCES lineage(id) ON DELETE RESTRICT",
+      "successor_id TEXT NOT NULL",
+      "eligibility_json TEXT NOT NULL",
+      "consent_minute INTEGER",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "lineage_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "succession_receipt": {
+    "name": "succession_receipt",
+    "fields": [
+      "lineage_id TEXT NOT NULL REFERENCES lineage(id) ON DELETE RESTRICT",
+      "source_command_id TEXT NOT NULL",
+      "old_player_id TEXT NOT NULL",
+      "new_player_id TEXT NOT NULL",
+      "old_generation INTEGER NOT NULL",
+      "new_generation INTEGER NOT NULL",
+      "transferred_assets_hash TEXT NOT NULL"
+    ],
+    "unique": [
+      "source_command_id",
+      "lineage_id,new_generation"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "lineage_contribution": {
+    "name": "lineage_contribution",
+    "fields": [
+      "lineage_id TEXT NOT NULL REFERENCES lineage(id) ON DELETE RESTRICT",
+      "generation_no INTEGER NOT NULL",
+      "source_event_id TEXT NOT NULL",
+      "contribution_type TEXT NOT NULL",
+      "amount INTEGER NOT NULL"
+    ],
+    "unique": [
+      "lineage_id,generation_no,source_event_id,contribution_type"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "event_instance": {
+    "name": "event_instance",
+    "fields": [
+      "template_id TEXT NOT NULL",
+      "template_version TEXT NOT NULL",
+      "occurred_minute INTEGER NOT NULL",
+      "observed_minute INTEGER",
+      "choice_state TEXT NOT NULL",
+      "payload_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "status,occurred_minute"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "event_participant": {
+    "name": "event_participant",
+    "fields": [
+      "event_id TEXT NOT NULL REFERENCES event_instance(id) ON DELETE RESTRICT",
+      "role_key TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "perception_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "event_id,role_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "event_receipt": {
+    "name": "event_receipt",
+    "fields": [
+      "event_id TEXT NOT NULL REFERENCES event_instance(id) ON DELETE RESTRICT",
+      "choice_key TEXT NOT NULL",
+      "source_command_id TEXT NOT NULL",
+      "effect_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "event_id",
+      "source_command_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "event_chain": {
+    "name": "event_chain",
+    "fields": [
+      "template_id TEXT NOT NULL",
+      "current_step TEXT NOT NULL",
+      "status TEXT NOT NULL",
+      "cooldown_until INTEGER",
+      "variables_json TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "template_id,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "event_chain_step": {
+    "name": "event_chain_step",
+    "fields": [
+      "chain_id TEXT NOT NULL REFERENCES event_chain(id) ON DELETE RESTRICT",
+      "step_key TEXT NOT NULL",
+      "event_id TEXT",
+      "result_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "chain_id,step_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "director_state": {
+    "name": "director_state",
+    "fields": [
+      "director_version TEXT NOT NULL",
+      "last_checked_minute INTEGER NOT NULL",
+      "pacing_json TEXT NOT NULL",
+      "cooldowns_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "director_budget": {
+    "name": "director_budget",
+    "fields": [
+      "budget_type TEXT NOT NULL",
+      "period_key TEXT NOT NULL",
+      "allowed_amount INTEGER NOT NULL",
+      "consumed_amount INTEGER NOT NULL",
+      "CHECK(consumed_amount<=allowed_amount)"
+    ],
+    "unique": [
+      "budget_type,period_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "legendary_record": {
+    "name": "legendary_record",
+    "fields": [
+      "entity_kind TEXT NOT NULL",
+      "entity_id TEXT NOT NULL",
+      "title TEXT NOT NULL",
+      "source_event_ids_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "entity_kind,entity_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "strategy_plan": {
+    "name": "strategy_plan",
+    "fields": [
+      "owner_id TEXT NOT NULL",
+      "input_generation TEXT NOT NULL",
+      "plan_json TEXT NOT NULL",
+      "evidence_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "owner_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "automation_rule": {
+    "name": "automation_rule",
+    "fields": [
+      "owner_id TEXT NOT NULL",
+      "condition_ast_json TEXT NOT NULL",
+      "action_json TEXT NOT NULL",
+      "budget_limit INTEGER NOT NULL",
+      "stop_policy_json TEXT NOT NULL",
+      "enabled INTEGER NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "owner_id,enabled"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "return_campaign": {
+    "name": "return_campaign",
+    "fields": [
+      "lineage_id TEXT NOT NULL",
+      "stage TEXT NOT NULL",
+      "natural_spawn_enabled INTEGER NOT NULL",
+      "sealing_quiet_days INTEGER NOT NULL",
+      "war_quiet_days INTEGER NOT NULL",
+      "last_closed_day INTEGER NOT NULL",
+      "source_gate_status TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "lineage_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "rift_core": {
+    "name": "rift_core",
+    "fields": [
+      "campaign_id TEXT NOT NULL REFERENCES return_campaign(id) ON DELETE RESTRICT",
+      "core_type TEXT NOT NULL",
+      "dungeon_id TEXT",
+      "discovered_minute INTEGER",
+      "sealed_minute INTEGER",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "campaign_id,core_type"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "demon_faction": {
+    "name": "demon_faction",
+    "fields": [
+      "name TEXT NOT NULL",
+      "command_profile TEXT NOT NULL",
+      "strength INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "demon_base": {
+    "name": "demon_base",
+    "fields": [
+      "faction_id TEXT NOT NULL REFERENCES demon_faction(id) ON DELETE RESTRICT",
+      "region_id TEXT NOT NULL",
+      "created_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "demon_gate": {
+    "name": "demon_gate",
+    "fields": [
+      "faction_id TEXT NOT NULL REFERENCES demon_faction(id) ON DELETE RESTRICT",
+      "region_id TEXT NOT NULL",
+      "created_minute INTEGER NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "demon_presence": {
+    "name": "demon_presence",
+    "fields": [
+      "faction_id TEXT NOT NULL REFERENCES demon_faction(id) ON DELETE RESTRICT",
+      "presence_type TEXT NOT NULL",
+      "world_entity_id TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [
+      "world_entity_id"
+    ],
+    "indexes": [
+      "presence_type,status"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "ending_record": {
+    "name": "ending_record",
+    "fields": [
+      "campaign_id TEXT NOT NULL REFERENCES return_campaign(id) ON DELETE RESTRICT",
+      "choice TEXT NOT NULL",
+      "source_command_id TEXT NOT NULL",
+      "game_minute INTEGER NOT NULL",
+      "ending_snapshot_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "source_command_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "chronicle_event": {
+    "name": "chronicle_event",
+    "fields": [
+      "source_event_id TEXT NOT NULL",
+      "event_type TEXT NOT NULL",
+      "occurred_minute INTEGER NOT NULL",
+      "observed_minute INTEGER",
+      "importance INTEGER NOT NULL",
+      "visibility TEXT NOT NULL",
+      "text_template_id TEXT NOT NULL",
+      "args_json TEXT NOT NULL",
+      "preserve_forever INTEGER NOT NULL"
+    ],
+    "unique": [
+      "source_event_id"
+    ],
+    "indexes": [
+      "occurred_minute,id",
+      "importance"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "chronicle_link": {
+    "name": "chronicle_link",
+    "fields": [
+      "chronicle_event_id TEXT NOT NULL REFERENCES chronicle_event(id) ON DELETE RESTRICT",
+      "entity_kind TEXT NOT NULL",
+      "entity_id TEXT NOT NULL",
+      "link_role TEXT NOT NULL"
+    ],
+    "unique": [
+      "chronicle_event_id,entity_kind,entity_id,link_role"
+    ],
+    "indexes": [
+      "entity_kind,entity_id"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "chronicle_snapshot": {
+    "name": "chronicle_snapshot",
+    "fields": [
+      "entity_kind TEXT NOT NULL",
+      "entity_id TEXT NOT NULL",
+      "year_no INTEGER NOT NULL",
+      "summary_json TEXT NOT NULL",
+      "source_hash TEXT NOT NULL",
+      "summary_version TEXT NOT NULL"
+    ],
+    "unique": [
+      "entity_kind,entity_id,year_no"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "statistics_aggregate": {
+    "name": "statistics_aggregate",
+    "fields": [
+      "projection_version TEXT NOT NULL",
+      "subject_kind TEXT NOT NULL",
+      "subject_id TEXT NOT NULL",
+      "period_kind TEXT NOT NULL",
+      "period_key TEXT NOT NULL",
+      "metric_key TEXT NOT NULL",
+      "value INTEGER NOT NULL"
+    ],
+    "unique": [
+      "projection_version,subject_kind,subject_id,period_kind,period_key,metric_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "aggregate_receipt": {
+    "name": "aggregate_receipt",
+    "fields": [
+      "projector_key TEXT NOT NULL",
+      "projection_version TEXT NOT NULL",
+      "source_event_id TEXT NOT NULL"
+    ],
+    "unique": [
+      "projector_key,projection_version,source_event_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "search_document": {
+    "name": "search_document",
+    "fields": [
+      "observer_id TEXT NOT NULL",
+      "entity_kind TEXT NOT NULL",
+      "entity_id TEXT NOT NULL",
+      "title TEXT NOT NULL",
+      "public_text TEXT NOT NULL",
+      "sort_key TEXT NOT NULL",
+      "visibility_version INTEGER NOT NULL"
+    ],
+    "unique": [
+      "observer_id,entity_kind,entity_id"
+    ],
+    "indexes": [
+      "observer_id,sort_key,entity_id"
+    ],
+    "note": "재구축 가능한 공개정보 색인 원본. FTS5 가상테이블은 파생 인덱스로 별도 생성.",
+    "store": "save"
+  },
+  "bookmark": {
+    "name": "bookmark",
+    "fields": [
+      "observer_id TEXT NOT NULL",
+      "entity_kind TEXT NOT NULL",
+      "entity_id TEXT NOT NULL",
+      "created_minute INTEGER NOT NULL"
+    ],
+    "unique": [
+      "observer_id,entity_kind,entity_id"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "save"
+  },
+  "search_cursor": {
+    "name": "search_cursor",
+    "fields": [
+      "observer_id TEXT NOT NULL",
+      "query_hash TEXT NOT NULL",
+      "last_sort_key TEXT NOT NULL",
+      "last_entity_id TEXT NOT NULL",
+      "snapshot_version TEXT NOT NULL"
+    ],
+    "unique": [
+      "observer_id,query_hash"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "ephemeral"
+  },
+  "notification": {
+    "name": "notification",
+    "fields": [
+      "source_event_id TEXT NOT NULL",
+      "observer_id TEXT NOT NULL",
+      "priority TEXT NOT NULL",
+      "read INTEGER NOT NULL",
+      "batch_key TEXT",
+      "public_text TEXT NOT NULL"
+    ],
+    "unique": [
+      "observer_id,source_event_id"
+    ],
+    "indexes": [
+      "observer_id,read,priority"
+    ],
+    "note": "",
+    "store": "save"
+  },
+  "ui_preference": {
+    "name": "ui_preference",
+    "fields": [
+      "preference_key TEXT NOT NULL",
+      "value_json TEXT NOT NULL"
+    ],
+    "unique": [
+      "preference_key"
+    ],
+    "indexes": [],
+    "note": "",
+    "store": "datastore"
+  },
+  "validation_run": {
+    "name": "validation_run",
+    "fields": [
+      "run_id TEXT NOT NULL",
+      "version_bundle_json TEXT NOT NULL",
+      "fixture_hash TEXT NOT NULL",
+      "seed_set_json TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "validation_case_result": {
+    "name": "validation_case_result",
+    "fields": [
+      "run_id TEXT NOT NULL",
+      "test_id TEXT NOT NULL",
+      "expected_json TEXT NOT NULL",
+      "actual_json TEXT",
+      "status TEXT NOT NULL",
+      "evidence_path TEXT"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "validation_artifact": {
+    "name": "validation_artifact",
+    "fields": [
+      "run_id TEXT NOT NULL",
+      "artifact_kind TEXT NOT NULL",
+      "local_path TEXT NOT NULL",
+      "sha256 TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "balance_baseline": {
+    "name": "balance_baseline",
+    "fields": [
+      "baseline_version TEXT NOT NULL",
+      "metric_key TEXT NOT NULL",
+      "acceptance_json TEXT NOT NULL",
+      "approved_by TEXT",
+      "approved_at TEXT"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "review_decision": {
+    "name": "review_decision",
+    "fields": [
+      "subject_id TEXT NOT NULL",
+      "reviewer TEXT",
+      "decision TEXT NOT NULL",
+      "evidence_json TEXT NOT NULL",
+      "reviewed_at TEXT"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "performance_run": {
+    "name": "performance_run",
+    "fields": [
+      "device_id TEXT NOT NULL",
+      "build_type TEXT NOT NULL",
+      "scenario TEXT NOT NULL",
+      "samples_json TEXT NOT NULL",
+      "metrics_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "release_manifest": {
+    "name": "release_manifest",
+    "fields": [
+      "app_version TEXT NOT NULL",
+      "artifact_hash TEXT NOT NULL",
+      "schema_version INTEGER NOT NULL",
+      "content_version TEXT NOT NULL",
+      "signing_certificate_hash TEXT NOT NULL",
+      "status TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [],
+    "note": "개발/검증 산출물 JSON. live save.db 테이블 아님. 디버그 UI는 별도 test-store만 읽는다.",
+    "store": "artifact"
+  },
+  "wallet": {
+    "name": "wallet",
+    "fields": [
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "purpose TEXT NOT NULL",
+      "balance INTEGER NOT NULL CHECK(balance>=0)",
+      "reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0 AND reserved<=balance)"
+    ],
+    "unique": [
+      "owner_kind,owner_id,purpose"
+    ],
+    "indexes": [
+      "owner_id"
+    ],
+    "note": "보유와 예약은 구분; 출금가능=balance-reserved. 정수금화 Long overflow 검증.",
+    "store": "alias",
+    "alias": "money_account"
+  },
+  "storage": {
+    "name": "storage",
+    "fields": [
+      "owner_kind TEXT NOT NULL",
+      "owner_id TEXT NOT NULL",
+      "location_kind TEXT NOT NULL",
+      "parent_location_id TEXT",
+      "capacity INTEGER NOT NULL",
+      "weight_limit INTEGER NOT NULL",
+      "access_policy_json TEXT NOT NULL"
+    ],
+    "unique": [],
+    "indexes": [
+      "owner_kind,owner_id",
+      "parent_location_id"
+    ],
+    "note": "",
+    "store": "alias",
+    "alias": "storage_location"
+  }
+}
