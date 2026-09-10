@@ -1,6 +1,6 @@
 # Phase 0. 기준선 · 아키텍처 · 개발기반 상세 설계서
 
-> 버전 v31.0 · 기준원문 v30 · 작성일 2026-09-08  
+> 버전 v31.2 · 기준원문 v30 · 작성일 2026-09-09
 > 상태: **설계 검토 초안 / 구현 NOT_STARTED / Test NOT_RUN**  
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
@@ -12,7 +12,7 @@
 기존 소스가 제공되지 않아 실제 구조에 대한 영향은 확정하지 않았다. 신규 클래스와 테이블은 구현 제안이며, 기존 코드가 확인되면 공통 Interface, DAO, SQL 재사용을 우선한다.
 
 ## 2. Phase 목표
-완료 후 상태: **기준선 충돌 C01~C06 검토와 core JVM smoke 통과**. 후속 Phase 에는 검증된 DTO/port, 실제 도메인 결과, 세이브 codec/DDL 변경, fixture 와 기준선을 전달한다. 기능 이름만 등록하거나 Fake 성공 응답만 반환하는 상태는 완료로 보지 않는다.
+완료 후 상태: **C01·C02·C03 적용 확인, C14 빌드 기준선 검증, `:core:simulation` JVM 및 `:app` smoke 통과**. 후속 Phase 에는 검증된 공통 타입·`WorldSession`/`SavePort` 계약, 빌드 보고서, test fixture와 기준선을 전달한다. P0는 실제 Room schema·`SaveCoordinator`·세이브 codec/DDL/migration·crash recovery를 구현하지 않으며 이는 P3 책임이다. 기능 이름만 등록하거나 Fake 성공 응답만 반환하는 상태는 완료로 보지 않는다.
 
 ## 3. 선행 조건
 | 선행 Phase | Gate | 전달받는 기능 | 미충족시 차단 Task |
@@ -26,7 +26,39 @@
 | C01 | 파티6 명/10 명 혼용 | 원문기준 해결 | 조직10 명·출전6 명. 30/10 과거대화는 첨부본 기준에 적용하지 않음. |
 | C02 | 플레이어 길드창설 예시 | 원문기준 해결 | 플레이어 신규창설 금지·기존길드 가입/승계. NPC 길드생성은 유지. |
 | C03 | XP 지수식/후반 공식 | 원문기준 해결 | 후반 100×L^1.70×구간보정, 레벨당자동1/자유1·10 배수추가2 유지. |
-| C14 | 기술버전·SDK 및 실제 코드 미제공 | 일부 공식문서 확인·빌드 미검증 | Room3/AGP 공식발표 확인과 프로젝트 resolve/compile 은 별개. P0 lock spike 필수. |
+| C14 | 기술버전·SDK 및 실제 코드 미제공 | 승인·빌드 검증 NOT_RUN | exact 기술/SDK와 `GREENFIELD_V1`은 확정했다. P0는 실제 프로젝트 resolve/compile/app smoke를 검증하고, Room compile/schema export는 실제 schema를 소유하는 P3에서 검증한다. |
+
+### C14 승인 기술 기준선
+
+아래 값은 원문 부록의 범위형 “시작점 예”보다 우선하는 구현 기준이다. 동적 버전과 임의 patch 상승은 금지하며 P0에서는 `libs.versions.toml`, Gradle wrapper와 dependency lock을 같은 revision으로 커밋한다. 실제 Room export schema는 P3에서 최초 승인 schema와 함께 커밋한다.
+
+| 항목 | 승인값 | 적용 원칙 |
+|---|---:|---|
+| SDK | `compileSdk 37`, `targetSdk 36`, `minSdk 26` | API 37로 compile하고 현재 Play 제출 기준인 API 36을 target한다 |
+| Build | AGP `9.4.0`, Gradle `9.6.0`, JDK `17` | AGP 공식 호환 조합 그대로 고정 |
+| Kotlin/KSP | KGP `2.4.20`, KSP `2.3.11` | Android module은 AGP built-in Kotlin 사용, `kotlin-android` 중복 적용 금지 |
+| UI | Compose BOM `2026.08.00` | 개별 Compose 버전 override 금지 |
+| DB | Room `3.0.2` + `BundledSQLiteDriver` | P3 적용 기준. coroutine DAO/KSP만 사용하고 Room 2 wrapper·KAPT 금지 |
+| Image | Coil `3.5.0` local-only | 네트워크 artifact를 추가하지 않음 |
+| Schema | `SchemaBaselineMode=GREENFIELD_V1` | 최초 승인 schema가 v1; 가상 migration 금지 |
+
+Room 3가 제공하는 KMP 기능은 사용하지 않는다. `:core:simulation`은 순수 Kotlin/JVM으로 유지하며 Android 이외 플랫폼 요구가 승인되기 전에는 KMP plugin과 source set을 만들지 않는다. 위 값의 공식 안정 릴리스 확인과 실제 빌드 PASS는 다른 증거이며, 현재 후자는 `NOT_RUN`이다.
+
+### P0 Build Manifest
+
+| 항목 | P0 확정값 | 검증/비고 |
+|---|---|---|
+| Root project | `IMSI` | 저장소 디렉터리명과 분리된 Gradle root name |
+| Android identity | `applicationId = "com.imsi.mud"`, `namespace = "com.imsi.mud"` | `versionCode = 1`, `versionName = "0.1.0-dev"`; 게시 후 ID 변경 금지 |
+| JVM identity | package root `com.imsi.mud`, Java/Kotlin toolchain·bytecode target `17` | `:core:simulation`은 `org.jetbrains.kotlin.jvm`만 적용 |
+| P0 물리 Gradle project | `:app`, `:core:simulation` | `:core:common`, `:core:model`, `:core:testing`은 package/test source set; 빈 module 생성 금지 |
+| P0 plugin | `:app`: `com.android.application`, `org.jetbrains.kotlin.plugin.compose`; `:core:simulation`: `org.jetbrains.kotlin.jvm` | AGP built-in Kotlin을 사용하므로 `org.jetbrains.kotlin.android` 적용 금지; P0에는 KSP/Room plugin 미적용 |
+| P0 직접 dependency | `:app → :core:simulation`, Compose BOM/Material3/lifecycle-runtime-compose; `:core:simulation`은 Kotlin stdlib/coroutines-core/JUnit test만 | Navigation/Hilt/DataStore/Coil/Room/serialization/benchmark는 실제 사용 Phase까지 추가하지 않는다 |
+| Room 인계 경로 | P3 생성 예정 `core/save/schemas` | P0는 경로와 `GREENFIELD_V1`만 예약하고 schema JSON을 가장해 만들지 않는다 |
+| 필수 명령 | `./gradlew :core:simulation:test`, `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` | Windows는 `gradlew.bat`; 실제 명령·exit code·환경을 `build/reports/phase0/`에 보관 |
+| 잠금 산출물 | `gradle/wrapper/gradle-wrapper.properties`, `gradle/libs.versions.toml`, dependency lock files | P0에서 실제 사용하는 plugin/dependency만 resolve·lock |
+
+`applicationId`는 내부 개발 기준선으로 고정한다. 외부 스토어에 게시한 뒤에는 같은 앱의 ID를 변경할 수 없으므로, 게시자 도메인이 `com.imsi`가 아니라면 **첫 배포 전에만** C14를 재승인한다.
 
 ## 4. 기능 범위 및 요구 연결
 | 기능 ID | 기능명 | 중요도 | 선행 기능/Phase | 원문요구/공통근거 |
@@ -39,34 +71,30 @@
 ## 5. 기능별 상세 설계
 
 ### 공통 계약의 적용 범위
-모든 새 메소드/클래스명과 물리 DDL 은 **설계 보완안**이다. 제공된 자료에는 실제 저장소·DAO·SQL 이 없으므로 기존 구현에 대한 변경 완료를 뜻하지 않는다. 원문의 객체명/데이터 항목은 최대한 유지하며 기존 코드가 발견되면 adapter 로 연결한다.
+이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
-`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload)`를 사용한다. `GameMinute`, `CombatMillis`, `Money(Long)`, `BasisPoint`, `EntityId`는 혼합 연산을 금지한다. 확률의 기본 표현은 **ppm(0..1,000,000)**이며 세밀한 0.01%도 정수로 표현한다. 표시 반올림과 판정은 분리한다. 정수연산 overflow 는 오류이며 clamp 로 은폐하지 않는다.
+`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
-`ReadView`는 불변이다. `Delta`는 변경행·RNG 새 상태·도메인 이벤트·명령 receipt 를 포함한다. 콘텐츠 참조/외부 파일 읽기는 transaction 진입 전에 끝낸다. 실패 가능한 대규모 계산은 transaction 밖에서 하고, 성공한 커밋 이후에만 메모리 및 화면 상태를 게시한다. `stateHash`는 canonical 직렬화(키 정렬·정수 표현·버전 포함)에 대한 SHA-256 이며 현실시각·UI 재생위치는 제외한다.
-
-중복 명령은 동일 epoch/commandId 와 payload hash 를 함께 검사한다. 동일 ID/동일 payload 이면 이전 결과를 반환하고, 다른 payload 이면 `IdempotencyKeyReuse`를 반환한다. 인메모리 중복 제거만으로 복구 후 중복을 막았다고 판단하지 않는다.
-
-게임은 한 프로세스·한 활성 WorldSession 을 기준으로 한다. 여러 노드/서버/분산 Lock 은 **해당 없음**이다. 다만 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 간의 동시성은 실제로 검증한다.
+게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
 
 <a id="func-p0-001"></a>
 ### 5.1. FUNC-P0-001 — 원문 기준선과 충돌 판정
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 원문 기준선과 충돌 판정을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 원문 기준선·SHA-256·결정 매핑을 저장소 검증 절차로 고정한다. 게임 런타임 클래스나 화면 기능으로 구현하지 않는다. |
 | 관련 요구사항 | [§1](#src-0001), [§123](#src-0123), [§124](#src-0124), [§125](#src-0125), [§127](#src-0127), [§3046](#src-3046), [§3135](#src-3135) |
 | 기능 요구사항 | 1. 원문 전체와 SHA-256 을 고정하고 번호·행범위로 추적한다<br>2. 명시적 교체/최종 조항을 우선하되 단순히 번호가 크다는 이유만으로 덮어쓰지 않는다<br>3. 해결 근거가 없는 충돌은 DESIGN_DECISION_REQUIRED 로 표시하고 영향 Task 를 차단한다<br>4. 본 문서의 보완 정책은 원문 규칙과 다른 namespace 로 관리한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `BaselineResolver.resolve(sectionId: SourceId, ruleKey: RuleKey) -> RuleDecision` |
-| 입력 필드/값 | sectionId, ruleKey, candidateClauses[], sourceHash; 구체적값: §28 6 명, §1737 조직10/출전6 |
-| 반환값 | effectiveClause, supersededClauses[], decisionStatus; 정상결과: 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 |
+| 주요 메소드 | 저장소 도구 `py -3 docs/검증도구/validate_docs.py`; 별도 production `BaselineResolver` 클래스는 만들지 않는다 |
+| 입력 필드/값 | 원문 파일, `document_manifest.json`, `decisions.json`, 요구·Task·Test 추적 데이터 |
+| 반환값 | 검증 종료코드와 `97_문서정합성_검증보고서.md`; 정상결과: source hash 일치, C01·C02·C03의 P0 매핑과 승인 상태 일치 |
 | 입력 검증 | 같은 규칙의 모순이며 교체 문구 없음 → 결정 대기; 해당 기능의 운영 활성화 차단; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | 요구사항 번호 하나 누락 → 문서 검증 실패; 릴리즈 범위에서 숨기지 않음; typed DomainError 로상위호출에전달 |
+| 예외 계약 | 요구사항 번호·hash·결정 매핑 누락 → 도구 종료코드 1과 실패 항목 출력; gameplay `DomainError`로 포장하지 않는다 |
 | Transaction | 조회/순수계산/도구핵심에는게임 write transaction 없음. 빌드/리포트파일은 staging 완료 후발행. 참조 DB 는읽기 snapshot. |
 | 상태 변화 | EXTRACTED → CLASSIFIED → RESOLVED 또는 OPEN |
-| 소유 모듈 | :app / :core:common / :core:model / :core:testing |
+| 소유 모듈 | 저장소 `docs/검증도구`와 `docs/관리데이터`; production Gradle module 없음 |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P0-TASK-001](#p0-task-001) · [P0-TASK-002](#p0-task-002) · [P0-TASK-003](#p0-task-003) · [P0-TASK-004](#p0-task-004) · [P0-TASK-005](#p0-task-005) |
 | 관련 Test | [P0-UT-001](#p0-ut-001) · [P0-BT-001](#p0-bt-001) · [P0-FT-001](#p0-ft-001) · [P0-CT-001](#p0-ct-001) · [P0-IT-001](#p0-it-001) |
@@ -79,7 +107,7 @@
 5. 본 문서의 보완 정책은 원문 규칙과 다른 namespace 로 관리한다
 6. 출력계약과원본불변을검증하고 view/report 만반환한다.
 
-입력 `sectionId, ruleKey, candidateClauses[], sourceHash` → `BaselineResolver.resolve` → 검증된 `effectiveClause, supersededClauses[], decisionStatus` → 호출 UI/검증리포트; live world 변경 없음.
+입력 원문·manifest·결정/추적 JSON → `validate_docs.py` → 종료코드와 검증보고서; live world와 Android 앱 코드는 호출하지 않는다.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
@@ -96,43 +124,44 @@
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| BaselineResolver | 신규/기존 adapter | 원문 기준선과 충돌 판정 규칙조정자 | BaselineResolver.resolve(sectionId: SourceId, ruleKey: RuleKey) -> RuleDecision |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+| `validate_docs.py` | 기존 도구 수정 | source hash·결정/추적 일치 검사와 실패 종료코드 | 파일 입력→검사 결과/보고서 |
+| `document_manifest.json` | 기존 데이터 수정 | 기준 원문·수량 기준선의 단일 원천 | schema-validated JSON |
+| `decisions.json` | 기존 데이터 수정 | 결정 상태·영향 Phase의 단일 원천 | C01·C02·C03·C14 P0 매핑 |
+| Android 앱 | 변경 없음 | 기준선 도구를 앱에 내장하지 않는다 | 해당 없음 |
 
 <a id="func-p0-002"></a>
 ### 5.2. FUNC-P0-002 — 빌드·모듈·기술버전 고정
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 빌드·모듈·기술버전 고정을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 재현 가능한 최소 Android/JVM 빌드와 물리 의존성 경계를 Gradle 설정·검증 Task로 고정한다. 이를 위한 production manager/registry 클래스는 만들지 않는다. |
 | 관련 요구사항 | [§122](#src-0122), [§3022](#src-3022), [§3023](#src-3023), [§3024](#src-3024), [§3025](#src-3025), [§3026](#src-3026), [§3027](#src-3027), [§3028](#src-3028), [§3029](#src-3029), [§3030](#src-3030), [§3031](#src-3031), [§3032](#src-3032), [§3095](#src-3095), [§3115](#src-3115), [§3116](#src-3116) 외 3 개 |
-| 기능 요구사항 | 1. 원문 §3031 모듈명을 유지하고 기존 저장소는 P0 에서 먼저 인벤토리한다<br>2. 아래 모듈 허용 의존성 allowlist와 공개 API 경계를 확정하고 그 밖의 모든 edge·mutation 우회를 정적 검사로 거절한다<br>3. `SavePort` 계약은 `:core:simulation`, 구현 `SaveCoordinator`는 `:core:save`, 조립 루트는 `:app`과 `:tools:headless`로 고정한다<br>4. AGP/Kotlin/KSP/Room 정확 버전과 schema export 경로를 version catalog 에서 잠근다<br>5. 기존 구현이 있으면 adapter 부터 연결하며 UI/도메인 전면 재작성은 별도 승인한다 |
+| 기능 요구사항 | 1. 원문 §3031 모듈명은 논리 namespace로 유지하고 P0 물리 구성은 `:app`, `:core:simulation` 두 개로 제한한다<br>2. `:app → :core:simulation`만 허용하고 simulation의 Android·Room·Compose·네트워크 import를 금지한다<br>3. `WorldSession`과 `SavePort` 계약은 `:core:simulation`에 두되 실제 `SaveCoordinator`와 `:core:save`는 P3에서 생성한다<br>4. P0 Build Manifest의 identity/toolchain/plugin/dependency/task/evidence 경로를 그대로 적용한다<br>5. `:tools:headless`는 P23/P25에서 독립 실행 요구가 확인된 경우만 생성한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `BuildBaseline.verify(lock: ToolchainLock, graph: ModuleGraph) -> BuildReport` |
-| 입력 필드/값 | versions{AGP,Gradle,JDK,Kotlin,KSP,Room}, modules{edges,imports}; 구체적값: simulation 소스에 Android import 없음 |
-| 반환값 | resolvedLock, compilerReport, forbiddenEdges[]; 정상결과: 순수 JVM test 태스크 단독 성공 |
-| 입력 검증 | `simulation→save/Room`, `feature:party→feature:guild`, `core:data→feature:party`, `core:model→Android` edge 또는 feature의 `WorldEngine`/`SaveCoordinator`/mutable Repository 직접호출 → 아키텍처 검사가 실패; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | 잠금 버전 의존성 resolve 실패 → 빌드 차단; 자동 최신 버전으로 변경하지 않음; typed DomainError 로상위호출에전달 |
+| 주요 메소드 | Gradle `:core:simulation:test`, `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleDebug`; 별도 `BuildBaseline` production 클래스 없음 |
+| 입력 필드/값 | P0 Build Manifest, version catalog, wrapper, settings/project graph, source imports |
+| 반환값 | Gradle exit code·dependency lock·architecture report; 정상결과: JVM test와 Android debug assemble 성공 |
+| 입력 검증 | `:core:simulation → :app` 또는 simulation의 Android/Room/Compose/네트워크 import, P0에 선언하지 않은 물리 module/plugin/dependency → 아키텍처 검사 실패 |
+| 예외 계약 | 잠금 버전 resolve/compile/lint 실패 → 빌드 차단; 자동 최신 버전 변경이나 gameplay `DomainError` 변환 금지 |
 | Transaction | 조회/순수계산/도구핵심에는게임 write transaction 없음. 빌드/리포트파일은 staging 완료 후발행. 참조 DB 는읽기 snapshot. |
 | 상태 변화 | DISCOVERED → LOCKED → COMPILE_VERIFIED |
-| 소유 모듈 | :app / :core:common / :core:model / :core:simulation / :core:save / :core:database / :core:testing / :tools:headless |
+| 소유 모듈 | Gradle root / :app / :core:simulation |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P0-TASK-006](#p0-task-006) · [P0-TASK-007](#p0-task-007) · [P0-TASK-008](#p0-task-008) · [P0-TASK-009](#p0-task-009) · [P0-TASK-010](#p0-task-010) |
 | 관련 Test | [P0-UT-002](#p0-ut-002) · [P0-BT-002](#p0-bt-002) · [P0-FT-002](#p0-ft-002) · [P0-CT-002](#p0-ct-002) · [P0-IT-002](#p0-it-002) |
 
 #### 처리 순서 및 데이터 흐름
 1. 입력/참조 version 을검사하고불변 snapshot 또는격리된파일 root 를확보한다.
-2. 원문 §3031 모듈명을 유지하고 기존 저장소는 P0 에서 먼저 인벤토리한다
-3. 아래 모듈 허용 의존성 allowlist와 feature 공개 API 경계를 정적 검사한다
-4. `WorldSession`/`SavePort`/`SaveCoordinator` 소유와 두 조립 루트를 실제 Gradle project path에 대응시킨다
-5. AGP/Kotlin/KSP/Room 정확 버전과 schema export 경로를 version catalog 에서 잠근다
-6. 기존 구현이 있으면 adapter 부터 연결하며 UI/도메인 전면 재작성은 별도 승인한다
-7. 출력계약과원본불변을검증하고 view/report 만반환한다.
+2. 원문 §3031 모듈명은 논리 package/소유 namespace로 유지한다
+3. 물리 Gradle project는 `:app`, `:core:simulation` 두 개만 생성한다
+4. P0 Build Manifest와 `:app → :core:simulation` allowlist를 정적 검사한다
+5. `WorldSession`/`SavePort` 계약 소유를 `:core:simulation`에 고정하고 실제 저장 구현은 P3 인계 목록으로 기록한다
+6. P0에서 실제 사용하는 버전과 dependency만 resolve·lock한다
+7. JVM test→Android unit/lint/assemble 순으로 실행하고 결과를 `build/reports/phase0/`에 보관한다
+8. 출력계약과원본불변을검증하고 view/report 만반환한다.
 
-입력 `versions{AGP,Gradle,JDK,Kotlin,KSP,Room}, modules{edges,imports}` → `BuildBaseline.verify` → 검증된 `resolvedLock, compilerReport, forbiddenEdges[]` → 호출 UI/검증리포트; live world 변경 없음.
+입력 Build Manifest·Gradle 파일·source import → Gradle/architecture verification task → exit code·lock·report; live world 변경 없음.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
@@ -149,29 +178,29 @@
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| BuildBaseline | 신규/기존 adapter | 빌드·모듈·기술버전 고정 규칙조정자 | BuildBaseline.verify(lock: ToolchainLock, graph: ModuleGraph) -> BuildReport |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+| Gradle root 설정 | 신규 | wrapper·version catalog·dependency lock·project graph | P0 Build Manifest와 동일 |
+| `:core:simulation` | 신규 JVM library | 공통 타입·WorldSession·SavePort 계약과 JVM tests | Android/Room/Compose import 0 |
+| `:app` | 신규 Android application | Compose AppRoot와 조립·UI smoke | `:core:simulation`만 내부 의존 |
+| architecture verification | Gradle test 또는 가장 작은 저장소 검사 | project graph와 forbidden import 검사 | 실패 source/edge와 exit code 출력 |
 
 <a id="func-p0-003"></a>
 ### 5.3. FUNC-P0-003 — 공통 타입·명령·오류·이벤트 계약
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 공통 타입·명령·오류·이벤트 계약을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 공통 value object와 `WorldSession` 명령 경계를 순수 Kotlin 코드로 고정한다. 타입 자체와 단일 진입점으로 보장할 수 있는 규칙을 별도 동적 registry로 중복 구현하지 않는다. |
 | 관련 요구사항 | [§126](#src-0126), [§3042](#src-3042), [§3043](#src-3043), [§3091](#src-3091), [§3092](#src-3092), [§3093](#src-3093), [§3094](#src-3094), [§3096](#src-3096), [§3122](#src-3122), [§3123](#src-3123) |
 | 기능 요구사항 | 1. GameMinute·CombatMillis·Money·BasisPoint·EntityId 를 구분하고 혼합 연산을 차단한다<br>2. 공통 CommandEnvelope 는 commandId/sessionEpoch/expectedVersion/payload 를 포함한다<br>3. DomainEvent 는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload 를 포함한다<br>4. 기능 미구현 port 는 UnsupportedFeature 를 반환하며 성공을 가장한 no-op 을 금지한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `ContractRegistry.validate(command: WorldCommand, event: DomainEvent) -> ContractResult` |
+| 주요 메소드 | value object 생성자/연산자와 `WorldSession.execute(envelope: CommandEnvelope) -> CommandResult`; 별도 `ContractRegistry` 없음 |
 | 입력 필드/값 | commandId, epoch, expectedVersion, actorId, payloadType, payload; 구체적값: Money(100), debit=40 |
 | 반환값 | validationErrors[], normalizedEnvelope; 정상결과: Money(60), 원본 값은 불변 |
-| 입력 검증 | Long.MAX_VALUE+1 금액 연산 → ArithmeticOverflow 오류·상태 변경 없음; required ID/enum/범위/상태/version 은변경 전에검사 |
+| 입력 검증 | `Money(Long.MAX_VALUE).plus(Money(1))` → `ArithmeticOverflow`·상태 변경 없음. `BasisPoint`는 1/10,000, 확률 ppm은 1/1,000,000의 별도 타입으로 혼용 금지 |
 | 예외 계약 | 잘못된 sessionEpoch 명령 → StaleSession; 다른 슬롯 변경 없음; typed DomainError 로상위호출에전달 |
-| Transaction | 조회/순수계산/도구핵심에는게임 write transaction 없음. 빌드/리포트파일은 staging 완료 후발행. 참조 DB 는읽기 snapshot. |
+| Transaction | P0는 in-memory test `SavePort`로 명령 경계만 검증하고 실제 DB transaction은 시작하지 않는다. 실제 commit/receipt/Event/RNG 원자 저장은 P3가 소유한다. |
 | 상태 변화 | RECEIVED → VALIDATED 또는 REJECTED |
-| 소유 모듈 | :app / :core:common / :core:model / :core:testing |
+| 소유 모듈 | :core:simulation; :app은 공개 계약만 소비 |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P0-TASK-011](#p0-task-011) · [P0-TASK-012](#p0-task-012) · [P0-TASK-013](#p0-task-013) · [P0-TASK-014](#p0-task-014) · [P0-TASK-015](#p0-task-015) |
 | 관련 Test | [P0-UT-003](#p0-ut-003) · [P0-BT-003](#p0-bt-003) · [P0-FT-003](#p0-ft-003) · [P0-CT-003](#p0-ct-003) · [P0-IT-003](#p0-it-003) |
@@ -184,7 +213,7 @@
 5. 기능 미구현 port 는 UnsupportedFeature 를 반환하며 성공을 가장한 no-op 을 금지한다
 6. 출력계약과원본불변을검증하고 view/report 만반환한다.
 
-입력 `commandId, epoch, expectedVersion, actorId, payloadType, payload` → `ContractRegistry.validate` → 검증된 `validationErrors[], normalizedEnvelope` → 호출 UI/검증리포트; live world 변경 없음.
+입력 `CommandEnvelope` → `WorldSession.execute`의 생성자/타입/epoch/version 검증 → 직렬 명령 처리 또는 typed 거절 결과. P0의 저장 port는 test source에만 존재한다.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
@@ -201,42 +230,42 @@
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| ContractRegistry | 신규/기존 adapter | 공통 타입·명령·오류·이벤트 계약 규칙조정자 | ContractRegistry.validate(command: WorldCommand, event: DomainEvent) -> ContractResult |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+| value object | 신규 순수 Kotlin 타입 | `GameMinute`, `CombatMillis`, `Money`, `BasisPoint`, `ProbabilityPpm`, `EntityId` 범위·연산 보장 | constructor/factory와 `Math.addExact` 의미의 안전 연산 |
+| sealed Command/Event/Error | 신규 순수 Kotlin 타입 | 허용 payload와 오류 결과를 compile-time에 제한 | versioned codec golden과 exhaustive `when` |
+| `WorldSession` | 신규 | 유일한 authoritative mutation 진입점과 bounded single-writer queue 소유 | `execute(CommandEnvelope): CommandResult` |
+| `SavePort` | 신규 계약 | P3 저장 구현 seam; 기능별 port를 만들지 않는다 | `commit(envelope, delta)`; P0 production 구현 없음 |
 
 <a id="func-p0-004"></a>
 ### 5.4. FUNC-P0-004 — 최소 검증 하네스·공통 UI 껍데기
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 최소 검증 하네스·공통 UI 껍데기을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 앱이 빌드·실행되고 공통 5-state를 표시하는 최소 Compose AppRoot와 test fixture를 제공한다. 하네스를 production 서비스로 만들지 않는다. |
 | 관련 요구사항 | [§3131](#src-3131), [§3132](#src-3132), [§3133](#src-3133) |
-| 기능 요구사항 | 1. 새게임·던전·전투·세이브 진입용 최소 route 와 loading/empty/error 상태를 먼저 만든다<br>2. 공통 FakeClock·ScriptedRng·FaultInjector 를 JVM test 에서 제공한다<br>3. core import 규칙·문서 ID 링크·Schema smoke 를 CI 초기 단계에 둔다<br>4. 후속 Phase 의 실제 화면은 각 Phase 에서 추가하고 P22 에서 디자인 전체 통합한다 |
+| 기능 요구사항 | 1. P0는 새 Screen ID나 새게임·던전·전투·세이브 실제 route를 만들지 않고 전역 88 문서의 ID를 placeholder destination으로만 등록한다<br>2. AppRoot는 Loading·Ready·Empty·Error·Blocked를 구분하고 후속 기능은 `UnsupportedFeature`를 성공처럼 처리하지 않는다<br>3. FakeClock·ScriptedRng·FaultInjector는 `:core:simulation` test source에서 필요한 fixture만 제공한다<br>4. UI 요소는 contentDescription/role/focus order와 최소 48dp touch target을 갖는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `SmokeHarness.run(seed: Long, fixture: FixtureId) -> SmokeReport` |
-| 입력 필드/값 | seed, fixtureId, dbPath, supportedPorts[]; 구체적값: fixture=EMPTY_WORLD, seed=42 |
-| 반환값 | stateHash, testReport, missingPorts[]; 정상결과: 같은 초기 stateHash 와 홈 empty state |
+| 주요 메소드 | Compose `AppRoot(state: AppShellState, onRetry: () -> Unit)`와 test-only fixture factory; 별도 production `SmokeHarness` 없음 |
+| 입력 필드/값 | `AppShellState`, 등록된 전역 Screen ID, retry callback |
+| 반환값 | Compose UI와 navigation intent; 권위 state·DB·RNG는 변경하지 않음 |
 | 입력 검증 | 선행 기능 port 가 UnsupportedFeature → 기능 준비 안 됨 표시; 앱 crash 없음; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | headless runner 가 실게임 DB 경로를 받음 → 실행 거절; 원본 DB hash 불변; typed DomainError 로상위호출에전달 |
+| 예외 계약 | 후속 기능 미구현 → Blocked/Empty와 가능한 다음 행동 표시; 앱 crash·가짜 성공·DB 생성 없음 |
 | Transaction | 조회/순수계산/도구핵심에는게임 write transaction 없음. 빌드/리포트파일은 staging 완료 후발행. 참조 DB 는읽기 snapshot. |
 | 상태 변화 | PENDING → RUNNING → PASS/FAIL |
-| 소유 모듈 | :app / :core:common / :core:model / :core:testing |
+| 소유 모듈 | :app; fixture는 각 module test source |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P0-TASK-016](#p0-task-016) · [P0-TASK-017](#p0-task-017) · [P0-TASK-018](#p0-task-018) · [P0-TASK-019](#p0-task-019) · [P0-TASK-020](#p0-task-020) |
 | 관련 Test | [P0-UT-004](#p0-ut-004) · [P0-BT-004](#p0-bt-004) · [P0-FT-004](#p0-ft-004) · [P0-CT-004](#p0-ct-004) · [P0-IT-004](#p0-it-004) |
 
 #### 처리 순서 및 데이터 흐름
 1. 입력/참조 version 을검사하고불변 snapshot 또는격리된파일 root 를확보한다.
-2. 새게임·던전·전투·세이브 진입용 최소 route 와 loading/empty/error 상태를 먼저 만든다
-3. 공통 FakeClock·ScriptedRng·FaultInjector 를 JVM test 에서 제공한다
-4. core import 규칙·문서 ID 링크·Schema smoke 를 CI 초기 단계에 둔다
-5. 후속 Phase 의 실제 화면은 각 Phase 에서 추가하고 P22 에서 디자인 전체 통합한다
+2. AppRoot의 5-state와 접근성 semantics를 구현한다
+3. 전역 화면 Matrix의 Screen ID만 placeholder destination으로 등록한다
+4. 필요한 test fixture를 각 test source에 둔다
+5. 실제 화면·Navigation library·DB 기반 시작/이어하기는 소유 Phase에서 추가한다
 6. 출력계약과원본불변을검증하고 view/report 만반환한다.
 
-입력 `seed, fixtureId, dbPath, supportedPorts[]` → `SmokeHarness.run` → 검증된 `stateHash, testReport, missingPorts[]` → 호출 UI/검증리포트; live world 변경 없음.
+입력 `AppShellState` → `AppRoot` → Loading/Ready/Empty/Error/Blocked UI와 navigation intent; live world·DB·RNG 변경 없음.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
@@ -253,10 +282,10 @@
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| SmokeHarness | 신규/기존 adapter | 최소 검증 하네스·공통 UI 껍데기 규칙조정자 | SmokeHarness.run(seed: Long, fixture: FixtureId) -> SmokeReport |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+| `AppRoot` | 신규 Compose 함수 | 공통 shell state와 retry/navigation intent 표현 | `AppRoot(AppShellState, onRetry)` |
+| placeholder destination | `:app` 내부 최소 구현 | 88 문서의 Screen ID를 중복 정의하지 않고 미구현 상태 표시 | `UnsupportedFeature → Blocked` |
+| fixture | test source | 실제 사용하는 FakeClock/ScriptedRng/FaultInjector만 제공 | production artifact 제외 |
+| UI test | Android test | 5-state·접근성·재시도·잘못된 route 확인 | DB/RNG fixture 불필요 |
 
 
 ### Phase 특화 알고리즘·수치·판단
@@ -268,64 +297,49 @@
 4. 역할: 설계 책임자는 규칙 결정, Android 개발자는 화면/인프라, 도메인 개발자는 엔진, 콘텐츠 담당자는 수치/카탈로그, QA 는 독립 oracle 을 소유한다.
 5. DB 와 UI 가 없는 `:core:simulation` JVM 빌드를 먼저 실행하고 모듈 의존 금지 검사를 PR 에 적용한다.
 
-원문 3031 의 모듈명과 기능 화면명을 유지한다. 논리 도메인별 package 를 먼저 사용하고 모든 기능을 각각 Gradle module 로 만드는 대규모 분리는 하지 않는다. 버전 후보는 `libs.versions.toml`에 고정하고 실제 resolve/컴파일/API smoke 후에만 검증완료로 바꾼다.
+원문 3031의 모듈명과 기능 화면명은 논리 package/소유 namespace로 유지한다. P0 물리 Gradle project는 `:app`, `:core:simulation` 두 개뿐이다. 버전은 `libs.versions.toml`에 고정하고 실제 resolve/컴파일/API smoke 후에만 검증완료로 바꾼다.
 
 ### 모듈 허용 의존성 allowlist
 
-P0 인벤토리에서 실제 Gradle project path를 대응시킨 뒤 아래 방향을 잠근다. 표에 없는 내부 모듈 edge는 모두 금지하며 외부 라이브러리는 version catalog와 플랫폼 제한을 별도로 검사한다.
+P0에서 아래 표가 물리 Gradle graph의 전부다. 아직 package인 논리 namespace를 빈 module로 만들지 않는다. P3 이후 모듈 승격은 독립 build, 둘 이상의 실제 소비자, 별도 Android/JVM plugin 경계 중 하나를 증거로 제시하고 이 표가 아니라 해당 Phase 설계에서 승인한다.
 
 | Source | 허용 내부 의존성 |
 |---|---|
-| `:core:common` | 없음 |
-| `:core:model` | `:core:common` |
-| `:core:simulation` | `:core:model`, `:core:common` |
-| `:core:content` | `:core:model`, `:core:common` |
-| `:core:database` | `:core:model`, `:core:common` |
-| `:core:save` | `:core:model`, `:core:common`, `:core:simulation`, `:core:database` |
-| `:core:data` | `:core:model`, `:core:common`, `:core:simulation`, `:core:content`, `:core:database`, `:core:save` |
-| `:core:image` | `:core:content`, `:core:common` |
-| `:core:designsystem` | `:core:common` |
-| `:core:testing` | `:core:model`, `:core:common`, `:core:simulation` |
-| `:feature:*` | `:core:model`, `:core:common`, `:core:simulation`, `:core:data`, `:core:designsystem`, `:core:image`; 다른 `:feature:*` 금지 |
-| `:feature:validation` | 일반 feature 허용 목록 + `:core:content`, `:core:testing` |
-| `:app` | 모든 feature와 조립에 필요한 core 모듈 |
-| `:tools:content-builder` | `:core:model`, `:core:common`, `:core:content` |
-| `:tools:headless` | `:core:model`, `:core:common`, `:core:simulation`, `:core:content`, `:core:database`, `:core:save`, `:core:testing` |
-| `:benchmark` | `:app` |
+| `:core:simulation` | 없음 |
+| `:app` | `:core:simulation` |
 
-추가 전역 제약은 `:core:* → :feature:*|:app` 금지, `:feature:* → :feature:*` 금지, Android/Room/Compose/네트워크 API의 `:core:simulation` 유입 금지다. 예외가 필요하면 코드보다 먼저 이 표와 아키텍처 경계 테스트를 승인받아 함께 변경한다.
+추가 제약은 Android/Room/Compose/네트워크 API의 `:core:simulation` 유입 금지와 P0 미선언 project 생성 금지다. 예외가 필요하면 코드보다 먼저 Build Manifest와 아키텍처 경계 테스트를 승인받아 함께 변경한다.
 
 ### 명령 facade·저장 port·조립 루트의 물리 소유
 
 | 계약/구현 | 물리 소유 | 공개 범위와 금지사항 |
 |---|---|---|
 | `WorldSession.execute(CommandEnvelope)` | `:core:simulation` | feature에 공개되는 유일한 mutation 진입점. feature는 `WorldEngine`을 직접 호출하지 않는다. |
-| `WorldEngine`·dispatcher·mutable engine state | `:core:simulation` | 모듈 내부 구현. `SavePort`에만 의존하고 `SaveCoordinator`·Room·DAO를 참조하지 않는다. |
-| `SavePort.findReceipt/commit` | `:core:simulation` | 순수 Kotlin 계약 1개를 재사용한다. 기능별 SavePort/RepositoryPort를 만들지 않는다. |
-| `SaveCoordinator : SavePort` | `:core:save` | `:core:database`를 사용해 receipt/Delta/Event/RNG/generation을 한 transaction으로 저장한다. |
-| typed ReadPort 구현 | `:core:data` | 조회 전용. feature에 mutable Repository 또는 transaction API를 공개하지 않는다. |
-| Android 조립 | `:app` | 실제 `SaveCoordinator`를 `WorldSession`에 주입하고 feature에는 조립 완료된 session만 제공한다. |
-| JVM 조립 | `:tools:headless` | 같은 `WorldSession`과 JVM Room/Save adapter를 사용하며 운영 save 경로를 거절한다. |
+| `WorldEngine`·single-writer queue·mutable engine state | `:core:simulation` | 모듈 내부 구현. `SavePort` 계약에만 의존하고 `SaveCoordinator`·Room·DAO를 참조하지 않는다. |
+| `SavePort.commit` | `:core:simulation` | 순수 Kotlin 계약 1개. P0에는 test source의 in-memory fake만 있고 production 구현은 없다. |
+| Android 조립 | `:app` | P0는 저장 기능을 `UnsupportedFeature`로 명시하고 AppRoot smoke만 수행한다. 실제 `SaveCoordinator` 주입은 P3에서 추가한다. |
+| `SaveCoordinator`·Room·typed ReadPort | P3 인계 | 실제 `:core:save` 및 schema와 함께 P3에서 구현한다. |
+| `:tools:headless` | P23/P25 조건부 | 독립 CLI 요구와 두 번째 실제 소비자가 확인될 때만 만든다. P0 Gate에는 포함하지 않는다. |
 
-경계 검사는 Gradle edge만 보지 않는다. feature 소스의 `WorldEngine`, `SaveCoordinator`, DAO, mutable Repository 직접 참조와 `:core:simulation`의 Android/Room/`:core:save` 참조도 실패시킨다.
+경계 검사는 Gradle edge뿐 아니라 `:core:simulation`의 Android/Room/Compose/네트워크 import와 `:app` 이외의 미선언 project 생성을 실패시킨다. feature·save·database 모듈 경계 검사는 해당 물리 모듈이 생성되는 Phase에서 활성화한다.
 
 
 ## 6. DB 상세 설계
 
-DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SavePort 계약시험으로 검증하며 원문에 없는 운영 DB 를 신설하지 않는다.
+DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`, receipt/generation/migration/crash recovery를 구현하지 않는다. Room `3.0.2`와 `GREENFIELD_V1`, 향후 schema 경로 `core/save/schemas`만 Build Manifest에 고정한다. 실제 `:core:save` 생성·Room compile·최초 v1 schema export/open-close·transaction·복구 검증은 P3 Gate가 소유한다. P0의 `SavePort` 검증은 test source의 in-memory fake만 사용한다.
 
 ## 7. Transaction / 동시성 / Thread 설계
 
 | 관점 | 이 Phase 의 구현 기준 |
 |---|---|
-| Transaction 시작/종료 | WorldEngine/UseCase 가불변 Delta 계산완료 후 `SavePort.commit`을 호출하고 `:core:save`의 SaveCoordinator 구현이 실제 Room write를 시작한다. 변경행/receipt/RNG/event/manifest→검증→commit 후에만 게시한다. compute/read/tool 은 live transaction 해당없음. |
-| Rollback | 필수입력/FK/버전/금액/소유권/일정/메소드예외,affectedRows 예상불일치면해당 semantic 작업전부 rollback.이미게시된 UI 값으로 DB 복구하지않음. |
-| 부분 실패 | 하나의거래/강화/승계/보상은부분성공없음. 서로독립정비항목/검증 case/선택 background 활동만항목 receipt 로부분결과를허용. |
-| 동시 처리/중복 | UI 연속탭·시간경계·NPC 명령이같은 data 를건드려도단일 writer 로직렬화. epoch/version/unique receipt 로재기동중복차단. |
+| Transaction 시작/종료 | P0에는 실제 DB transaction이 없다. `WorldSession`은 검증→RNG 소비→Delta 생성→in-memory `SavePort` 결과→state 게시의 순서 계약만 고정하고, 실제 Room 원자 commit은 P3가 구현한다. |
+| Rollback | 검증/명령 처리 실패 시 state와 RNG를 함께 직전 값으로 유지한다. P0 fake는 성공/실패를 원자적으로 모사하되 durable 저장 성공을 주장하지 않는다. |
+| 부분 실패 | P0 authoritative command는 부분 성공을 허용하지 않는다. batch/segment transaction은 해당 기능 Phase에서 별도 설계한다. |
+| 동시 처리/중복 | `WorldSession`마다 capacity 64의 bounded `Channel<QueuedCommand>`과 consumer coroutine 1개를 둔다. enqueue 수락 순서(`submissionSequence`)대로 한 번에 하나만 처리한다. |
 | 여러 노드 | 오프라인싱글:해당없음. 분산 lock/서버 leader election/remoteDB 를신설하지않음. |
-| Thread 생성 주체 | Application 이인프라 scope, WorldSessionFactory 가세션 scope/전용직렬 dispatcher 를소유. CPU 계산 Default/전용 dispatcher, DB/파일 IO 는 IO/context 를사용. Main 은 UI 만. |
-| Daemon/Pool | 직접 Java daemon Thread 를게임수명보장으로사용하지않음. 고정·제한 dispatcher/pool 만허용. NPC/이벤트마다 Thread 생성금지. daemon 여부에무관하게구조화 scope 종료를검증. |
-| 생명주기/종료 | OPEN→PAUSING→PAUSED→CLOSING→CLOSED.새명령차단→안전경계→commit drain→child job 취소/join→connection/handle 닫기. 프로세스 kill 은콜백없음을가정. |
+| Thread 생성 주체 | Application이 infrastructure scope, `WorldSession`이 child scope와 단일 consumer를 소유한다. authoritative 경로는 별도 `Default` 병렬 작업으로 분기하지 않는다. Main은 UI만 처리한다. |
+| Daemon/Pool | 직접 Thread·GlobalScope·NPC별 coroutine을 만들지 않는다. P0는 consumer 1개로 충분하며 별도 dispatcher/pool abstraction을 추가하지 않는다. |
+| 생명주기/종료 | OPEN→CLOSING→CLOSED. CLOSING부터 새 enqueue를 `SessionClosed`로 거절하고 이미 수락된 항목을 순서대로 drain한 뒤 consumer를 join한다. 호출자 cancellation은 enqueue 전에는 취소되고, 수락 후에는 authoritative 처리를 취소하지 않으며 결과는 commandId로 재조회 가능해야 한다. 프로세스 kill 복구는 P3 책임이다. |
 | Exception 처리 | CancellationException 전파. 예상 DomainError 는 typed 결과,Invariant 오류는안전정지,장식/파생 consumer 오류는격리. 일반 catch 에서실패를성공으로변환하지않음. |
 | 메모리/누수 | Domain 에 Context/Bitmap/ViewModel 참조금지.세션폐기후 observer/job/callback/파일 FD 잔존0.캐시최대 size 와 in-flight 작업한도 profile 필수. |
 
@@ -355,8 +369,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-001 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | BaselineResolver.resolve(sectionId: SourceId, ruleKey: RuleKey) -> RuleDecision 의 DTO/오류/불변식 정의. 입력 sectionId, ruleKey, candidateClauses[], sourceHash. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | 원문 파일·`document_manifest.json`·`decisions.json`·추적 데이터의 입력/오류/검증 결과를 고정하고 `FUNC-P0-001`의 REQUIRED/DATA Assertion을 승인하거나 결정 ID 근거로 강도를 재분류한다. 별도 `BaselineResolver` production 타입은 만들지 않고 기존 `validate_docs.py` 검사를 확장한다. |
+| 대상 모듈 | docs/검증도구 / docs/관리데이터 |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -369,7 +383,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
+| 완료 조건 | 검증 계약·fixture 승인, FUNC-P0-001 미승인 REQUIRED/DATA 0건, 별도 production resolver 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-002"></a>
@@ -380,7 +394,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | Task ID | P0-TASK-002 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
 | 상세 구현 내용 | 원문 전체와 SHA-256 을 고정하고 번호·행범위로 추적한다; 명시적 교체/최종 조항을 우선하되 단순히 번호가 크다는 이유만으로 덮어쓰지 않는다; 해결 근거가 없는 충돌은 DESIGN_DECISION_REQUIRED 로 표시하고 영향 Task 를 차단한다; 본 문서의 보완 정책은 원문 규칙과 다른 namespace 로 관리한다. 정해진 입력에서는 '조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존'을 만족해야 한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 대상 모듈 | docs/검증도구 / docs/관리데이터 |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -389,11 +403,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-001, P0-BT-001, P0-FT-001 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
+| 완료 조건 | 충돌 우선순위·차단 규칙과 C01 근거 추적 검사 PASS |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-003"></a>
@@ -403,8 +417,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-003 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 파일/빌드 산출물 adapter. 조회/계산/검증결과 adapter 를구현하고 live world mutation 이없음을검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | 문서 검증 결과는 staging 후 `97_문서정합성_검증보고서.md`에 원자 교체하고 실패 시 종료코드 1을 반환한다. DB·SavePort·앱 adapter는 사용하지 않는다. |
+| 대상 모듈 | docs/검증도구 / docs/관리데이터 |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -413,11 +427,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-001, P0-IT-001 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | 검증보고서 원자 교체·실패 종료코드 1·game DB/앱 호출 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-004"></a>
@@ -427,8 +441,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-004 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | 검증 도구는 CLI와 Markdown 보고서만 제공한다. Android UI·관리 화면·DomainError/SavePort 경로는 만들지 않는다. |
+| 대상 모듈 | docs/검증도구 |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -437,11 +451,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-001, P0-IT-001 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
+| 완료 조건 | CLI 종료코드·Markdown 보고서로 실패 관측, Android UI·SavePort 경로 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-005"></a>
@@ -452,7 +466,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | Task ID | P0-TASK-005 |
 | 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
 | 상세 구현 내용 | P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 대상 모듈 | docs/검증도구 / docs/관리데이터 |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -461,7 +475,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001 |
@@ -475,8 +489,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-006 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | BuildBaseline.verify(lock: ToolchainLock, graph: ModuleGraph) -> BuildReport 의 DTO/오류/불변식 정의. 입력 versions{AGP,Gradle,JDK,Kotlin,KSP,Room}, modules{edges,imports,publicSymbols}, compositionRoots{:app,:tools:headless}, schemaBaselineMode. WorldSession·SavePort·SaveCoordinator 소유와 정상/금지 graph fixture를 고정한다. |
-| 대상 모듈 | :app / :tools:headless / :core:simulation / :core:save / :core:data / :core:testing |
+| 상세 구현 내용 | P0 Build Manifest를 실제 Gradle 파일로 옮긴다. root `IMSI`, Android identity, JDK 17, `:app`/`:core:simulation` 두 project, plugin/dependency allowlist, 실행 명령과 evidence 경로를 고정하고 `FUNC-P0-002`의 REQUIRED/DATA를 승인하며 채택한 RECOMMENDED Assertion을 결정 ID에 연결한다. 별도 `BuildBaseline` class는 만들지 않는다. |
+| 대상 모듈 | Gradle root / :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -489,7 +503,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
+| 완료 조건 | P0 Build Manifest·두 project graph·fixture 승인, FUNC-P0-002 미승인 REQUIRED/DATA 0건, 채택 RECOMMENDED 결정 ID 연결 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-007"></a>
@@ -499,8 +513,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-007 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 원문 §3031 모듈명을 유지하고 기존 저장소를 인벤토리한다. allowlist 밖 내부 edge와 simulation의 Android/Room/Compose/네트워크 import를 검사하고, feature의 WorldEngine·SaveCoordinator·mutable Repository 직접 참조를 금지한다. WorldSession·SavePort는 :core:simulation, SaveCoordinator는 :core:save에 두며 :app과 :tools:headless만 조립한다. toolchain·schema export·SchemaBaselineMode를 증거로 잠근다. |
-| 대상 모듈 | :app / :tools:headless / :core:simulation / :core:save / :core:data / :core:testing |
+| 상세 구현 내용 | P0 물리 graph는 `:app → :core:simulation` 하나로 제한한다. simulation의 Android/Room/Compose/네트워크 import와 미선언 module/plugin/dependency를 실패시키고 toolchain·dependency lock·`GREENFIELD_V1` 결정 증거를 보관한다. |
+| 대상 모듈 | Gradle root / :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -509,11 +523,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-002, P0-BT-002, P0-FT-002 |
-| 완료 조건 | 전체 모듈 allowlist·금지 API·두 조립 루트 compile/동치 검증; toolchain·SchemaBaselineMode 증거 잠금; 미정 규칙 활성 금지 |
+| 완료 조건 | 두 project graph·allowlist·금지 import·toolchain/lock 증거 검사 PASS |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-008"></a>
@@ -523,8 +537,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-008 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 실제 Gradle graph/source symbol 검사와 schema export 검증 adapter를 연결한다. `:tools:headless`는 격리 DB root만 받고 운영 DB 경로를 거절하며, 두 조립 루트의 구현 class·schemaVersion·stateHash 증거를 남긴다. |
-| 대상 모듈 | :app / :tools:headless / :core:simulation / :core:save / :core:data / :core:testing |
+| 상세 구현 내용 | 실제 Gradle graph/source import 검사와 dependency lock 검증을 연결한다. P0에서는 Room schema·DB·headless adapter를 만들지 않고 P3 인계 경로 `core/save/schemas`만 검사한다. |
+| 대상 모듈 | Gradle root / :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -533,11 +547,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-002, P0-IT-002 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | graph/import/lock·P3 인계 경로 검사 PASS, P0 schema/DB/headless 산출물 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-009"></a>
@@ -547,8 +561,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-009 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | `:app` instrumentation entry와 `:tools:headless` CLI entry가 동일 `WorldSession`/`SavePort` 계약을 조립하도록 한다. feature UI는 명령은 WorldSession, 조회는 typed ReadPort만 사용하고 저장소를 직접 수정하지 않는다. |
-| 대상 모듈 | :app / :tools:headless / :core:simulation / :core:data |
+| 상세 구현 내용 | `:app`이 `:core:simulation` 공개 계약만 의존해 AppRoot를 조립하고 debug build를 실행한다. save/headless/feature 모듈 및 실제 DB는 연결하지 않는다. |
+| 대상 모듈 | :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -557,11 +571,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-002, P0-IT-002 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
+| 완료 조건 | :app → :core:simulation만으로 AppRoot assemble/smoke PASS, DB/save/headless 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-010"></a>
@@ -572,7 +586,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | Task ID | P0-TASK-010 |
 | 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
 | 상세 구현 내용 | P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 대상 모듈 | Gradle root / :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -581,7 +595,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002 |
@@ -595,8 +609,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-011 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ContractRegistry.validate(command: WorldCommand, event: DomainEvent) -> ContractResult 의 DTO/오류/불변식 정의. 입력 commandId, epoch, expectedVersion, actorId, payloadType, payload. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | 공통 value object, sealed Command/Event/Error, `CommandEnvelope`, `WorldSession`, `SavePort`의 public contract와 fixture를 정의한다. 별도 `ContractRegistry`는 만들지 않는다. |
+| 대상 모듈 | :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -609,7 +623,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
+| 완료 조건 | value object·Command/Event/Error·WorldSession/SavePort 계약과 fixture 승인 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-012"></a>
@@ -619,8 +633,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-012 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | GameMinute·CombatMillis·Money·BasisPoint·EntityId 를 구분하고 혼합 연산을 차단한다; 공통 CommandEnvelope 는 commandId/sessionEpoch/expectedVersion/payload 를 포함한다; DomainEvent 는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload 를 포함한다; 기능 미구현 port 는 UnsupportedFeature 를 반환하며 성공을 가장한 no-op 을 금지한다. 정해진 입력에서는 'Money(60), 원본 값은 불변'을 만족해야 한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | GameMinute·CombatMillis·Money·BasisPoint·ProbabilityPpm·EntityId 를 구분하고 혼합 연산을 차단한다; 공통 CommandEnvelope 는 commandId/sessionEpoch/expectedVersion/payload 를 포함한다; DomainEvent 는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload 를 포함한다; 기능 미구현 port 는 UnsupportedFeature 를 반환하며 성공을 가장한 no-op 을 금지한다. Money overflow는 exact arithmetic로 거절한다. |
+| 대상 모듈 | :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -629,11 +643,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-003, P0-BT-003, P0-FT-003 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
+| 완료 조건 | type 경계·overflow·UnsupportedFeature·Command/Event field 검사 PASS |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-013"></a>
@@ -643,8 +657,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-013 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 파일/빌드 산출물 adapter. 조회/계산/검증결과 adapter 를구현하고 live world mutation 이없음을검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | Command/Event codec golden과 test-only in-memory `SavePort`를 구현한다. Room/파일 adapter·DDL·migration은 만들지 않으며 P3 인계 계약만 검증한다. |
+| 대상 모듈 | :core:simulation test source |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -653,11 +667,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-003, P0-IT-003 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | codec golden·test-only in-memory SavePort PASS, production persistence 산출물 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-014"></a>
@@ -667,8 +681,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-014 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | `:app`은 `WorldSession` 공개 API와 typed 결과만 참조한다. 실제 gameplay handler·ReadPort·DB 조립은 소유 Phase까지 추가하지 않는다. |
+| 대상 모듈 | :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -677,11 +691,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-003, P0-IT-003 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
+| 완료 조건 | :app 공개 API compile PASS, 저장 구현/DAO 직접 참조 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-015"></a>
@@ -692,7 +706,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | Task ID | P0-TASK-015 |
 | 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
 | 상세 구현 내용 | P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 대상 모듈 | :core:simulation / :app |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -701,7 +715,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003 |
@@ -715,8 +729,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-016 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | SmokeHarness.run(seed: Long, fixture: FixtureId) -> SmokeReport 의 DTO/오류/불변식 정의. 입력 seed, fixtureId, dbPath, supportedPorts[]. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | `AppShellState`와 `AppRoot(state,onRetry)` 계약, 전역 Screen ID placeholder 규칙을 정의한다. 별도 `SmokeHarness` production 클래스는 만들지 않는다. |
+| 대상 모듈 | :app |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -729,7 +743,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
+| 완료 조건 | AppShellState·AppRoot·placeholder 계약과 fixture 승인 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-017"></a>
@@ -739,8 +753,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-017 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 새게임·던전·전투·세이브 진입용 최소 route 와 loading/empty/error 상태를 먼저 만든다; 공통 FakeClock·ScriptedRng·FaultInjector 를 JVM test 에서 제공한다; core import 규칙·문서 ID 링크·Schema smoke 를 CI 초기 단계에 둔다; 후속 Phase 의 실제 화면은 각 Phase 에서 추가하고 P22 에서 디자인 전체 통합한다. 정해진 입력에서는 '같은 초기 stateHash 와 홈 empty state'을 만족해야 한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | Loading/Ready/Empty/Error/Blocked를 구현하고 88 문서의 기존 Screen ID만 placeholder로 등록한다. 실제 Navigation graph와 새게임·던전·전투·세이브 화면은 만들지 않는다. |
+| 대상 모듈 | :app |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -749,11 +763,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-004, P0-BT-004, P0-FT-004 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
+| 완료 조건 | AppRoot 5-state·기존 Screen ID placeholder 구현, 실제 gameplay navigation 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-018"></a>
@@ -763,8 +777,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-018 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 파일/빌드 산출물 adapter. 조회/계산/검증결과 adapter 를구현하고 live world mutation 이없음을검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | FakeClock·ScriptedRng·FaultInjector는 실제 사용하는 JVM test source에만 둔다. production adapter와 DB fixture를 만들지 않는다. |
+| 대상 모듈 | :core:simulation test source / :app test source |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -773,11 +787,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-004, P0-IT-004 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | 사용하는 test source에만 fixture 생성, production adapter/DB fixture 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-019"></a>
@@ -787,8 +801,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-019 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | 5-state, retry, unknown route, contentDescription/role/focus order, 48dp touch target을 Compose test로 검증한다. |
+| 대상 모듈 | :app |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -797,11 +811,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-004, P0-IT-004 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
+| 완료 조건 | 5-state·retry·unknown route·접근성 Compose test PASS |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p0-task-020"></a>
@@ -812,7 +826,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | Task ID | P0-TASK-020 |
 | 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
 | 상세 구현 내용 | P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 대상 모듈 | :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p0_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -821,7 +835,7 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 |
@@ -835,8 +849,8 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 |---|---|
 | Task ID | P0-TASK-021 |
 | 목적 | Gate 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 기준선 충돌 C01~C06 검토와 core JVM smoke 통과; 기능별리뷰/예외/회귀/세이브호환/후속 port 확인. 미승인설계 보완안은해당기능구현활성화를차단하고상태를은폐하지않는다. |
-| 대상 모듈 | :app / :core:common / :core:model / :core:testing |
+| 상세 구현 내용 | C01·C02·C03 적용과 C14 Build Manifest를 확인하고 8개 Gate Test를 실행한다. 실제 Room schema·SaveCoordinator·DDL/migration·crash recovery는 P3 인계 항목으로 확인하며 P0 PASS 조건에 넣지 않는다. |
+| 대상 모듈 | docs/검증도구 / Gradle root / :app / :core:simulation |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.phase_0 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -845,11 +859,11 @@ DB 변경 없음. 파일/빌드/공통타입만 변경한다. DB 통합은 SaveP
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | C14 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001, P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002, P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003, P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004, P0-RT-001, P0-CN-001, P0-REC-001, P0-PT-001, P0-OP-001, P0-ET-001, P0-IT-005 |
-| 완료 조건 | 필수 Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0 |
+| Test | **Gate 8개:** P0-UT-001, P0-UT-002, P0-BT-002, P0-BT-003, P0-CT-003, P0-CN-001, P0-CT-004, P0-IT-002. 나머지 P0 Test는 중복되지 않는 결함을 검증할 때만 실행하는 보조 계획이며 Gate를 막지 않는다. |
+| 완료 조건 | Gate 8개 PASS·C01/C02/C03 적용·C14 빌드 증거·인계 contract/fixture·미해결 P0/P1 결함 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 
@@ -911,24 +925,24 @@ flowchart TB
 
 ## 11. Phase별 Test 설계
 
-UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Concurrency,REC=Recovery,PT=Performance,OP=운영,ET=Exception 이다. 모든 case 는 실행 계획이며 현재 NOT_RUN 이다. 정상 예제에 사용한 fixture profile 수치를 제품 확정값으로 해석하지 않는다.
+UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Concurrency,REC=Recovery,PT=Performance,OP=운영,ET=Exception 이다. 모든 case 는 실행 계획이며 현재 NOT_RUN 이다. P0 Gate는 `P0-UT-001`, `P0-UT-002`, `P0-BT-002`, `P0-BT-003`, `P0-CT-003`, `P0-CN-001`, `P0-CT-004`, `P0-IT-002` 정확히 8개다. 나머지 case는 비차단 후속 계획이며 DB·RNG·headless를 강제하지 않고 실제 소유 Phase에서 fixture를 구체화한다. 정상 예제의 fixture profile 수치를 제품 확정값으로 해석하지 않는다.
 
 <a id="p0-ut-001"></a>
-### P0-UT-001 — 원문 기준선과 충돌 판정 / 정상 규칙
+### P0-UT-001 — 원문 hash·Phase 결정 매핑
 
 | 항목 | 설계 |
 |---|---|
 | Test ID | P0-UT-001 |
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P0-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | §28 6 명, §1737 조직10/출전6 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-001, testId=P0-UT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | 원문 파일, `document_manifest.json`, `decisions.json`, Phase 0 문서의 읽기 전용 복제본이 준비되어 있다. DB/RNG/Android adapter는 사용하지 않는다. |
+| 입력값 | 원문 SHA-256, Phase 0 결정 집합 `{C01,C02,C03,C14}`, active P0 REQUIRED/DATA Assertion 상태 |
+| 수행 절차 | ① 원문 SHA-256 계산 ② manifest 값 비교 ③ Phase 0 문서와 decisions.json의 결정 ID/상태 비교 ④ C04~C06이 P0 Gate에 없는지 검사 ⑤ active P0 기능의 REQUIRED/DATA가 모두 APPROVED_REQUIREMENT 이상인지 검사 ⑥ `build/reports/phase0/P0-UT-001.txt`에 결과 저장 |
+| 예상 결과 | hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건 |
+| DB/파일 확인 | 원문과 관리 JSON hash는 검사 전후 동일하며 검증보고서 외 파일 변경이 없다. |
+| 로그 확인 | testId=P0-UT-001, sourceHash, decisionId, expectedPhase, actualPhase, exitCode를 기록한다. |
+| 상태 확인 | source/decision mismatch 0건, 구현 착수 대상 atomic approval mismatch 0건 |
+| 성공 기준 | `py -3 docs/검증도구/validate_docs.py`가 결정·Assertion Gate 검사를 포함해 종료코드 0이고 증거 파일이 존재한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-bt-001"></a>
@@ -993,32 +1007,32 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-IT-001 |
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P0-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | §28 6 명, §1737 조직10/출전6; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-001, testId=P0-IT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | 문서 검증 도구를 격리된 저장소 복제본에서 실행할 수 있다. |
+| 입력값 | C01 fixture와 원문/결정/추적 JSON |
+| 수행 절차 | ① 도구 실행 ② 보고서와 종료코드 확인 ③ 같은 입력으로 재실행 ④ 두 보고서의 의미 결과 비교 |
+| 예상 결과 | C01 근거가 보존되고 같은 입력의 검사 결과가 동치이며 Android/DB 경로를 호출하지 않는다. |
+| DB/파일 확인 | game DB를 열지 않는다. source/decision/report 파일은 격리 root에만 생성되고 입력 hash는 불변이다. |
+| 로그 확인 | testId=P0-IT-001, sourceHash, decisionId, resultHash, exitCode를 기록한다. |
+| 상태 확인 | decision/source mismatch 0건, Android/DB 호출 0건 |
+| 성공 기준 | 두 실행 모두 종료코드 0이고 의미 결과 hash가 일치한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ut-002"></a>
-### P0-UT-002 — 빌드·모듈·기술버전 고정 / 정상 규칙
+### P0-UT-002 — Build Manifest·JVM compile
 
 | 항목 | 설계 |
 |---|---|
 | Test ID | P0-UT-002 |
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P0-002 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | simulation 소스에 Android import 없음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 순수 JVM test 태스크 단독 성공 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-002, testId=P0-UT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 순수 JVM test 태스크 단독 성공 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | wrapper/version catalog/settings와 `:core:simulation` source가 존재하고 JDK 17을 사용한다. DB/RNG fixture는 필요 없다. |
+| 입력값 | P0 Build Manifest와 `gradlew.bat :core:simulation:test` |
+| 수행 절차 | ① Java/Gradle 버전 기록 ② settings project 목록 비교 ③ dependency lock 사용 확인 ④ `:core:simulation:test` 실행 ⑤ `build/reports/phase0/P0-UT-002.txt`에 command/exit code 저장 |
+| 예상 결과 | 물리 project가 `:app`, `:core:simulation`뿐이고 JVM test가 성공한다. |
+| DB/파일 확인 | DB를 열지 않으며 build output과 lock/report만 변경된다. |
+| 로그 확인 | testId=P0-UT-002, javaVersion, gradleVersion, projects, command, exitCode를 기록한다. |
+| 상태 확인 | P0 Build Manifest mismatch 0건, JVM test failure 0건 |
+| 성공 기준 | 선언된 명령 종료코드 0과 재현 가능한 lock/report가 존재한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-bt-002"></a>
@@ -1030,13 +1044,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | BT |
 | 대상 기능 | FUNC-P0-002 |
 | 사전 조건 | 실제 Gradle project graph와 Kotlin source set을 복제한 격리 fixture. allowlist와 공개 API 금지 symbol 목록이 P0 revision으로 고정됨. |
-| 입력값 | 금지 edge/API 6종: simulation→save/Room, feature:party→feature:guild, core:data→feature:party, core:model→Android, feature→WorldEngine/SaveCoordinator, feature→mutable Repository; 허용 edge: save→simulation/database, tools:headless→simulation/database/save/testing |
-| 수행 절차 | ① 정상 graph와 각 금지 edge/API를 하나씩 추가한 fixture 생성 ② Gradle dependency 검사와 source symbol 검사를 각각 실행 ③ 각 실패가 정확한 source/target 또는 금지 symbol을 지목하는지 확인 ④ 정상 graph에서 `:core:simulation` JVM test와 `:tools:headless` compile 실행 ⑤ 보고서를 P0-BT-002로 저장 |
-| 예상 결과 | 금지 edge/API 6종은 각각 실패하고 허용 edge와 두 JVM compile은 통과 |
+| 입력값 | 정상 edge `:app→:core:simulation`; 금지 edge `:core:simulation→:app`; simulation의 Android/Room/Compose/네트워크 import; 미선언 P0 module/plugin/dependency |
+| 수행 절차 | ① 정상 graph 검사 ② 각 금지 edge/import/module/plugin/dependency fixture를 하나씩 적용한 격리 복제본 검사 ③ 실패가 정확한 source/target/symbol을 지목하는지 확인 ④ 정상 graph에서 `:core:simulation:test` 실행 ⑤ `build/reports/phase0/P0-BT-002.txt` 저장 |
+| 예상 결과 | 모든 금지 fixture는 실패하고 정상 `:app→:core:simulation` graph와 JVM test는 통과 |
 | DB/파일 확인 | 게임 DB를 열지 않는다. 검사 전후 저장소 fixture hash가 동일하고 build 산출물은 격리된 build directory에만 생성된다. |
 | 로그 확인 | testId=P0-BT-002, ruleId, sourceModule, targetModule 또는 forbiddenSymbol, Gradle task와 exit code를 기록한다. |
 | 상태 확인 | production graph 변경 0건, 금지 fixture false-negative 0건, 정상 graph false-positive 0건 |
-| 성공 기준 | 금지 6건이 모두 비정상 종료하고 허용 graph의 simulation/headless compile이 성공하며 증거 로그가 존재한다. |
+| 성공 기준 | 금지 fixture false-negative 0건, 정상 graph false-positive 0건, JVM test 종료코드 0과 증거 로그가 존재한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ft-002"></a>
@@ -1076,21 +1090,21 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-it-002"></a>
-### P0-IT-002 — 빌드·모듈·기술버전 고정 / adapter·영속 경계
+### P0-IT-002 — Android build·launch smoke
 
 | 항목 | 설계 |
 |---|---|
 | Test ID | P0-IT-002 |
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P0-002 |
-| 사전 조건 | 잠금된 toolchain과 실제 Gradle graph, `:app`·`:tools:headless` 조립 코드, 격리된 EMPTY_WORLD DB root가 존재한다. |
-| 입력값 | 동일 EMPTY_WORLD/seed42를 :app instrumentation entry와 :tools:headless entry에서 각각 실행 |
-| 수행 절차 | ① 두 entry가 조립한 구현 클래스와 module graph 기록 ② 각 entry에서 `WorldSession.execute`로 동일 명령 실행 ③ session/DB를 닫고 새 session으로 재조회 ④ stateHash·receipt·schemaVersion 비교 ⑤ headless에 운영 DB 경로를 전달해 거절 확인 |
-| 예상 결과 | 두 entry가 동일 WorldSession/SavePort 계약과 서로 다른 조립 루트를 사용하고 재조회 stateHash·receipt·schemaVersion이 일치하며 운영 DB 경로는 거절 |
-| DB/파일 확인 | 각 entry는 서로 다른 임시 DB root를 사용한다. 종료 후 WAL checkpoint/connection close를 확인하고 운영 DB hash는 불변이다. |
-| 로그 확인 | testId=P0-IT-002, entry=app/headless, implementationClass, schemaVersion, stateHash, exit code를 기록한다. |
-| 상태 확인 | `:core:simulation` Android/Room import 0건, feature의 금지 symbol 참조 0건, app/headless 결과 불일치 0건 |
-| 성공 기준 | 실제 app/headless 조립이 compile·실행되고 동일 계약 결과를 내며 운영 DB 접근 방어 증거가 존재한다. |
+| 사전 조건 | P0 Build Manifest가 적용된 `:app`과 `:core:simulation`, Android test target이 존재한다. Room/save/headless module은 없어야 한다. |
+| 입력값 | `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`와 AppRoot launch smoke |
+| 수행 절차 | ① project/plugin/dependency 목록 기록 ② unit/lint/assemble 실행 ③ debug APK의 applicationId/namespace/version 확인 ④ AppRoot를 실행해 기본 Blocked/Empty 상태 확인 ⑤ `build/reports/phase0/P0-IT-002.txt`에 command/exit code/APK metadata 저장 |
+| 예상 결과 | 세 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다. |
+| DB/파일 확인 | save.db·Room schema JSON·WAL 파일 생성 0건. build output과 report만 생성된다. |
+| 로그 확인 | testId=P0-IT-002, applicationId, namespace, versionCode, versionName, plugins, tasks, exitCode를 기록한다. |
+| 상태 확인 | build/lint/smoke failure 0건, forbidden plugin/module 0건 |
+| 성공 기준 | 명시된 Gradle task 종료코드 0, APK metadata 일치, AppRoot smoke PASS 증거가 존재한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ut-003"></a>
@@ -1119,14 +1133,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-BT-003 |
 | 테스트 종류 | BT |
 | 대상 기능 | FUNC-P0-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | Long.MAX_VALUE+1 금액 연산 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
+| 사전 조건 | `:core:simulation` value object와 안전 연산 JUnit test가 존재한다. DB·Android adapter는 사용하지 않는다. |
+| 입력값 | `Money(Long.MAX_VALUE).plus(Money(1))`, `BasisPoint(10_001)`, `ProbabilityPpm(1_000_001)` |
+| 수행 절차 | ① 각 경계 바로 안/밖 값을 생성 ② Money 안전 덧셈 실행 ③ 타입 간 직접 혼합이 compile되지 않음을 확인 ④ 예외 전후 in-memory state/RNG hash 비교 ⑤ JUnit XML을 증거로 저장 |
 | 예상 결과 | ArithmeticOverflow 오류·상태 변경 없음 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-003, testId=P0-BT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | DB를 열지 않는다. JUnit report 외 파일 변경이 없다. |
+| 로그 확인 | testId=P0-BT-003, type, operand, boundary, resultCode를 JUnit report에 기록한다. |
 | 상태 확인 | ArithmeticOverflow 오류·상태 변경 없음 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | overflow·범위 밖 생성이 typed 오류이고 유효 경계값은 성공하며 상태/RNG 변경이 없다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ft-003"></a>
@@ -1148,21 +1162,21 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ct-003"></a>
-### P0-CT-003 — 공통 타입·명령·오류·이벤트 계약 / 컴포넌트 계약·재호출
+### P0-CT-003 — Command/Event codec golden
 
 | 항목 | 설계 |
 |---|---|
 | Test ID | P0-CT-003 |
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P0-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | Money(100), debit=40; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | Money(60), 원본 값은 불변; 같은입력2 회 결과동일·live state/RNG 쓰기0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-003, testId=P0-CT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | Money(60), 원본 값은 불변; 같은입력2 회 결과동일·live state/RNG 쓰기0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | versioned Command/Event serializer와 승인된 UTF-8 golden fixture가 `:core:simulation` test resources에 있다. DB는 사용하지 않는다. |
+| 입력값 | 동일 `CommandEnvelope`/`DomainEvent` 객체와 canonical golden bytes |
+| 수행 절차 | ① encode 2회 ② byte equality 비교 ③ decode 후 전체 필드 비교 ④ unknown/newer codec ID가 typed 오류인지 확인 ⑤ golden diff와 JUnit XML 저장 |
+| 예상 결과 | 동일 입력의 bytes가 완전히 같고 roundtrip field loss 0건이며 unknown codec을 성공 처리하지 않는다. |
+| DB/파일 확인 | golden resource는 읽기 전용이며 JUnit report 외 변경이 없다. |
+| 로그 확인 | testId=P0-CT-003, codecId, payloadHash, expectedBytesHash, actualBytesHash를 기록한다. payload 원문은 일반 로그에 남기지 않는다. |
+| 상태 확인 | codec mismatch 0건, unknown codec false-success 0건 |
+| 성공 기준 | golden roundtrip과 unknown codec 거절이 모두 PASS한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-it-003"></a>
@@ -1173,14 +1187,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-IT-003 |
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P0-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | Money(100), debit=40; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | Money(60), 원본 값은 불변; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-003, testId=P0-IT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | Money(60), 원본 값은 불변; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | `:core:simulation` public API와 `:app` compile fixture, test-only in-memory SavePort가 있다. |
+| 입력값 | `:app`의 `WorldSession` 공개 API 사용과 저장 구현 타입 직접 참조 fixture |
+| 수행 절차 | ① 허용 public API fixture compile ② 저장 구현/DAO 직접 참조 fixture compile 실패 확인 ③ in-memory port로 명령 1회 실행 |
+| 예상 결과 | 공개 API 사용만 compile되고 저장 구현 직접 참조는 실패하며 in-memory 결과는 정확히 1회 반환된다. |
+| DB/파일 확인 | in-memory SavePort만 사용하고 DB/file I/O 0건이다. |
+| 로그 확인 | testId=P0-IT-003, fixtureKind, compileResult, commandId, completionCount를 기록한다. |
+| 상태 확인 | forbidden concrete dependency 0건, completionCount=1 |
+| 성공 기준 | 허용 fixture만 compile되고 금지 fixture는 실패하며 명령 결과는 정확히 1회 완료된다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ut-004"></a>
@@ -1227,32 +1241,32 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-FT-004 |
 | 테스트 종류 | FT |
 | 대상 기능 | FUNC-P0-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | headless runner 가 실게임 DB 경로를 받음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 실행 거절; 원본 DB hash 불변 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-004, testId=P0-FT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 실행 거절; 원본 DB hash 불변 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | AppRoot Error/Blocked fixture와 예외를 던지는 retry callback이 있다. |
+| 입력값 | unknown Screen ID와 실패하는 retry callback |
+| 수행 절차 | ① unknown Screen ID 렌더 ② retry 실행 ③ 예외 후 UI 상태와 crash 여부 확인 |
+| 예상 결과 | Blocked/Error가 유지되고 crash·가짜 성공·navigation 실행이 없다. |
+| DB/파일 확인 | DB와 save 파일을 생성하지 않는다. Compose test output만 기록한다. |
+| 로그 확인 | testId=P0-FT-004, screenId, retryCount, callbackError, uiState를 기록한다. |
+| 상태 확인 | Blocked/Error 유지, unauthorized navigation 0건 |
+| 성공 기준 | retry 예외가 UI test process를 종료하지 않고 Error/Blocked 상태와 오류 정보가 유지된다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-ct-004"></a>
-### P0-CT-004 — 최소 검증 하네스·공통 UI 껍데기 / 컴포넌트 계약·재호출
+### P0-CT-004 — AppRoot 5-state·접근성
 
 | 항목 | 설계 |
 |---|---|
 | Test ID | P0-CT-004 |
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P0-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | fixture=EMPTY_WORLD, seed=42; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 같은 초기 stateHash 와 홈 empty state; 같은입력2 회 결과동일·live state/RNG 쓰기0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-004, testId=P0-CT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 같은 초기 stateHash 와 홈 empty state; 같은입력2 회 결과동일·live state/RNG 쓰기0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | `:app` Compose test에서 AppRoot와 Loading/Ready/Empty/Error/Blocked fixture를 조립한다. DB/RNG/실제 Navigation은 사용하지 않는다. |
+| 입력값 | 5개 `AppShellState`, unknown Screen ID, retry callback |
+| 수행 절차 | ① 각 state 렌더 ② 제목/본문/CTA semantics 검사 ③ Error retry 1회 호출 확인 ④ unknown route가 Blocked로 표시되는지 확인 ⑤ focus order·contentDescription/role·48dp touch target 검사 |
+| 예상 결과 | 각 상태가 구분되고 미구현 기능은 Blocked이며 crash·가짜 성공·중복 callback 0건 |
+| DB/파일 확인 | DB와 save 파일을 생성하지 않는다. screenshot/JUnit report만 test output에 기록한다. |
+| 로그 확인 | testId=P0-CT-004, uiState, screenId, retryCount, semanticsFailureCount를 기록한다. |
+| 상태 확인 | 5-state mismatch 0, accessibility failure 0, unauthorized navigation 0 |
+| 성공 기준 | Compose UI test가 5-state·retry·unknown route·접근성 검사를 모두 통과한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-it-004"></a>
@@ -1263,14 +1277,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-IT-004 |
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P0-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | fixture=EMPTY_WORLD, seed=42; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 같은 초기 stateHash 와 홈 empty state; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P0-004, testId=P0-IT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 같은 초기 stateHash 와 홈 empty state; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | debug APK와 AppRoot Android test가 있으며 Room/save/headless 모듈은 없다. |
+| 입력값 | 앱 최초 실행·process recreation과 5-state fixture |
+| 수행 절차 | ① 앱 실행 ② state 전환 ③ process recreation ④ 복원 가능한 shell state와 미구현 화면 Blocked 표시 확인 |
+| 예상 결과 | shell이 crash 없이 재생성되고 권위 저장 성공을 주장하지 않으며 DB 파일을 만들지 않는다. |
+| DB/파일 확인 | save.db·Room schema·WAL 생성 0건이다. Android test output만 기록한다. |
+| 로그 확인 | testId=P0-IT-004, lifecycleStep, beforeState, afterState, dbFileCount를 기록한다. |
+| 상태 확인 | recreation crash 0건, false-success 0건, dbFileCount=0 |
+| 성공 기준 | process recreation 뒤에도 shell 상태 계약을 지키고 미구현 기능은 Blocked이며 DB 파일을 만들지 않는다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-rt-001"></a>
@@ -1299,32 +1313,32 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-CN-001 |
 | 테스트 종류 | CN |
 | 대상 기능 | PHASE-0 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | §28 6 명, §1737 조직10/출전6; 요청2 개동시에제출/이전 epoch 응답지연 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-0, testId=P0-CN-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | capacity 64 Channel과 consumer 1개를 소유한 `WorldSession`, controllable test dispatcher, in-memory `SavePort`가 준비되어 있다. |
+| 입력값 | command A/B 동시 enqueue, stale epoch C, enqueue 전 취소 D, enqueue 후 caller 취소 E, close 중 F |
+| 수행 절차 | ① A 처리 중지 지점 설정 후 B enqueue ② A 재개 ③ submissionSequence와 결과 순서 확인 ④ C/D/E 실행 ⑤ close 호출 후 수락 항목 drain·F 거절 확인 ⑥ 같은 fixture 100회 반복 |
+| 예상 결과 | A→B 수락 순서와 stateVersion이 일치하고 stale epoch/close 이후 쓰기 0, enqueue 전 취소 효과 0, 수락 후 E는 정확히 1회 완료 |
+| DB/파일 확인 | in-memory fake만 사용하며 DB/file I/O 0건이다. |
+| 로그 확인 | testId=P0-CN-001, commandId, submissionSequence, epoch, beforeVersion, afterVersion, outcome을 기록한다. |
+| 상태 확인 | concurrent mutation 0, order mismatch 0, duplicate effect 0, drain 후 child job 0 |
+| 성공 기준 | 100회 모두 동일 결과·state hash를 내고 close 후 consumer가 join되며 timeout 5초를 넘지 않는다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-rec-001"></a>
-### P0-REC-001 — 종료 후 복구
+### P0-REC-001 — 검증 산출물 중단 안전성
 
 | 항목 | 설계 |
 |---|---|
 | Test ID | P0-REC-001 |
 | 테스트 종류 | REC |
 | 대상 기능 | PHASE-0 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 요구사항 번호 하나 누락; 정상요청직전/커밋직전/직후 kill |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-0, testId=P0-REC-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | 검증보고서 staging/rename 경로를 격리 임시 디렉터리에서 실행할 수 있다. |
+| 입력값 | 보고서 쓰기 전·staging 완료 후·rename 직전 프로세스 중단 |
+| 수행 절차 | ① 기존 보고서 hash 저장 ② 세 cut point에서 도구 중단 ③ 재실행 ④ 최종 Markdown/JSON parse와 hash 확인 |
+| 예상 결과 | 기존 또는 새 완전한 보고서만 존재하고 부분 파일·깨진 JSON 0건 |
+| DB/파일 확인 | 문서 임시 root만 사용하며 game DB를 생성하거나 열지 않는다. |
+| 로그 확인 | testId=P0-REC-001, cutPoint, beforeHash, afterHash, exitCode를 기록한다. |
+| 상태 확인 | partial artifact 0건 |
+| 성공 기준 | 세 cut point 모두 기존/새 완전 산출물 중 하나로 복구된다. 실제 save/crash recovery 검증은 P3에서 수행한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-pt-001"></a>
@@ -1335,14 +1349,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-PT-001 |
 | 테스트 종류 | PT |
 | 대상 기능 | PHASE-0 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | §28 6 명, §1737 조직10/출전6; seed0..99 를반복하고대표최대 fixture 사용 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-0, testId=P0-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | Gate 8개가 PASS하고 동일 머신/JDK/Gradle 조건을 기록할 수 있다. |
+| 입력값 | `:core:simulation:test`와 `:app:assembleDebug` 각 3회 |
+| 수행 절차 | ① 환경 기록 ② warm-up 1회 제외 ③ 3회 wall time/peak process memory/APK bytes 기록 ④ 중앙값 산출 |
+| 예상 결과 | 측정치와 환경이 보고서에 남는다. P0에는 장기 시뮬레이션 성능 합격 임계치를 두지 않으며 이 Test는 Gate 비차단이다. |
+| DB/파일 확인 | DB bytes 측정 대상 없음; APK/build cache 크기만 기록한다. |
+| 로그 확인 | testId=P0-PT-001, environmentHash, command, wallMs, peakBytes, apkBytes를 기록한다. |
+| 상태 확인 | 실행 timeout 10분, hang 0건 |
+| 성공 기준 | 수치 누락 없이 3회 중앙값이 기록된다. 성능 PASS 판정은 P24 기준과 실제 runtime fixture에서 수행한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-op-001"></a>
@@ -1353,14 +1367,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-OP-001 |
 | 테스트 종류 | OP |
 | 대상 기능 | PHASE-0 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | fixture=EMPTY_WORLD, seed=42; 네트워크차단·앱재실행/도구재실행 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 같은 초기 stateHash 와 홈 empty state; 필수 네트워크요청0·게임현실시간 catchup0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-0, testId=P0-OP-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 같은 초기 stateHash 와 홈 empty state; 필수 네트워크요청0·게임현실시간 catchup0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | debug APK와 네트워크가 차단된 Android test target이 있다. |
+| 입력값 | 앱 최초 실행·재실행, 네트워크 차단, `AppShellState.Empty/Blocked` |
+| 수행 절차 | ① 앱 실행 ② Empty/Blocked 확인 ③ 프로세스 종료/재실행 ④ 네트워크 요청과 현실시간 catch-up 시도 검사 |
+| 예상 결과 | 동일 shell 상태, 필수 네트워크 요청 0, 현실시간 catch-up 0, DB 생성 0 |
+| DB/파일 확인 | save.db·Room schema·WAL 생성 0건 |
+| 로그 확인 | testId=P0-OP-001, networkRequestCount, dbFileCount, renderedState를 기록한다. |
+| 상태 확인 | restart 전후 shell state 동치 |
+| 성공 기준 | 앱은 완전 오프라인으로 시작하며 미구현 gameplay를 성공으로 표시하지 않는다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-et-001"></a>
@@ -1371,14 +1385,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-ET-001 |
 | 테스트 종류 | ET |
 | 대상 기능 | PHASE-0 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | headless runner 가 실게임 DB 경로를 받음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 실행 거절; 원본 DB hash 불변; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-0, testId=P0-ET-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 실행 거절; 원본 DB hash 불변; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | 문서 검사 실패 fixture와 AppRoot Error/Blocked fixture가 있다. |
+| 입력값 | source hash mismatch, Gradle task 실패, unknown Screen ID, UnsupportedFeature |
+| 수행 절차 | ① 각 오류를 독립 주입 ② 도구 exit code와 UI state 검사 ③ 오류 간 상태 누출 여부 확인 |
+| 예상 결과 | 문서/빌드 오류는 non-zero로 차단되고 UI는 Error/Blocked를 구분하며 crash·가짜 성공·DB 생성이 없다. |
+| DB/파일 확인 | game DB를 열지 않는다. 실패 도구는 기존 기준 파일을 덮어쓰지 않는다. |
+| 로그 확인 | testId=P0-ET-001, errorType, scope, exitCode 또는 uiState를 기록한다. |
+| 상태 확인 | failure swallowed 0건, cross-case contamination 0건 |
+| 성공 기준 | 네 오류가 각각 정의된 범위로 전파되고 정상 상태로 위장되지 않는다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p0-it-005"></a>
@@ -1389,14 +1403,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P0-IT-005 |
 | 테스트 종류 | IT |
 | 대상 기능 | PHASE-0 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | §28 6 명, §1737 조직10/출전6→fixture=EMPTY_WORLD, seed=42 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 및 같은 초기 stateHash 와 홈 empty state; 선행 port/DTO/version 인계완료 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-0, testId=P0-IT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 및 같은 초기 stateHash 와 홈 empty state; 선행 port/DTO/version 인계완료 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 사전 조건 | Gate 8개 결과와 C01/C02/C03/C14 상태, P1/P2/P3 인계 체크리스트가 준비되어 있다. |
+| 입력값 | Phase 0 Gate evidence index |
+| 수행 절차 | ① 8개 PASS/evidence 확인 ② Build Manifest와 실제 graph 비교 ③ 공통 contract hash 기록 ④ P3에 `:core:save`, Room schema, SaveCoordinator, recovery 책임이 명시됐는지 확인 |
+| 예상 결과 | Gate evidence 누락 0, C01/C02/C03 적용, C14 build PASS, P3 저장 책임 인계 완료 |
+| DB/파일 확인 | DB를 열지 않으며 schema/DDL/migration 산출물이 P0에 생성되지 않았음을 확인한다. |
+| 로그 확인 | testId=P0-IT-005, gateTestId, evidencePath, decisionId, contractHash를 기록한다. |
+| 상태 확인 | ownership ambiguity 0건 |
+| 성공 기준 | 8개 Gate Test와 결정/인계 검사가 모두 충족되며 미해결 P0/P1 결함이 없다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 
@@ -1405,10 +1419,10 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 기존 기능 | 영향 원인 | 영향 가능성 | Regression Test/검증 |
 |---|---|---|---|
 | 선행 정상플레이/읽기 | 공통 DTO/이벤트/조건식확장 | 중간 | P0-RT-001;선행 golden fixture 전체 |
-| 기존 DB/소유권/저장 | 새행/인덱스/코덱/참조추가 | 높음 | P0-RT-001;구 fixture roundtrip·원래 ID/금/시간동일 |
+| 기존 DB/소유권/저장 | P0 DB 변경 없음 | 없음 | save.db/schema/DDL 생성 0건 확인; 실제 회귀는 P3 소유 |
 | 기존 모니터링/뉴스/기록 | event payload/visibility 변경 | 중간 | P0-RT-001;필드호환·중복원본0·숨은값0 |
 | 기존 Thread/Coroutine | scope/observer/비동기 adapter | 높음 | P0-RT-001;슬롯전환/취소후작업0 |
-| 기존 Transaction | 새로직의의미적원자범위확장 | 높음 | P0-RT-001;각 write cut old/new 전체일치 |
+| 기존 Transaction | in-memory SavePort 경계·single-writer 도입 | 중간 | P0-CN-001; 수락 순서·state/RNG 원자 결과 확인 |
 | 기존 장애처리 | 새 fallback/catch 추가 | 높음 | P0-RT-001;expected failure 코드유지·핵심오류무시금지 |
 
 ## 13. Phase 완료 기준 / 다음 단계 허용
@@ -1416,9 +1430,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 분류 | 조건 | 미충족시 |
 |---|---|---|
 | 필수 | 본문/원문하위규칙·결정대장·실제 코드일치·독립리뷰승인 | Gate 불가 |
-| 필수 | 모든필수 Task 구현·Unit/Component/Integration/Boundary/Exception/Failure/Regression PASS | Gate 불가 |
-| 필수 | DB/소유권/시간/RNG/세이브/가문중관련불변식·crash 복구 | 후속제품활성화불가 |
-| 필수 | 다음 Phase input DTO/codec/schema/fixture 와오류계약검증 | 다음 Phase 통합불가 |
+| 필수 | P0-TASK-021의 Gate 8개 Test PASS와 실제 command/evidence path 보존 | Gate 불가 |
+| 필수 | `WorldSession` single-writer·state/RNG 원자 결과와 cancellation/close 계약 | 후속 mutation 활성화 불가 |
+| 필수 | 다음 Phase input contract/fixture와 오류계약 검증; 실제 codec/schema/DDL/migration/recovery는 P3 인계 | 다음 Phase 통합 불가 |
 | 병렬착수허용 | 공개 interface 고정상태에서후속 UIprototype/fixture 작성 | Mock/IN_PROGRESS 표시;완료주장금지 |
 | 조건부이월 | 문구/선택표정/비필수장식/원문 선택 확장 | 담당자/대체동작/목표 Phase/승인기록필수 |
 | 이월불가 | 저장손상·중복자원·숨은정보노출·핵심소프트락·미지원 schema 파괴 | 출시및관련후속 Gate 차단 |
@@ -1429,18 +1443,20 @@ Phase Gate Task 는 **P0-TASK-021**, 결과상태는 DESIGN_REVIEW→IMPLEMENTED
 
 | Risk ID | 내용 | 발생가능성 | 영향도 | 대응/책임 | 회귀근거 |
 |---|---|---|---|---|---|
-| R-P0-01 | 기존 저장소 미제공 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P0-TASK-021 에서증거심의 | P0-RT-001 |
-| R-P0-02 | 버전 조합 미검증 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P0-TASK-021 에서증거심의 | P0-RT-001 |
-| R-P0-03 | 과도한 모듈 분리 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P0-TASK-021 에서증거심의 | P0-RT-001 |
+| R-P0-01 | Android/Gradle 소스 없음 | 확정 | 높음 | Architecture/Build 책임자가 P0 Build Manifest대로 `:app`/`:core:simulation`을 생성하고 P0-UT-002/P0-IT-002 로그를 제출 | P0-UT-002, P0-IT-002 |
+| R-P0-02 | exact 버전 resolve/compile 미검증 | 높음 | 높음 | 자동 version 변경 금지; wrapper/catalog/lock과 실패 dependency를 기록하고 환경 복구 후 동일 명령 재실행 | P0-UT-002, P0-FT-002 |
+| R-P0-03 | 논리 namespace를 빈 Gradle module로 생성 | 중간 | 높음 | settings project를 `:app`, `:core:simulation`으로 제한하고 미선언 project를 architecture 검사에서 실패 | P0-BT-002 |
+| R-P0-04 | 병렬 command의 순서/RNG 결정론 붕괴 | 중간 | 높음 | capacity 64 Channel·consumer 1개·submissionSequence·close drain 계약을 구현하고 100회 반복 검증 | P0-CN-001 |
+| R-P0-05 | P0가 P3 저장 책임을 선구현 | 중간 | 높음 | P0에서 Room/SaveCoordinator/schema/DDL/migration 파일 생성을 금지하고 인계 체크에서 검사 | P0-IT-002, P0-IT-005 |
 
 ## 15. Phase 간 연계 및 인계 계약
 
 | 구분 | 전달항목 | version/유효성 | 수신/검증 |
 |---|---|---|---|
-| 이전 Phase 에서수신 | 공통 EntityId/Time/Money,CommandEnvelope,DomainEvent,SavePort,ReadView,Fixture | sourceHash/content/balance/engine/rng/schema 일치 | 선행 Gate 와메소드 input 검증 |
-| 이 Phase 에서생성 | 본 Phase 메소드의반환 DTO/불변 Delta/PublicView·새 codec·DDL/migration·fixture | schema export 와 contract hash 를 PR 에보관 | 다음 Phase 는직접 DB 우회대신 public port 사용 |
-| 후속 Phase 로전달 | 처리결과/권위 source event/확장 handler 등록지점/실패 TypedError | 미등록 handler 는 UnsupportedFeature·이벤트보존 | 후속: P1,P2,P3 |
-| Test Fixture | 본 Phase 정상/경계/실패·RNG golden vector·save snapshot | mutable live save 공유금지;명시 fixtureVersion | 후속 Regression 에본 Phase fixture 포함 |
+| 프로젝트 입력에서 수신 | 기준 원문, manifest, C01·C02·C03·C14 결정, 저장소 상태 | sourceHash·결정상태 일치 | P0-UT-001 |
+| 이 Phase 에서 생성 | P0 Build Manifest, `:app`/`:core:simulation`, 공통 value object·Command/Event/Error·WorldSession/SavePort 계약, AppRoot, Gate evidence | build/contract hash를 같은 revision에 보관 | 후속 Phase는 공개 contract를 사용 |
+| P3로 전달 | `SavePort` 계약, `GREENFIELD_V1`, 예약 schema 경로 `core/save/schemas` | P0에는 production SavePort 구현·Room schema·DDL/migration 0건 | P3가 `:core:save`·SaveCoordinator·Room v1·복구를 구현 |
+| Test Fixture | codec golden, in-memory SavePort, controllable dispatcher, AppShellState fixture | test source 한정·fixtureVersion 명시 | 후속 Regression에 필요한 최소 fixture만 포함 |
 | 기존 코드연계 | 기존 module/DAO/SQL 발견시 adapter 와영향도 diff | 변경사유/호환성/rollback 검토 | 전면리팩토링은별도승인 |
 ## 16. 원문 상세 규칙·카탈로그·화면 부록
 

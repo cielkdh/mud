@@ -5,10 +5,18 @@
 ## 1. 중요한 해석 규칙
 
 1. 아래 Assertion은 원문을 **자동 분해한 후보**이며, 원문 문구를 임의로 의미 변경하지 않는다.
-2. `REQUIRED/RECOMMENDED/DATA/EXAMPLE/INFORMATIONAL` 분류는 문구 기반 1차 분류다. 개발 Gate에서 담당자가 승인해야 `VERIFIED_REQUIREMENT`가 된다.
+2. `REQUIRED/RECOMMENDED/DATA/EXAMPLE/INFORMATIONAL` 분류는 문구 기반 1차 분류다. 개발 Gate에서 담당자가 승인해야 `APPROVED_REQUIREMENT`가 된다.
 3. 현재 Phase의 Test ID는 기능 대표 Test다. 특정 Assertion이 실제로 그 Test에서 검증되는지 리뷰 전에는 `candidate` 관계로 취급한다.
 4. 릴리즈 시 REQUIRED/DATA Assertion은 `IMPLEMENTED + DIRECT_TEST 또는 APPROVED_MANUAL_REVIEW` 상태여야 한다.
 5. 원문과 설계 보완안이 다르면 94 결정대장을 통해 근거를 남기며 이 문서에서 원문을 몰래 수정하지 않는다.
+
+### 1.1. Phase별 Assertion 승인 Gate
+
+- 계약·fixture Task는 해당 기능의 Assertion을 검토하기 위해 먼저 착수할 수 있다.
+- 그 밖의 구현 Task를 `IN_PROGRESS`로 바꾸기 전, 활성 기능의 `REQUIRED`/`DATA` Assertion은 모두 `APPROVED_REQUIREMENT`여야 한다. 요구가 아닌 자동 후보는 결정 ID를 남기고 강도를 재분류하며, 유예할 기능은 `active_function_ids`에서 제외한다. `RECOMMENDED`는 채택한 경우에만 같은 Gate를 적용한다.
+- `EXAMPLE`/`INFORMATIONAL`은 구현 Gate 대상이 아니며 `NON_NORMATIVE_REVIEW` 상태를 유지할 수 있다.
+- authoritative save 필드는 의미가 불명확한 채 승인하거나 유예하지 않는다. 필요하면 해당 테이블·기능 자체를 결정 ID로 유예하고 물리 schema에 넣지 않는다.
+- Phase Gate에서는 채택된 `REQUIRED`/`DATA`가 `IMPLEMENTED`이고 `DIRECT_TEST` 또는 `APPROVED_MANUAL_REVIEW` 증거에 연결되었는지 확인한다.
 
 ## 2. 추출 결과 요약
 

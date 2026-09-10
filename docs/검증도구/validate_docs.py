@@ -13,6 +13,7 @@ from collections import Counter, defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import unquote
+from rebuild_status import atomic_assertions
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS: list[dict[str, object]] = []
@@ -323,8 +324,44 @@ def main() -> int:
     classification_failures, mutation_functions, function_commands, defined_commands = function_registry(contract, expected_functions)
     record('Mutation과 Query/Tool 기능 분류',classification_failures,
            f'mutation {len(mutation_functions)}개 / non-mutation {len(expected_functions-mutation_functions)}개')
+    state_machine=(ROOT/'83_전체_상태머신_설계서.md').read_text(encoding='utf-8')
+    expected_classes={function_id:'AUTHORITATIVE' for function_id in expected_functions}
+    nonmutation_section=contract.split('## 7. ',1)[1].split('## 8. ',1)[0]
+    for row in markdown_table_rows(nonmutation_section):
+        function_match=re.search(r'(FUNC-P\d+-\d+)',row[0])
+        if not function_match or len(row)<3:
+            continue
+        kind=row[1].strip('`').lower()
+        durable=row[2].lower()
+        expected_classes[function_match.group(1)]=(
+            'BUILD_ARTIFACT' if 'build 산출물' in durable else
+            'PROJECTION' if 'consumer' in kind else
+            'LIFECYCLE' if 'lifecycle' in kind else
+            'READ' if kind in ('read','compute') or 'read/' in kind else
+            'TOOL'
+        )
+    registry_section=state_machine.split('## 4. 전체 기능 상태 Registry',1)[1].split('## 5.',1)[0]
+    actual_classes={}
+    for row in markdown_table_rows(registry_section):
+        function_match=re.fullmatch(r'`(FUNC-P\d+-\d+)`',row[1]) if len(row)==5 else None
+        if function_match:
+            actual_classes[function_match.group(1)]=row[4].strip('`')
+    persistence_failures=[f'{function_id}: {actual_classes.get(function_id)} != {expected}' for function_id,expected in sorted(expected_classes.items()) if actual_classes.get(function_id)!=expected]
+    record('State Registry PersistenceClass→Command/Event 동기화',persistence_failures,
+           'AUTHORITATIVE/PROJECTION/READ/TOOL/LIFECYCLE/BUILD_ARTIFACT 6종을 84 계약에서 파생')
     screen_contract=(ROOT/'88_화면_ID_상태_Action_전이_Matrix.md').read_text(encoding='utf-8')
     screen_report=(ROOT/'99_전역기준문서_추가_정합성_검증보고서.md').read_text(encoding='utf-8')
+    nfr=(ROOT/'85_NFR_성능_용량_단말_기준서.md').read_text(encoding='utf-8')
+    balance=(ROOT/'86_밸런스_KPI_및_시뮬레이션_합격기준.md').read_text(encoding='utf-8')
+    nfr_decision=(ROOT/'94_설계보완안_및_결정대장.md').read_text(encoding='utf-8')
+    nfr_markers=('85/C19','BASELINE_V1','NOT_RUN','86','PROVISIONAL/설계 보완안')
+    record('NFR 승인 상태 동기화',
+           [marker+' 누락' for marker in nfr_markers if marker not in screen_report]
+           + ['85: '+marker+' 누락' for marker in ('C19','BASELINE_V1','NOT_RUN') if marker not in nfr]
+           + ['94 C19: '+marker+' 누락' for marker in ('C19','BASELINE_V1','NOT_RUN') if marker not in nfr_decision]
+           + (['86: PROVISIONAL 누락'] if 'PROVISIONAL/설계 보완안' not in balance else [])
+           + (['85/86 일괄 PROVISIONAL 문구 잔존'] if '85/86의 신규 정량 수치는' in screen_report else []),
+           '85/C19=BASELINE_V1·실측 NOT_RUN, 86 신규 정량 규칙=PROVISIONAL')
     navigation_failures, action_failures, referenced_commands, screen_count = screen_contract_checks(screen_contract, expected_functions, mutation_functions, function_commands, defined_commands)
     if manifest.get('screen_count') != screen_count:
         action_failures.append(f'document_manifest screen_count {manifest.get("screen_count")} != {screen_count}')
@@ -354,10 +391,22 @@ def main() -> int:
     master_failures += [name+': Early Playable Gate 누락' for name,text in early_sources.items() if 'Early Playable Gate' not in text]
     record('마스터 Early Playable Gate·절 번호 동기화', master_failures, 'P6 기존 Gate/Test 재사용; 마스터 절 1..13')
     p3_body=(ROOT/by_phase[3]['file']).read_text(encoding='utf-8')
+    p23_body=(ROOT/by_phase[23]['file']).read_text(encoding='utf-8')
     p21_body=(ROOT/by_phase[21]['file']).read_text(encoding='utf-8')
     p22_body=(ROOT/by_phase[22]['file']).read_text(encoding='utf-8')
     p25_body=(ROOT/by_phase[25]['file']).read_text(encoding='utf-8')
     schema_registry=(ROOT/'관리데이터/schema_registry.json').read_text(encoding='utf-8')
+    schema_objects=json.loads(schema_registry)
+    dictionary=(ROOT/'81_전체_데이터사전.md').read_text(encoding='utf-8')
+    data_contract_markers=('Meaning','Unit','Enum/code set','Range/check','Default/nullability','Writer','Reader','Lifecycle/delete rule','Retention/hash/codec scope')
+    alias_failures=[f'{alias}: {schema_objects.get(alias,{}).get("alias")} != {target}' for alias,target in (('storage','storage_location'),('wallet','money_account')) if schema_objects.get(alias,{}).get('alias')!=target]
+    alias_failures += [marker+' 누락' for marker in data_contract_markers if marker not in dictionary]
+    for alias,target in (('storage','storage_location'),('wallet','money_account')):
+        alias_block=dictionary.split(f'. `{alias}`',1)[1].split('### 3.',1)[0]
+        if f'공통 alias → `{target}`' not in alias_block or '비물리 alias. Entity/DAO/table 생성 금지.' not in alias_block:
+            alias_failures.append(f'{alias}: 데이터사전 alias/비물리 계약 누락')
+    record('Data Dictionary authoritative 필드·alias 계약',alias_failures,
+           'authoritative save 9개 속성 선확정; storage→storage_location, wallet→money_account는 비물리 alias')
     save_boundary_sources={
         'Command/Event 계약': contract,
         'P3 상세설계': p3_body,
@@ -402,10 +451,11 @@ def main() -> int:
         '| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 |',
         '| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 |',
     )
+    expected_responsibility_rows=len(features)-len(by_phase[0]['features'])
     component_failures=[pattern for pattern in obsolete_patterns if re.search(pattern, phase_text, re.M)]
-    component_failures += [f'{row}: {phase_text.count(row)} != {len(features)}' for row in responsibility_rows if phase_text.count(row)!=len(features)]
+    component_failures += [f'{row}: {phase_text.count(row)} != {expected_responsibility_rows}' for row in responsibility_rows if phase_text.count(row)!=expected_responsibility_rows]
     record('기능별 기계적 Port/Validator/Projection 제거', component_failures,
-           f'{len(features)}개 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용')
+           f'P0 기반 기능 4개를 제외한 {expected_responsibility_rows}개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용')
     allowlist_sources={
         '마스터': master,
         'P0 상세설계': p0_body,
@@ -417,25 +467,32 @@ def main() -> int:
     }
     record('전체 모듈 허용 의존성 allowlist 계약',
            [name+': allowlist/금지 edge 계약 누락' for name,text in allowlist_sources.items()
-            if 'allowlist' not in text and not ('금지 edge' in text and '허용 edge' in text)],
+            if 'allowlist' not in text and not ('금지 edge' in text and any(marker in text for marker in ('허용 edge', '정상 edge')))],
            '표 밖 내부 edge, core→feature/app, feature→feature, simulation→Android/Room/Compose/네트워크 금지')
-    ownership_sources={
+    p0_ownership_sources={
         '마스터': master,
         'P0 상세설계': p0_body,
         'Command/Event 계약': contract,
-        'P3 상세설계': p3_body,
-        'functions.json': ''.join(by_func['FUNC-P0-002']['rules'])+by_func['FUNC-P3-001']['method']+''.join(by_func['FUNC-P3-001']['rules']),
-        'phases.json': ''.join(next(x for x in by_phase[0]['features'] if x['id']=='FUNC-P0-002')['rules'])+next(x for x in by_phase[3]['features'] if x['id']=='FUNC-P3-001')['method'],
-        'tasks.json': by_task['P0-TASK-007']['detail']+by_task['P3-TASK-001']['detail'],
+        'functions.json': ''.join(by_func['FUNC-P0-002']['rules']),
+        'phases.json': ''.join(next(x for x in by_phase[0]['features'] if x['id']=='FUNC-P0-002')['rules']),
+        'tasks.json': by_task['P0-TASK-007']['detail']+by_task['P0-TASK-011']['detail'],
     }
-    ownership_markers=('WorldSession', 'SavePort', 'SaveCoordinator', ':core:simulation', ':core:save', ':tools:headless')
-    ownership_failures=[name+': '+marker+' 누락' for name,text in ownership_sources.items() for marker in ownership_markers if marker not in text]
+    p3_ownership_sources={
+        '마스터': master,
+        'P3 상세설계': p3_body,
+        'Command/Event 계약': contract,
+        'functions.json': by_func['FUNC-P3-001']['method']+''.join(by_func['FUNC-P3-001']['rules']),
+        'phases.json': next(x for x in by_phase[3]['features'] if x['id']=='FUNC-P3-001')['method']+''.join(next(x for x in by_phase[3]['features'] if x['id']=='FUNC-P3-001')['rules']),
+        'tasks.json': by_task['P3-TASK-001']['detail'],
+    }
+    ownership_failures=[name+': '+marker+' 누락' for name,text in p0_ownership_sources.items() for marker in ('WorldSession', 'SavePort', ':core:simulation', ':app') if marker not in text]
+    ownership_failures += [name+': '+marker+' 누락' for name,text in p3_ownership_sources.items() for marker in ('SaveCoordinator', ':core:save') if marker not in text]
     if 'internal SaveCoordinator.commit' in by_func['FUNC-P3-001']['method'] or 'internal SaveCoordinator.commit' in next(x for x in by_phase[3]['features'] if x['id']=='FUNC-P3-001')['method']:
         ownership_failures.append('관리데이터: WorldEngine→SaveCoordinator 구체 의존 잔존')
-    boundary_test='\n'.join(str(by_test[test_id].get(key,'')) for test_id in ('P0-BT-002','P0-IT-002') for key in ('input','expected','precondition','steps','logs','success'))
-    ownership_failures += ['P0 경계 Test: '+marker+' 누락' for marker in ('WorldSession', 'SavePort', 'WorldEngine', 'SaveCoordinator', 'forbiddenSymbol', ':tools:headless') if marker not in boundary_test]
+    boundary_test='\n'.join(str(by_test[test_id].get(key,'')) for test_id in ('P0-BT-002','P0-IT-002') for key in ('input','expected','precondition','steps','db','logs','success'))
+    ownership_failures += ['P0 경계 Test: '+marker+' 누락' for marker in ('forbiddenSymbol', 'Gradle', 'applicationId', 'Room schema') if marker not in boundary_test]
     record('WorldSession·SavePort 물리 소유와 조립 루트', ownership_failures,
-           ':core:simulation 계약→:core:save 구현; feature 직접 우회 금지; :app/:tools:headless만 조립')
+           'P0 :app/:core:simulation 계약; P3 :core:save/SaveCoordinator 구현; headless는 P23/P25까지 유예')
     decision_doc=(ROOT/'94_설계보완안_및_결정대장.md').read_text(encoding='utf-8')
     schedule=(ROOT/'95_일정_및_검토운영.md').read_text(encoding='utf-8')
     decisions_text=(ROOT/'관리데이터/decisions.json').read_text(encoding='utf-8')
@@ -444,6 +501,56 @@ def main() -> int:
            [name+': P0/추적/활성화 계약 누락' for name,text in activation_sources.items()
             if 'P0' not in text or '추적' not in text or '활성' not in text],
            '672개 Task는 추적 후보; 파일/API/담당/명령/증거/결정과 P0 lock 전에는 P1~P25 비활성')
+    assertions=atomic_assertions()
+    active_functions={function_id for phase in phases for function_id in phase.get('active_function_ids', [])}
+    approved_states={'APPROVED_REQUIREMENT','IMPLEMENTED','VERIFIED'}
+    pending_by_function={function_id:[row for row in assertions if row['function']==function_id and row['modality'] in ('REQUIRED','DATA') and row['status'] not in approved_states] for function_id in active_functions}
+    atomic_failures=[] if len(assertions)==manifest['atomic_assertion_count'] else [f'Atomic parse count {len(assertions)} != {manifest["atomic_assertion_count"]}']
+    atomic_failures += [task['id']+': 미승인 REQUIRED/DATA 상태에서 '+task['status'] for task in tasks if task['function'] in active_functions and task['stage']!='계약' and task['status'] in ('IN_PROGRESS','DONE') and pending_by_function.get(task['function'])]
+    atomic_failures += [task['id']+': 계약 Task 완료 조건에 Assertion Gate 누락' for task in tasks if task['function'] in active_functions and task['stage']=='계약' and not all(marker in task['detail']+task['done'] for marker in ('REQUIRED/DATA','결정'))]
+    atomic_failures += ['P0-UT-001: '+marker+' 누락' for marker in ('APPROVED_REQUIREMENT','Assertion Gate') if marker not in ''.join(str(by_test['P0-UT-001'].get(key,'')) for key in ('input','expected','steps','state','success'))]
+    record('Phase별 Atomic Assertion 승인 Gate',atomic_failures,
+           f'{len(assertions)}개 파싱; 계약 Task만 선착수, 후속 구현은 active REQUIRED/DATA 승인 필요')
+    candidate_tasks=[task for task in tasks if task['function'] in active_functions and task['status']=='NOT_STARTED' and not task.get('blocked_by') and all(by_task[dependency]['status']=='DONE' for dependency in task['depends'])]
+    context_ready=[task for task in candidate_tasks if task['stage']=='계약' or not pending_by_function.get(task['function'])]
+    context_failures=[]
+    for task in context_ready:
+        pack=ROOT/'작업컨텍스트'/f"{task['id']}.md"
+        if not pack.is_file():
+            context_failures.append(task['id']+': 작업 컨텍스트 없음')
+            continue
+        pack_text=pack.read_text(encoding='utf-8')
+        context_failures += [task['id']+': '+marker+' 누락' for marker in (task['id'],task['function'],'REQUIRED/DATA Atomic Assertions','Command/Event 계약','권위 문서') if marker not in pack_text]
+        if '## 16.' in pack_text:
+            context_failures.append(task['id']+': 원문 부록이 작업 컨텍스트에 포함됨')
+    record('착수 가능 Task Context Pack',context_failures,
+           f'{len(context_ready)}개 ready Task에 계약·Test·Assertion·Schema·Command/Event 요약 제공')
+    early_markers=('P2','P3','P6','P8','P12','P14','P17','P23','최초 발견')
+    early_failures=['95: '+marker+' 누락' for marker in early_markers[:-1] if marker not in schedule]
+    early_failures += ['P23: '+marker+' 누락' for marker in early_markers if marker not in p23_body]
+    spike_markers=('save→process kill→recovery','restore 중 kill','storage full','WAL 존재','candidate DB swap 중 kill','손상 generation','save.previous.db')
+    early_failures += ['P3 spike: '+marker+' 누락' for marker in spike_markers if marker not in p3_body]
+    record('조기 Property/Fuzz/Recovery 검증 소유권',early_failures,
+           'P2/P3/P6/P8/P12/P14/P17이 최초 검증, P23은 통합·shrink/repro')
+    expected_p0_gate={'P0-UT-001','P0-UT-002','P0-BT-002','P0-BT-003','P0-CT-003','P0-CN-001','P0-CT-004','P0-IT-002'}
+    rebuild_status=(ROOT/'검증도구/rebuild_status.py').read_text(encoding='utf-8')
+    p0_baseline_failures=[]
+    if by_phase[0]['modules'] != 'Gradle root / :app / :core:simulation':
+        p0_baseline_failures.append('P0 물리 module 집합 불일치')
+    if set(by_phase[0].get('active_function_ids', [])) != {'FUNC-P0-001','FUNC-P0-002'}:
+        p0_baseline_failures.append('P0 active_function_ids 불일치')
+    if set(by_task['P0-TASK-021']['tests']) != expected_p0_gate or len(by_task['P0-TASK-021']['tests']) != len(expected_p0_gate):
+        p0_baseline_failures.append('P0 Gate Test가 정확히 8개가 아님')
+    p0_task_plan_lines=task_plan.splitlines()
+    for task in (item for item in tasks if item['phase']==0):
+        if not any(f'[{task["id"]}](' in line and f'| {task["module"]} |' in line and f'| {task["done"]} |' in line for line in p0_task_plan_lines):
+            p0_baseline_failures.append(task['id']+': 전체 Task의 module/완료 기준 불일치')
+    if 'C01~C06' in by_phase[0]['gate'] or 'C01~C06' in by_task['P0-TASK-021']['detail']:
+        p0_baseline_failures.append('C04~C06이 P0 Gate에 잔존')
+    if 'ACTIVE_FUNCTIONS' in rebuild_status:
+        p0_baseline_failures.append('rebuild_status.py에 활성 기능 hardcode 잔존')
+    record('P0 최소 물리 모듈·활성·Gate 기준선', p0_baseline_failures,
+           ':app/:core:simulation, active FUNC-P0-001/002, Gate Test 8개, C01/C02/C03+C14')
     p3_feature=by_func['FUNC-P3-004']
     p25_feature=by_func['FUNC-P25-002']
     phase3_feature=next(x for x in by_phase[3]['features'] if x['id']=='FUNC-P3-004')
@@ -466,10 +573,16 @@ def main() -> int:
     record('실제 증거 기반 SchemaBaselineMode', baseline_failures,
            'GREENFIELD_V1은 최초 v1·migration 0개; LEGACY_CHAIN은 실제 exported schema/DB fixture만 사용')
     critical_test_markers={
+        'P0-UT-001': ('sourceHash', 'decisionId', 'APPROVED_REQUIREMENT'),
+        'P0-UT-002': ('javaVersion', 'Gradle'),
         'P0-BT-002': ('forbiddenSymbol', 'Gradle'),
-        'P0-IT-002': ('WorldSession.execute', '운영 DB'),
+        'P0-BT-003': ('boundary', 'JUnit'),
+        'P0-CT-003': ('codecId', 'golden'),
+        'P0-CN-001': ('submissionSequence', 'capacity 64'),
+        'P0-CT-004': ('semantics', '48dp'),
+        'P0-IT-002': ('applicationId', 'Room schema'),
         'P3-FT-001': ('BEFORE_RNG_WRITE', '새 connection'),
-        'P3-IT-004': ('sourceSchemaHash', ':tools:headless'),
+        'P3-IT-004': ('sourceSchemaHash', ':core:save'),
         'P6-IT-007': ('WorldSession.execute', '같은 commandId'),
         'P22-CT-004': ('lifecycle', 'effectId'),
         'P25-IT-002': ('EventCodecId', 'projectionHash'),

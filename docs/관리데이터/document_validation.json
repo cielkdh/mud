@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-09T12:51:58+09:00",
+  "executed_at": "2026-09-10T10:34:11+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -81,6 +81,18 @@
       "failures": []
     },
     {
+      "name": "State Registry PersistenceClass→Command/Event 동기화",
+      "status": "PASS",
+      "detail": "AUTHORITATIVE/PROJECTION/READ/TOOL/LIFECYCLE/BUILD_ARTIFACT 6종을 84 계약에서 파생",
+      "failures": []
+    },
+    {
+      "name": "NFR 승인 상태 동기화",
+      "status": "PASS",
+      "detail": "85/C19=BASELINE_V1·실측 NOT_RUN, 86 신규 정량 규칙=PROVISIONAL",
+      "failures": []
+    },
+    {
       "name": "기본 Bottom Navigation 5탭",
       "status": "PASS",
       "detail": "홈/던전/파티/도시/기록",
@@ -89,13 +101,19 @@
     {
       "name": "Screen Action→Mutation 계약 연결",
       "status": "PASS",
-      "detail": "49개 Screen / 32개 Command ID 참조",
+      "detail": "56개 Screen / 36개 Command ID 참조",
       "failures": []
     },
     {
       "name": "마스터 Early Playable Gate·절 번호 동기화",
       "status": "PASS",
       "detail": "P6 기존 Gate/Test 재사용; 마스터 절 1..13",
+      "failures": []
+    },
+    {
+      "name": "Data Dictionary authoritative 필드·alias 계약",
+      "status": "PASS",
+      "detail": "authoritative save 9개 속성 선확정; storage→storage_location, wallet→money_account는 비물리 alias",
       "failures": []
     },
     {
@@ -113,7 +131,7 @@
     {
       "name": "기능별 기계적 Port/Validator/Projection 제거",
       "status": "PASS",
-      "detail": "111개 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용",
+      "detail": "P0 기반 기능 4개를 제외한 107개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용",
       "failures": []
     },
     {
@@ -125,13 +143,37 @@
     {
       "name": "WorldSession·SavePort 물리 소유와 조립 루트",
       "status": "PASS",
-      "detail": ":core:simulation 계약→:core:save 구현; feature 직접 우회 금지; :app/:tools:headless만 조립",
+      "detail": "P0 :app/:core:simulation 계약; P3 :core:save/SaveCoordinator 구현; headless는 P23/P25까지 유예",
       "failures": []
     },
     {
       "name": "P0 우선 구현 활성화 Gate",
       "status": "PASS",
       "detail": "672개 Task는 추적 후보; 파일/API/담당/명령/증거/결정과 P0 lock 전에는 P1~P25 비활성",
+      "failures": []
+    },
+    {
+      "name": "Phase별 Atomic Assertion 승인 Gate",
+      "status": "PASS",
+      "detail": "21443개 파싱; 계약 Task만 선착수, 후속 구현은 active REQUIRED/DATA 승인 필요",
+      "failures": []
+    },
+    {
+      "name": "착수 가능 Task Context Pack",
+      "status": "PASS",
+      "detail": "2개 ready Task에 계약·Test·Assertion·Schema·Command/Event 요약 제공",
+      "failures": []
+    },
+    {
+      "name": "조기 Property/Fuzz/Recovery 검증 소유권",
+      "status": "PASS",
+      "detail": "P2/P3/P6/P8/P12/P14/P17이 최초 검증, P23은 통합·shrink/repro",
+      "failures": []
+    },
+    {
+      "name": "P0 최소 물리 모듈·활성·Gate 기준선",
+      "status": "PASS",
+      "detail": ":app/:core:simulation, active FUNC-P0-001/002, Gate Test 8개, C01/C02/C03+C14",
       "failures": []
     },
     {
@@ -179,7 +221,7 @@
     {
       "name": "로컬 Markdown 링크·명시적 anchor",
       "status": "PASS",
-      "detail": "8104개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
+      "detail": "8167개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
       "failures": []
     },
     {
@@ -256,7 +298,7 @@
     }
   ],
   "summary": {
-    "PASS": 42
+    "PASS": 49
   },
   "game_test_execution": "NOT_RUN"
 }

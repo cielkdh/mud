@@ -17,6 +17,8 @@ data class CommandEnvelope<P : WorldCommandPayload>(
 
 필수 규칙: 동일 epoch/commandId/동일 payload는 이전 receipt 반환, 같은 ID/다른 payload는 `IdempotencyKeyReuse`, stale epoch는 `StaleSession`, expectedVersion 불일치는 재계산 없이 거절한다.
 
+`payloadHash`는 호출자가 임의로 채우는 문자열이 아니다. `CommandPayloadCodec.v1`이 payload를 UTF-8 canonical JSON으로 직렬화한 바이트의 SHA-256 소문자 hex다. 객체 key는 Unicode code point 오름차순, 배열은 의미 순서 유지, 문자열은 NFC, 정수는 부호 있는 10진수(선행 0 없음), enum/ID는 계약의 canonical name, `null`은 명시 필드에만 허용한다. float/NaN/Infinity, map의 비문자 key, 로케일 의존 형식은 payload에 금지한다. hash 입력은 `"CMDPAYLOAD\u0000" + codecId + "\u0000" + canonicalPayloadBytes`이며 `codecId`도 receipt에 포함된 `result_json`의 metadata로 보존한다. 서버나 UI가 보낸 hash는 신뢰하지 않고 UseCase 경계에서 재계산한다.
+
 ## 2. DomainEvent
 
 ```kotlin
@@ -42,6 +44,14 @@ data class DomainEvent<E : DomainEventPayload>(
 
 연대기/통계/dirty registration은 Event consumer가 처리할 수 있으나, Event가 authoritative mutation을 재실행하여 이중 효과를 만들면 안 된다.
 
+### 2.1. `StateHash.v1` 범위와 직렬화
+
+`stateHash`는 매 command의 DB row_version 대체물이 아니라 결정론·복원 동등성 검증값이다. `schema_registry.json`에서 `save` store의 **권위 게임 상태**로 분류된 current row와 `rng_state`를 포함하고, `command_receipt`, `world_event`, `save_generation`, `checkpoint_chunk`, `generation_chunk`, `save_slot`, `migration_history`, `recovery_journal`, 검색/통계 projection, 캐시, UI preference, `row_version`, 현실시각, 기존 `world_state.state_hash`는 제외한다. 포함/제외 분류가 없는 새 save 객체는 schema 검증을 실패시킨다.
+
+canonical stream은 `STATEHASH.v1\n` 뒤에 table name UTF-8 오름차순, 각 table의 PK tuple 오름차순, 물리 column name 오름차순으로 `(type-tag, byte-length u32 big-endian, value-bytes)`를 이어 붙인다. 정수는 signed 64-bit big-endian, Boolean은 0/1 한 byte, 문자열은 NFC UTF-8, BLOB은 원바이트, null은 별도 tag다. 각 domain codec의 JSON/AST는 저장 문자열이 아니라 해당 codec의 canonical bytes를 사용한다. 구현 전 golden fixture가 이 byte stream과 SHA-256을 함께 고정한다.
+
+v1은 복잡한 증분 Merkle 구조를 도입하지 않는다. 일반 command는 `stateVersion`만 증가시키고, `stateHash`는 명시적 checkpoint, load/restore, 결정론 Test, crash-cut 검증에서 전체 스캔으로 계산한다. MIN 단말의 100년 fixture에서 checkpoint hash가 500ms를 넘는다는 실측이 있을 때만 같은 canonical leaf 규칙을 유지한 증분 cache를 별도 ADR로 추가한다.
+
 ## 3. Command 처리 파이프라인
 
 ```mermaid
@@ -66,18 +76,24 @@ sequenceDiagram
     PR-->>UI: UiState
 ```
 
-`CommandEnvelope`는 UI/스케줄러가 시작하는 application UseCase 경계에서 한 번만 생성하고 `WorldSession.execute`로 제출한다. `WorldSession`·`WorldEngine`·순수 Kotlin `SavePort` 계약은 `:core:simulation`이 소유한다. `:core:save`의 `SaveCoordinator`는 `SavePort` 구현이며 `WorldEngine`은 이 구체 타입이나 Room을 참조하지 않는다. `:app`과 `:tools:headless`가 각각 같은 계약을 조립한다. SaveCoordinator는 envelope를 새로 만들거나 `commandId`를 바꾸지 않고 바깥 command의 Delta/Event/receipt를 원자적으로 저장하며, 내부 저장 호출은 별도의 COMMITTED/REJECTED Event나 receipt를 만들지 않는다.
+`CommandEnvelope`는 UI/스케줄러가 시작하는 application UseCase 경계에서 한 번만 생성하고 `WorldSession.execute`로 제출한다. `WorldSession`·`WorldEngine`·순수 Kotlin `SavePort` 계약은 `:core:simulation`이 소유한다. P0 조립 루트는 `:app`만이며, P3에서 `:core:save`의 `SaveCoordinator`가 `SavePort`를 구현한다. `:tools:headless`는 P23/P25에서 독립 실행 요구가 확인될 때만 동일 계약을 조립한다. SaveCoordinator는 envelope를 새로 만들거나 `commandId`를 바꾸지 않고 `DomainDelta`를 persistence plan으로 변환한다. 일반 command는 envelope당 receipt 1개와 write transaction 1개다. 시간 진행처럼 중간 내구 경계가 제품 요구인 **resumable command**만 같은 receipt row를 `RUNNING → COMMITTED|INTERRUPTED`로 갱신하는 여러 bounded segment commit을 허용하며, segment별 receipt/CommandEnvelope는 만들지 않는다.
+
+권위 상태 쓰기는 capacity 64 `Channel<QueuedCommand>` 하나와 consumer 하나로만 실행한다. enqueue 완료 시 부여한 `submissionSequence`가 수락 순서다. enqueue 전 caller 취소는 명령을 취소하지만 수락 후 caller 취소는 권위 실행을 취소하지 않는다. close는 새 명령을 거절하고 이미 수락한 항목을 drain한 뒤 consumer를 join한다. 이 경로 밖의 병렬 authoritative mutation은 금지한다.
+
+`DomainDelta`는 typed aggregate change, 새 RNG state/counter, typed DomainEvent payload, command result만 포함한다. table name, DAO, SQL, `dirtyRows[]`를 포함하지 않는다. SaveCoordinator의 mapper가 DomainDelta를 current row 변경과 dirty shard key로 변환하므로 `:core:simulation`은 저장 구조를 모른다.
+
+도메인 guard 거절은 권위 상태/RNG를 바꾸지 않는 receipt-only transaction으로 `REJECTED` receipt를 먼저 확정한 뒤, 필요할 때만 같은 transaction의 `SYSTEM` visibility failure DomainEvent를 기록한다. Registry의 Failure Event는 이 **결정론적 도메인 거절**에만 해당한다. malformed envelope, `StaleSession`, `IdempotencyKeyReuse`, 인증/정보노출 위험, DB/파일/프로세스 실패는 신뢰 가능한 receipt/Event를 만들 수 없으므로 typed 응답·로컬 진단만 남긴다. 따라서 모든 `world_event`는 COMMITTED 또는 REJECTED receipt를 FK로 가지며 커밋 전에 publish되지 않는다.
 
 ```kotlin
 data class PublicSnapshot<V : PublicView>(
     val sessionEpoch: SessionEpoch,
     val stateVersion: StateVersion,
-    val generationId: GenerationId,
+    val checkpointGenerationId: GenerationId?,
     val payload: V
 )
 ```
 
-ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVersion`을 단조 증가시킨다. 동일 version 재수신은 멱등 허용하고 더 낮은 version은 버린다. 슬롯/세션 전환 시 이전 collector를 취소하며 `generationId`는 durable saved state와 복구 출처를 식별한다.
+ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVersion`을 단조 증가시킨다. 동일 version 재수신은 멱등 허용하고 더 낮은 version은 버린다. 슬롯/세션 전환 시 이전 collector를 취소하며 `checkpointGenerationId`는 가장 최근 완전 checkpoint와 복구 출처만 식별한다. 일반 command commit이 SaveGeneration을 만들었다는 뜻으로 사용하지 않는다.
 
 ## 4. 원문에서 직접 제시된 WorldCommand 예
 
@@ -106,16 +122,30 @@ ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVers
 
 ## 6. Capability-level Mutation Registry — 설계 보완안
 
-> 아래 Registry ID는 `WorldSession`이 접수하고 WorldEngine이 `SavePort`를 통해 receipt와 함께 commit하는 **외부 mutation 경계**다. `Payload/메소드 계약`이 순수 계산으로 Delta/Plan을 만들더라도 메소드 호출마다 receipt를 쓰지 않고, 이를 호출한 바깥 CommandEnvelope당 한 번만 원자 commit한다. read/compute/tool/lifecycle/event consumer와 `SaveCoordinator` 구현은 7절 계약을 따르며 별도 CommandEnvelope·command receipt·COMMITTED/REJECTED Event를 만들지 않는다. 실제 UI 명령이 더 세분화될 경우 동일 Function namespace 아래 subtype을 추가한다.
+> 아래 표는 capability namespace와 대표 계산 메소드를 함께 추적한다. **표의 모든 메소드가 외부 CommandEnvelope 경계라는 뜻은 아니다.** UI/스케줄러가 시작하는 `EXTERNAL` wrapper만 receipt를 만들고, `INTERNAL` 계산은 그 wrapper의 DomainDelta에 합쳐진다. read/compute/tool/lifecycle/event consumer와 `SaveCoordinator` 구현은 7절 계약을 따르며 별도 CommandEnvelope·command receipt·COMMITTED/REJECTED Event를 만들지 않는다. 실제 UI 명령이 더 세분화될 경우 동일 Function namespace 아래 sealed payload subtype을 추가한다.
+
+### 6.1. 경계 분류 override
+
+| Capability | 분류 | receipt 소유 외부 경계 |
+|---|---|---|
+| CMD-P2-F001 | `PROTOCOL` | 다른 모든 외부 command를 접수하는 facade 자체이며 독립 gameplay command가 아니다. |
+| CMD-P2-F002 | `INTERNAL` | 전투/시간 외부 command가 `TimeRngKernel` 결과를 포함한다. |
+| CMD-P3-F002, CMD-P3-F004 | `INTERNAL` | 수동/자동 checkpoint, load/import 외부 command가 generation/migration 계산을 포함한다. |
+| CMD-P6-F001, CMD-P6-F003, CMD-P6-F004 | `INTERNAL` | `StartCombat`/`ChooseRetreat`/자동 전투 외부 command의 combat step이다. |
+| CMD-P7-F001~CMD-P7-F004 | `INTERNAL` | 전투·던전 외부 command 안의 AI/phase/encounter 계산이다. |
+| CMD-P8-F002, CMD-P8-F003 | `INTERNAL` | `EnterDungeon`/던전 생성 외부 command 안의 배치 계산이다. |
+| 그 밖의 `CMD-*` | `EXTERNAL_NAMESPACE` | 대표 메소드를 직접 노출하지 않고 UI/스케줄러 의도를 sealed payload subtype으로 정의한다. |
+
+`INTERNAL` 항목의 Registry Completion/Failure Event 이름은 독립 receipt 결과가 아니라 외부 command에 포함될 수 있는 typed domain outcome 식별자다. 구현 lock 시 독립 command로 승격하려면 사용자/스케줄러 trigger, 멱등키, transaction, UX 실패 표면을 함께 추가해야 한다.
 
 | Command ID | Phase | Function | Payload/메소드 계약 | Tables | Transaction | Completion Event | Failure Event |
 |---|---|---|---|---|---|---|---|
 | `CMD-P2-F001` | P2 | `FUNC-P2-001` 단일 작성자 명령 처리 | `WorldEngine.execute(envelope: CommandEnvelope) -> CommandResult` | world_state, command_receipt, world_event, rng_state | authoritative 변경+receipt 원자 처리 | `EVT-P2-F001-COMMITTED` | `EVT-P2-F001-REJECTED` |
 | `CMD-P2-F002` | P2 | `FUNC-P2-002` 게임 달력·잔여 밀리초·RNG 스트림 | `TimeRngKernel.advanceCombat(ms: CombatMillis, clock: WorldClock) -> ClockDelta` | world_state, rng_state | authoritative 변경+receipt 원자 처리 | `EVT-P2-F002-COMMITTED` | `EVT-P2-F002-REJECTED` |
 | `CMD-P2-F003` | P2 | `FUNC-P2-003` 예약·점유·자원 선점 | `ScheduleService.reserve(request: ScheduleRequest, calendar: OccupancyView) -> ReservationDelta` | scheduled_action, occupancy, resource_reservation | authoritative 변경+receipt 원자 처리 | `EVT-P2-F003-COMMITTED` | `EVT-P2-F003-REJECTED` |
-| `CMD-P2-F004` | P2 | `FUNC-P2-004` 이벤트 경계 시간진행·자동중단 | `TimeAdvanceEngine.advance(request: TimeAdvanceRequest) -> AdvanceResult` | world_state, scheduled_action, time_advance_state, world_event | authoritative 변경+receipt 원자 처리 | `EVT-P2-F004-COMMITTED` | `EVT-P2-F004-REJECTED` |
-| `CMD-P3-F001` | P3 | `FUNC-P3-001` 명시적 체크포인트·자동 저장 요청 | `WorldSession.execute(CheckpointWorld(...)) -> CommandResult`; WorldEngine이 `SavePort.commit` 1회 호출 | world_state, command_receipt, world_event, rng_state, save_generation | 바깥 command의 변경+receipt만 원자 처리; SaveCoordinator 내부 receipt/Event 없음 | `EVT-P3-F001-COMMITTED` | `EVT-P3-F001-REJECTED` |
-| `CMD-P3-F002` | P3 | `FUNC-P3-002` 복원 가능한 세대·슬롯·불변 청크 | `GenerationStore.create(snapshot: WorldSnapshot, parent: GenerationId?) -> GenerationManifest` | save_generation, save_slot, checkpoint_chunk, generation_chunk | authoritative 변경+receipt 원자 처리 | `EVT-P3-F002-COMMITTED` | `EVT-P3-F002-REJECTED` |
+| `CMD-P2-F004` | P2 | `FUNC-P2-004` 이벤트 경계 시간진행·자동중단 | 외부 `AdvanceTime`; 내부 `TimeAdvanceEngine.advance/nextSegment` | world_state, scheduled_action, time_advance_state, world_event, command_receipt | 외부 receipt 1개를 segment transaction마다 RUNNING→terminal 갱신; segment별 receipt 없음 | `EVT-P2-F004-COMMITTED` | `EVT-P2-F004-REJECTED` |
+| `CMD-P3-F001` | P3 | `FUNC-P3-001` 명시적 checkpoint·새 슬롯 bootstrap | `SaveCommand = CheckpointWorld | CreateNewWorld`; `SavePort.checkpoint` 1회 | world_state, command_receipt, rng_state, save_generation, save_slot | frozen current snapshot의 완전 generation+receipt; 이전 mutation 재적용 없음 | `EVT-P3-F001-COMMITTED` | `EVT-P3-F001-REJECTED` |
+| `CMD-P3-F002` | P3 | `FUNC-P3-002` 복원 가능한 세대·슬롯·불변 청크 | 내부 `GenerationStore.create(snapshot, parent) -> GenerationManifest` | save_generation, save_slot, checkpoint_chunk, generation_chunk | P3-F001/P3-F003/P3-F005 내부 persistence plan; 독립 receipt 없음 | `EVT-P3-F002-COMMITTED` | `EVT-P3-F002-REJECTED` |
 | `CMD-P3-F003` | P3 | `FUNC-P3-003` 전투·장기진행·대화 복구 | `RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession` | recovery_checkpoint, time_advance_state, dialogue_session | authoritative 변경+receipt 원자 처리 | `EVT-P3-F003-COMMITTED` | `EVT-P3-F003-REJECTED` |
 | `CMD-P3-F004` | P3 | `FUNC-P3-004` 마이그레이션·콘텐츠 호환 | `MigrationPlanner.migrate(source: SaveArchive, target: SchemaVersion) -> MigrationResult` | migration_history, save_generation, content_binding | authoritative 변경+receipt 원자 처리 | `EVT-P3-F004-COMMITTED` | `EVT-P3-F004-REJECTED` |
 | `CMD-P3-F005` | P3 | `FUNC-P3-005` 오프라인 Export·Import·아카이브 보호 | `SaveArchiveService.importArchive(input: LocalDocument) -> NewSlotResult` | save_slot, save_generation, recovery_journal | authoritative 변경+receipt 원자 처리 | `EVT-P3-F005-COMMITTED` | `EVT-P3-F005-REJECTED` |
@@ -194,10 +224,10 @@ ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVers
 
 | Function | 종류 | 변경 허용 | 규칙 |
 |---|---|---|---|
-| `FUNC-P0-001` 원문 기준선과 충돌 판정 | `tool` | 아니오 | live save.db hash 불변, 필요한 경우 artifact 저장소에만 결과 기록 |
-| `FUNC-P0-002` 빌드·모듈·기술버전 고정 | `tool` | 아니오 | live save.db hash 불변, 필요한 경우 artifact 저장소에만 결과 기록 |
-| `FUNC-P0-003` 공통 타입·명령·오류·이벤트 계약 | `tool` | 아니오 | live save.db hash 불변, 필요한 경우 artifact 저장소에만 결과 기록 |
-| `FUNC-P0-004` 최소 검증 하네스·공통 UI 껍데기 | `tool` | 아니오 | live save.db hash 불변, 필요한 경우 artifact 저장소에만 결과 기록 |
+| `FUNC-P0-001` 원문 기준선과 충돌 판정 | `tool` | 아니오 | 문서/관리 JSON 읽기 전용; 검증 artifact만 기록 |
+| `FUNC-P0-002` 빌드·모듈·기술버전 고정 | `tool` | 아니오 | Gradle build output/lock/report만 기록; 게임 DB 사용 안 함 |
+| `FUNC-P0-003` 공통 타입·명령·오류·이벤트 계약 | `lifecycle/compute` | 아니오 | 실제 명령의 계약 소유; P0는 in-memory SavePort만 사용 |
+| `FUNC-P0-004` 최소 검증 하네스·공통 UI 껍데기 | `ui/local` | 아니오 | AppRoot 로컬 state/semantics만 검증; 권위 저장 없음 |
 | `FUNC-P1-001` 정적 카탈로그 스키마와 ID 보존 | `tool` | content build 산출물만 | live save.db와 command receipt를 사용하지 않음 |
 | `FUNC-P1-002` 콘텐츠 검증·사전 DB 빌드 | `tool` | content build 산출물만 | live save.db와 command receipt를 사용하지 않음 |
 | `FUNC-P1-003` 로컬 이미지·AssetResolver·크롭 | `read/tool` | asset build 산출물만 | 런타임 `resolve`는 읽기 전용이며 command receipt를 만들지 않음 |

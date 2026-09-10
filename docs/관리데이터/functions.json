@@ -4,7 +4,7 @@
     "i": 1,
     "id": "FUNC-P0-001",
     "name": "원문 기준선과 충돌 판정",
-    "method": "BaselineResolver.resolve(sectionId: SourceId, ruleKey: RuleKey) -> RuleDecision",
+    "method": "py -3 docs/검증도구/validate_docs.py",
     "tables": [],
     "rules": [
       "원문 전체와 SHA-256을 고정하고 번호·행범위로 추적한다",
@@ -67,14 +67,14 @@
     "i": 2,
     "id": "FUNC-P0-002",
     "name": "빌드·모듈·기술버전 고정",
-    "method": "BuildBaseline.verify(lock: ToolchainLock, graph: ModuleGraph) -> BuildReport",
+    "method": "Gradle :core:simulation:test + :app:testDebugUnitTest/:app:lintDebug/:app:assembleDebug",
     "tables": [],
     "rules": [
-      "원문 §3031 모듈명을 유지하고 기존 저장소는 P0에서 먼저 인벤토리한다",
-      "모듈 허용 의존성 allowlist 밖의 모든 내부 edge와 simulation의 Android·Room·Compose·네트워크 import를 정적 검사한다",
-      "WorldSession과 SavePort는 :core:simulation, SaveCoordinator 구현은 :core:save에 두고 feature의 WorldEngine·SaveCoordinator·mutable Repository 직접 참조를 금지한다",
-      ":app과 :tools:headless만 조립 루트이며 동일 WorldSession/SavePort 계약을 사용한다",
-      "AGP/Kotlin/KSP/Room 정확 버전과 schema export 경로를 version catalog에서 잠근다",
+      "원문 §3031 모듈명은 논리 namespace로 유지하고 P0 물리 Gradle project는 :app과 :core:simulation 두 개로 제한한다",
+      "실제로 분리한 두 모듈만 allowlist를 적용하고 근거 없는 빈 모듈 및 simulation의 Android·Room·Compose·네트워크 import를 정적 검사한다",
+      "WorldSession과 SavePort 계약은 :core:simulation에 두되 SaveCoordinator·Room·:core:save는 P3에서 실제 schema와 함께 생성한다",
+      "P0 조립 루트는 :app만 두고 :tools:headless는 P23/P25에서 독립 실행 요구가 확인될 때만 생성한다",
+      "AGP/Kotlin 및 P0 직접 의존성을 exact pin하고 Room/KSP/schema export는 P3 Gate에서 검증한다",
       "기존 구현이 있으면 adapter부터 연결하며 UI/도메인 전면 재작성은 별도 승인한다"
     ],
     "normal": [
@@ -82,8 +82,8 @@
       "순수 JVM test 태스크 단독 성공"
     ],
     "edge": [
-      "금지 edge/API 6종: simulation→save/Room, feature:party→feature:guild, core:data→feature:party, core:model→Android, feature→WorldEngine/SaveCoordinator, feature→mutable Repository; 허용 edge: save→simulation/database, tools:headless→simulation/database/save/testing",
-      "금지 edge/API 6종은 각각 실패하고 허용 edge와 두 JVM compile은 통과"
+      "허용 edge :app→:core:simulation; 금지 edge :core:simulation→:app; simulation의 Android/Room/Compose/네트워크 import와 미선언 P0 module/plugin/dependency",
+      "금지 fixture는 각각 실패하고 허용 graph와 :core:simulation JVM test는 통과"
     ],
     "failure": [
       "잠금 버전 의존성 resolve 실패",
@@ -148,10 +148,10 @@
     "i": 3,
     "id": "FUNC-P0-003",
     "name": "공통 타입·명령·오류·이벤트 계약",
-    "method": "ContractRegistry.validate(command: WorldCommand, event: DomainEvent) -> ContractResult",
+    "method": "WorldSession.execute(envelope: CommandEnvelope) -> CommandResult",
     "tables": [],
     "rules": [
-      "GameMinute·CombatMillis·Money·BasisPoint·EntityId를 구분하고 혼합 연산을 차단한다",
+      "GameMinute·CombatMillis·Money·BasisPoint·ProbabilityPpm·EntityId를 구분하고 혼합 연산을 차단한다",
       "공통 CommandEnvelope는 commandId/sessionEpoch/expectedVersion/payload를 포함한다",
       "DomainEvent는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload를 포함한다",
       "기능 미구현 port는 UnsupportedFeature를 반환하며 성공을 가장한 no-op을 금지한다"
@@ -161,8 +161,8 @@
       "Money(60), 원본 값은 불변"
     ],
     "edge": [
-      "Long.MAX_VALUE+1 금액 연산",
-      "ArithmeticOverflow 오류·상태변경 없음"
+      "Money(Long.MAX_VALUE) + Money(1), BasisPoint(10001), ProbabilityPpm(1000001)",
+      "ArithmeticOverflow 또는 OutOfRange 오류·상태변경 없음"
     ],
     "failure": [
       "잘못된 sessionEpoch 명령",
@@ -215,12 +215,12 @@
     "i": 4,
     "id": "FUNC-P0-004",
     "name": "최소 검증 하네스·공통 UI 껍데기",
-    "method": "SmokeHarness.run(seed: Long, fixture: FixtureId) -> SmokeReport",
+    "method": "Compose AppRoot(state: AppShellState, onRetry: () -> Unit)",
     "tables": [],
     "rules": [
-      "새게임·던전·전투·세이브 진입용 최소 route와 loading/empty/error 상태를 먼저 만든다",
-      "공통 FakeClock·ScriptedRng·FaultInjector를 JVM test에서 제공한다",
-      "core import 규칙·문서 ID 링크·Schema smoke를 CI 초기 단계에 둔다",
+      "P0는 새 Screen ID나 새게임·던전·전투·세이브 실제 route를 만들지 않고 전역 88 문서 ID를 placeholder로만 쓴다",
+      "Loading·Ready·Empty·Error·Blocked를 구분하고 미구현 기능은 UnsupportedFeature로 표시한다",
+      "FakeClock·ScriptedRng·FaultInjector는 :core:simulation test source에 필요한 fixture만 둔다",
       "후속 Phase의 실제 화면은 각 Phase에서 추가하고 P22에서 디자인 전체 통합한다"
     ],
     "normal": [
@@ -232,8 +232,8 @@
       "기능 준비 안 됨 표시; 앱 crash 없음"
     ],
     "failure": [
-      "headless runner가 실게임 DB 경로를 받음",
-      "실행 거절; 원본 DB hash 불변"
+      "미등록 Screen ID 요청 또는 retry callback 실패",
+      "Error 또는 Blocked 표시; 앱 crash 없음"
     ],
     "kw": [
       "테스트",

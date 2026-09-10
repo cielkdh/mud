@@ -25,10 +25,14 @@
 
 | 결정 ID | 검토 주제 | 상태 | 적용/차단 내용 |
 |---|---|---|---|
-| C14 | 기술버전·SDK 및 실제 코드 미제공 | 일부 공식문서 확인·빌드 미검증 | Room3/AGP 공식발표 확인과 프로젝트 resolve/compile 은 별개. P0 lock spike 필수. |
-| C15 | 월드분과전투10ms 연결 | 설계 보완안·승인 대기 | subMinuteMs 누적, 6×10 초=1 분; 동일시각월드 phase order 버전 고정. |
-| C16 | 세대번호만 존재하는 과거상태 복원 | 설계 보완안·승인 대기 | 불변청크+완전 manifest+정규화 current projection 원자저장. GC root 보호. |
+| C14 | 기술버전·SDK 및 실제 코드 미제공 | 승인·빌드 검증 NOT_RUN | exact 기술/SDK와 GREENFIELD_V1은 승인 완료. P0는 resolve/JVM·app compile를, P3는 Room compile/최초 v1 schema export를 검증한다. |
+| C15 | 월드분과전투10ms 연결 | 승인·기준선 반영 | subMinuteMs 누적, 6×10 초=1 분; 동일시각월드 phase order 버전 고정. |
+| C16 | 세대번호만 존재하는 과거상태 복원 | 승인·기준선 반영 | 불변청크+완전 manifest+정규화 current projection 원자저장. GC root 보호. |
 | C22 | 암호화·checksum 보장범위 | 원문 해석 확정 | checksum 은손상탐지,인증/치트방지아님. 기본로컬파일백업·사용자동의·원본 보존. |
+
+P3 진입 시 `:core:save`를 실제 Room schema와 함께 처음 생성한다. 이 문서의 `:core:database`/`:core:data`는 독립 build 근거가 생기기 전까지 `:core:save` 내 논리 package로 해석하며 빈 Gradle module로 만들지 않는다. P3 검증은 `:core:save` JVM/instrumented test source를 사용하고 `:tools:headless`를 선행 요구하지 않는다.
+
+Room/SQLite 물리 구현을 기능별 adapter Task로 확장하기 전에 실제 단말 storage/recovery spike를 통과해야 한다. 최소 시나리오는 `save→process kill→recovery`, restore 중 kill, storage full, WAL 존재, candidate DB swap 중 kill, 손상 generation 거절, `save.previous.db` fallback이다. 각 시나리오는 이전 또는 다음 완전 세대만 선택하고 live slot 부분 갱신이 0건임을 증명한다. 실패하면 구조를 단순화하거나 결정대장에 차단 결정을 기록하며 성공으로 간주하지 않는다.
 
 ## 4. 기능 범위 및 요구 연결
 | 기능 ID | 기능명 | 중요도 | 선행 기능/Phase | 원문요구/공통근거 |
@@ -43,15 +47,11 @@
 ## 5. 기능별 상세 설계
 
 ### 공통 계약의 적용 범위
-모든 새 메소드/클래스명과 물리 DDL 은 **설계 보완안**이다. 제공된 자료에는 실제 저장소·DAO·SQL 이 없으므로 기존 구현에 대한 변경 완료를 뜻하지 않는다. 원문의 객체명/데이터 항목은 최대한 유지하며 기존 코드가 발견되면 adapter 로 연결한다.
+이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
-`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload)`를 사용한다. `GameMinute`, `CombatMillis`, `Money(Long)`, `BasisPoint`, `EntityId`는 혼합 연산을 금지한다. 확률의 기본 표현은 **ppm(0..1,000,000)**이며 세밀한 0.01%도 정수로 표현한다. 표시 반올림과 판정은 분리한다. 정수연산 overflow 는 오류이며 clamp 로 은폐하지 않는다.
+`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
-`ReadView`는 불변이다. `Delta`는 변경행·RNG 새 상태·도메인 이벤트·명령 receipt 를 포함한다. 콘텐츠 참조/외부 파일 읽기는 transaction 진입 전에 끝낸다. 실패 가능한 대규모 계산은 transaction 밖에서 하고, 성공한 커밋 이후에만 메모리 및 화면 상태를 게시한다. `stateHash`는 canonical 직렬화(키 정렬·정수 표현·버전 포함)에 대한 SHA-256 이며 현실시각·UI 재생위치는 제외한다.
-
-중복 명령은 동일 epoch/commandId 와 payload hash 를 함께 검사한다. 동일 ID/동일 payload 이면 이전 결과를 반환하고, 다른 payload 이면 `IdempotencyKeyReuse`를 반환한다. 인메모리 중복 제거만으로 복구 후 중복을 막았다고 판단하지 않는다.
-
-게임은 한 프로세스·한 활성 WorldSession 을 기준으로 한다. 여러 노드/서버/분산 Lock 은 **해당 없음**이다. 다만 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 간의 동시성은 실제로 검증한다.
+게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
 
 <a id="func-p3-001"></a>
 ### 5.1. FUNC-P3-001 — 현재상태 스키마·Dirty 단위 저장
@@ -60,15 +60,15 @@
 |---|---|
 | 기능 목적 | 현재상태 스키마·Dirty 단위 저장을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§2429](#src-2429), [§2430](#src-2430), [§2431](#src-2431), [§2432](#src-2432), [§2433](#src-2433), [§2437](#src-2437), [§2441](#src-2441), [§2446](#src-2446), [§2450](#src-2450), [§2471](#src-2471), [§2484](#src-2484), [§2485](#src-2485), [§2487](#src-2487), [§2492](#src-2492), [§2497](#src-2497) 외 10 개 |
-| 기능 요구사항 | 1. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다<br>2. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다<br>3. current normalized row·RNG·receipt·events·generation manifest 를 동일 write transaction 에서 갱신한다<br>4. Dirty set 은 성공한 commit 만 해제하며 UI 는 durable version 만 저장됨으로 표시한다<br>5. `SaveCoordinator`는 `:core:simulation`의 `SavePort` 구현이며 CommandEnvelope·새 commandId·중첩 receipt/Event를 만들지 않는다. WorldEngine은 구체 SaveCoordinator나 Room을 참조하지 않는다 |
+| 기능 요구사항 | 1. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다<br>2. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다<br>3. 일반 mutation은 current normalized row·RNG·receipt·events만 동일 write transaction에서 갱신하고 SaveGeneration을 매번 만들지 않는다<br>4. 명시/자동/위험경계 checkpoint만 current snapshot의 불변 청크·완전 manifest를 만들며 성공한 commit 뒤 save-layer dirty shard key를 해제한다<br>5. `SaveCoordinator`는 `:core:simulation`의 `SavePort` 구현이며 CommandEnvelope·새 commandId·중첩 receipt/Event를 만들지 않는다. WorldEngine은 구체 SaveCoordinator나 Room을 참조하지 않는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | 외부 `WorldSession.execute(command: CheckpointWorld) -> CommandResult`<br>계약 `SavePort.commit(envelope: CommandEnvelope, delta: WorldDelta) -> CommitReceipt`<br>구현 `SaveCoordinator.commit(...)` |
-| 입력 필드/값 | 외부 CheckpointWorld{reason,expectedVersion}; 내부 dirtyRows[], rngChanges[], events[], commandReceipt; 구체적값: 아이템 이동+금화지출+RNG 1 회 |
-| 반환값 | 외부 CommandResult{receipt,generationId,committedVersion,stateHash}; 내부 CommitReceipt; 정상결과: 세 요소와 receipt 가 같은 generation 에서 보임 |
+| 주요 메소드 | 외부 `WorldSession.execute(command: SaveCommand) -> CommandResult`, `SaveCommand = CheckpointWorld | CreateNewWorld`<br>계약 `SavePort.commit(envelope, domainDelta)` / `SavePort.checkpoint(envelope, snapshot)`<br>구현 `SaveCoordinator` mapper·commit/checkpoint |
+| 입력 필드/값 | 외부 CheckpointWorld{reason,expectedVersion} 또는 CreateNewWorld{slot,worldSeed,contentVersion}; 내부 typed DomainDelta 또는 frozen WorldSnapshot; `dirtyRows[]` 금지 |
+| 반환값 | 일반 mutation은 CommitReceipt{committedVersion}, checkpoint/new game은 CommandResult{receipt,checkpointGenerationId,committedVersion,stateHash} |
 | 입력 검증 | Dirty set 공집합 → 필요 metadata 변경 없으면 NoOp; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | RNG row 쓰기 단계에서 예외 → 아이템·금화·RNG 전부 이전 값; typed DomainError 로상위호출에전달 |
-| Transaction | 명시적 저장은 `WorldSession.execute(CheckpointWorld(...))` 외부 명령으로 시작한다. WorldEngine은 transaction 밖에서 계산하고 `SavePort.commit`을 한 번 호출한다. SaveCoordinator 구현이 그 command의 Delta/Event/receipt를 단일 write transaction으로 확정한 뒤 게시한다. 원자적 효과의 중간 성공과 내부 command/receipt 중첩은 허용하지 않는다. |
+| Transaction | 일반 mutation은 `SavePort.commit` 1회로 current rows/RNG/events/receipt만 확정한다. 명시적 저장·새 게임은 `WorldSession.execute(SaveCommand)`에서 시작하고 `SavePort.checkpoint` 1회로 완전 manifest/slot/receipt를 확정한다. checkpoint는 이전 mutation을 재적용하지 않는다. 내부 command/receipt 중첩은 허용하지 않는다. |
 | 상태 변화 | SNAPSHOTTED → WRITING → COMMITTED/ABORTED |
 | 소유 모듈 | :core:database / :core:save / :core:data |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
@@ -79,12 +79,12 @@
 1. WorldSession/WorldEngine이 바깥 명령 envelope/현재 epoch/version과 대상 존재·권한을 확인하고 `SavePort`로 기존 receipt를 조회한다.
 2. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다
 3. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다
-4. current normalized row·RNG·receipt·events·generation manifest 를 동일 write transaction 에서 갱신한다
-5. Dirty set 은 성공한 commit 만 해제하며 UI 는 durable version 만 저장됨으로 표시한다
-6. WorldEngine은 `SavePort.commit(envelope, delta)`만 호출한다. SaveCoordinator 구현은 envelope를 새로 만들거나 commandId/receipt/Event를 추가하지 않고 바깥 command의 해당행/RNG/event/receipt/codec을 원자 commit한다.
+4. 일반 mutation은 current normalized row·RNG·receipt·events만 갱신한다. checkpoint/new game은 frozen current snapshot을 immutable chunk와 complete manifest로 만든다.
+5. SaveCoordinator mapper가 관리하는 dirty shard key는 checkpoint 성공 뒤에만 해제하며 simulation에 노출하지 않는다.
+6. WorldEngine은 typed `DomainDelta` 또는 `WorldSnapshot`을 SavePort에 넘긴다. SaveCoordinator 구현은 envelope를 새로 만들거나 commandId/receipt/Event를 추가하지 않는다.
 7. WorldEngine은 commit 성공 뒤 PublicView/후속 event를 발행하고 실패 시 메모리/DB 상태를 게시하지 않는다.
 
-외부 입력 `CommandEnvelope<CheckpointWorld>` → `WorldSession.execute` → `WorldEngine` Delta 계산 → `SavePort.commit` → `SaveCoordinator` 구현 → 검증된 `generationId, committedVersion, stateHash` → PublicProjection/후속 handler. receipt는 바깥 command에만 1개다.
+외부 입력 `CommandEnvelope<SaveCommand>` → `WorldSession.execute` → frozen snapshot → `SavePort.checkpoint` → `SaveCoordinator` 구현 → 검증된 `checkpointGenerationId, committedVersion, stateHash` → PublicProjection. receipt는 바깥 command에만 1개다. gameplay mutation 경로는 별도 `SavePort.commit(DomainDelta)`를 사용하며 generation을 생성하지 않는다.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
@@ -101,8 +101,8 @@
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| SavePort | 기존 공통 계약 | `:core:simulation` 소유 receipt 조회·commit 경계 | SavePort.findReceipt(...), SavePort.commit(envelope, delta) -> CommitReceipt |
-| SaveCoordinator | 신규/기존 adapter | `:core:save` 소유 SavePort 구현·현재상태 원자 저장 | SaveCoordinator.commit(envelope, delta) -> CommitReceipt |
+| SavePort | 기존 공통 계약 | `:core:simulation` 소유 receipt 조회·일반 commit·checkpoint 경계 | findReceipt, commit(envelope, DomainDelta), checkpoint(envelope, WorldSnapshot) |
+| SaveCoordinator | 신규/기존 adapter | `:core:save` 소유 mapper·현재상태 commit·완전 checkpoint | commit/checkpoint; dirty shard key는 구현 내부 |
 | 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
 | 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
 | 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
@@ -218,7 +218,7 @@
 |---|---|
 | 기능 목적 | 마이그레이션·콘텐츠 호환을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§2422](#src-2422), [§2423](#src-2423), [§2448](#src-2448), [§2449](#src-2449), [§2452](#src-2452), [§2453](#src-2453), [§2454](#src-2454), [§2455](#src-2455), [§2456](#src-2456), [§2457](#src-2457), [§2458](#src-2458), [§2459](#src-2459), [§2460](#src-2460), [§2461](#src-2461), [§2462](#src-2462) 외 10 개 |
-| 기능 요구사항 | 1. P0에서 DB 기준선을 `GREENFIELD_V1` 또는 `LEGACY_CHAIN`으로 판정한다. 실제 출시·운영된 과거 schema 증거가 없으면 `GREENFIELD_V1`이다<br>2. `GREENFIELD_V1`은 승인된 완성 스키마를 최초 v1으로 생성·재오픈·왕복 검증하며 출시되지 않은 가상 v2/v3 migration을 만들지 않는다<br>3. `LEGACY_CHAIN`만 실제 Room export schema와 불변 DB fixture에 대해 N→N+1 순차 변환을 복제본에서 적용하고 destructive migration을 금지한다<br>4. 실제 schema 변경마다 migration ID와 fixture를 추가하고 schema/content/balance/generator/rng 버전을 독립 확인한다<br>5. 신버전 세이브를 구버전 앱에서 열면 설명하고 차단한다 |
+| 기능 요구사항 | 1. P0는 `SchemaBaselineMode=GREENFIELD_V1`을 결정값으로 인계하고 P3가 실제 Room schema 증거로 확정한다. 실제 출시·운영된 과거 schema 증거가 없으면 `GREENFIELD_V1`이다<br>2. `GREENFIELD_V1`은 승인된 완성 스키마를 최초 v1으로 생성·export·재오픈·왕복 검증하며 가상 v2/v3 migration을 만들지 않는다<br>3. `LEGACY_CHAIN`만 실제 Room export schema와 불변 DB fixture에 대해 N→N+1 순차 변환을 복제본에서 적용하고 destructive migration을 금지한다<br>4. 실제 schema 변경마다 migration ID와 fixture를 추가하고 schema/content/balance/generator/rng 버전을 독립 확인한다<br>5. 신버전 세이브를 구버전 앱에서 열면 설명하고 차단한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `MigrationPlanner.migrate(source: SaveArchive, target: SchemaVersion) -> MigrationResult` |
@@ -235,7 +235,7 @@
 
 #### 처리 순서 및 데이터 흐름
 1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. P0 증거로 `GREENFIELD_V1`/`LEGACY_CHAIN`을 판정하고 exported schema·fixture hash를 고정한다
+2. P0의 `GREENFIELD_V1` 결정값을 받고 P3가 실제 exported schema·fixture hash로 확정한다
 3. `GREENFIELD_V1`이면 v1 fresh create→close→reopen→대표 권위행 왕복만 검증하고 migration 목록은 비워 둔다
 4. `LEGACY_CHAIN`이면 실제 N→N+1 순차 변환을 복제본에서 적용하고 destructive migration을 사용하지 않는다
 5. 실제 schema 변경마다 migration ID/fixture를 추가하고 schema/content/balance/generator/rng 버전을 독립 확인한다
@@ -382,6 +382,8 @@
 ```
 모든 권위 domain codec 은 `encodeCanonical`, `decode`, `validate`, `enumerateReferences`, `migrate`를 제공한다. source events·난수·예약·선점·수정원장을 포함하고 검색/이미지캐시/UI preferences 는 제외한다. P3 에서는 registry 와 공통 codec 을 만들고 각 Phase 에서 해당 도메인 codec 을 등록한다. 등록 누락 domain 이 dirty 이면 저장을 성공으로 처리하지 않는다.
 
+일반 command commit과 SaveGeneration 생성은 분리한다. 일반 commit은 current materialization을 항상 durable하게 만들지만 불변 청크를 생성하지 않는다. generation은 수동 저장, debounce된 자동 저장, 전투 시작/종료, 장기 진행 시작/종료, migration 전, 앱 background safe point에서만 만든다. 같은 stateVersion에 이미 완전 generation이 있으면 metadata만 갱신하거나 NoOp하고 중복 청크를 만들지 않는다. `PublicSnapshot.checkpointGenerationId`는 마지막 완전 generation이며 현재 stateVersion과 같을 필요가 없다.
+
 기본 청크 목표는 비압축 256KiB, 최대1MiB(보완 목표)이다. 안정적인 domain+ID range shard 를 사용하여 한 행 변경이 전체 세계 청크를 바꾸지 않게 한다. 변경 청크만 새로 만들고 변경 없는 청크 참조는 재사용한다. **전체 manifest**이므로 부모 delta 체인을 끝없이 읽지 않는다. 부모 링크는 이력용이며 root pruning 시 tombstone metadata 만 남기거나 별도 ancestry archive 로 이동한다.
 
 ```kotlin
@@ -403,9 +405,11 @@ publishFrozenSnapshotAsCommitted()
 ```
 위 block 은 Room3 구현 시 `withWriteTransaction` 계열을 사용한다(기술검증 부록 E01). `SQLITE_BUSY`는 같은 불변 plan 으로 제한 재시도하되 다른 world version 이면 재검증한다. 50/100/200ms 최대3 회는 **보완 설정값**이며 IO/손상/공간부족에는 무한 재시도하지 않는다. 커밋 결과가 불명확하면 receipt 부터 조회하고 비용명령을 다시 계산하지 않는다.
 
-로드는 ①파일/버전검사 ②전체 manifest 해시 ③각청크 checksum ④해당세대 전 domain decode ⑤FK/소유권/RNG/예약 불변식 ⑥새 branch/epoch ⑦current materialization 원자교체 ⑧UI 게시 순서이다. 한 세대의 금화와 다른 세대의 RNG 를 섞지 않는다. 이미 생성한 복구 파일을 현재 DB 에 단순 부분 복사하지 않는다.
+로드는 ①파일/버전검사 ②전체 manifest 해시 ③각청크 checksum ④해당세대 전 domain decode ⑤FK/소유권/RNG/예약 불변식 ⑥새 branch/epoch ⑦current materialization 원자교체 ⑧UI 게시 순서이다. 155개 current table을 한 행씩 live DB에서 지우고 채우지 않는다. 앱 private directory에 동일 schema의 `save.restore.<operationId>.db`를 만들고 보존할 slot/generation metadata를 복사한 뒤 선택 generation을 전부 materialize·`foreign_key_check`·`integrity_check`·stateHash 검증한다. DB connection을 모두 닫고 fsync된 `restore.intent` marker를 기록한 다음 `save.db → save.previous.db`, candidate→`save.db` rename 순서로 교체한다. 시작 시 marker가 남아 있으면 두 파일의 checksum/manifest를 검사해 완전한 쪽만 선택하며, 성공 후 history를 `recovery_journal`에 옮기고 marker/previous를 정책에 따라 정리한다. source generation과 기존 DB는 성공 확인 전 삭제하지 않는다.
 
 GC 는 자동/수동/전투/장기진행/마이그레이션 root 의 모든 참조를 mark 한 후 미참조청크만 sweep 한다. 부모 ancestry 메타데이터가 남는 것과 청크가 필요한 것은 별개이다. 보존 세대의 checksum/복원시험에 실패하면 GC 를 금지한다. 수동슬롯은 자동정리 대상이 아니다.
+
+`world_event`는 전체 세계의 영구 source of truth가 아니며 current rows+완전 generation이 복원의 기준이다. raw event는 모든 consumer receipt 완료, 최소 30 game-day 경과, 최소 3개 후속 자동 generation 존재를 모두 만족할 때만 compact할 수 있다. chronicle/bookmark/ledger/recovery checkpoint/미완료 outbox가 참조하는 event는 기간과 무관하게 보존한다. `command_receipt`는 참조 world_event가 없고 current/직전 session epoch가 아니며 보존 generation의 replay/감사 대상이 아닐 때 event보다 나중에 삭제한다. Event/JSON/BLOB codec은 모든 보존 generation과 raw row를 registry scan했을 때 참조 0이고 migration+restore fixture가 PASS하기 전 제거할 수 없다.
 
 Export 는 검증된 snapshot DB 를 staging 하여 archive 로 발행한다. 열린 DB 의 main 파일만 복사하지 않는다. 지원되는 online backup 또는 월드정지→commit drain→checkpoint 확인→connection close→파일복사→재오픈 barrier 를 선택한다. SQLite/드라이버 실제 backup 지원 여부는 구현 spike 에서 확인한다. WAL checkpoint 호출 성공 여부를 검사하지 않은 파일복사는 금지한다.
 
@@ -419,7 +423,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | 논리/물리 객체 | 저장영역 | 최초 계약 Phase | 접근 | PK/유일조건 | 조회 Index |
 |---|---|---|---|---|---|
 | checkpoint_chunk | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | sha256 | PK/UNIQUE |
-| command_receipt | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | epoch,command_id | state_version |
+| command_receipt | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | epoch,command_id | state_version, lifecycle_status,epoch,state_version |
 | content_binding | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | content_version,balance_version | PK/UNIQUE |
 | dialogue_session | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK | speaker_id,status |
 | generation_chunk | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | generation_id,domain_key,shard_no | chunk_id |
@@ -429,7 +433,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | rng_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | stream_key | PK/UNIQUE |
 | save_generation | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | branch_id,generation_no | status,generation_no |
 | save_slot | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | slot_kind,ordinal | generation_id |
-| time_advance_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | request_id | PK/UNIQUE |
+| time_advance_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | command_epoch,request_id | status,next_boundary_minute,request_id |
 | world_event | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | source_epoch,source_command_id,event_sequence | game_minute,id, event_type,game_minute, source_epoch,source_command_id,event_sequence |
 | world_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK | session_epoch |
 
@@ -450,13 +454,15 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 |---|---|
 | command_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | epoch TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1' | canonical payload codec ID를 보존 |
 | payload_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| lifecycle_status TEXT NOT NULL | RUNNING/COMMITTED/INTERRUPTED/REJECTED 상태 |
 | result_code TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | result_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | state_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | game_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
-같은 ID+다른 payload 는 거절. generation snapshot 에 함께 포함.
+같은 ID+다른 payload는 거절한다. resumable command도 같은 receipt 한 행을 갱신하며 generation 생성 여부와 분리한다.
 #### `content_binding` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -558,10 +564,13 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 
 | 필드/제약 | 용도 |
 |---|---|
+| command_epoch TEXT NOT NULL | command_receipt.epoch FK 구성 열 |
 | request_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| segment_no INTEGER NOT NULL | 완료 segment 번호 |
 | target_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | last_boundary_key TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | next_boundary_minute INTEGER | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| next_event_sequence INTEGER NOT NULL | 외부 command 전체의 다음 event sequence |
 | interrupt_policy_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | status TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 #### `world_event` 필드 및 관계
@@ -596,6 +605,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | balance_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | rng_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | engine_order_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| state_hash_version TEXT NOT NULL | canonical state hash 계약 버전 |
 | player_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | state_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
@@ -648,7 +658,9 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   command_id TEXT NOT NULL,
   epoch TEXT NOT NULL,
+  payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1',
   payload_hash TEXT NOT NULL,
+  lifecycle_status TEXT NOT NULL DEFAULT 'COMMITTED' CHECK(lifecycle_status IN ('RUNNING','COMMITTED','INTERRUPTED','REJECTED')),
   result_code TEXT NOT NULL,
   result_json TEXT NOT NULL,
   state_version INTEGER NOT NULL,
@@ -656,6 +668,7 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   UNIQUE(epoch,command_id)
 );
 CREATE INDEX IF NOT EXISTS ix_command_receipt_1 ON command_receipt(state_version);
+CREATE INDEX IF NOT EXISTS ix_command_receipt_2 ON command_receipt(lifecycle_status,epoch,state_version);
 
 CREATE TABLE IF NOT EXISTS content_binding (
   id TEXT PRIMARY KEY NOT NULL,
@@ -771,14 +784,19 @@ CREATE INDEX IF NOT EXISTS ix_save_slot_1 ON save_slot(generation_id);
 CREATE TABLE IF NOT EXISTS time_advance_state (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
+  command_epoch TEXT NOT NULL,
   request_id TEXT NOT NULL,
+  segment_no INTEGER NOT NULL DEFAULT 0 CHECK(segment_no>=0),
   target_minute INTEGER NOT NULL,
   last_boundary_key TEXT,
   next_boundary_minute INTEGER,
+  next_event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_event_sequence>=0),
   interrupt_policy_json TEXT NOT NULL,
-  status TEXT NOT NULL,
-  UNIQUE(request_id)
+  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED')),
+  UNIQUE(command_epoch,request_id),
+  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS ix_time_advance_state_1 ON time_advance_state(status,next_boundary_minute,request_id);
 
 CREATE TABLE IF NOT EXISTS world_event (
   id TEXT PRIMARY KEY NOT NULL,
@@ -815,6 +833,7 @@ CREATE TABLE IF NOT EXISTS world_state (
   balance_version TEXT NOT NULL,
   rng_version TEXT NOT NULL,
   engine_order_version INTEGER NOT NULL,
+  state_hash_version TEXT NOT NULL DEFAULT 'StateHash.v1',
   player_id TEXT,
   state_hash TEXT NOT NULL
 );
@@ -825,7 +844,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 
 | 관점 | 이 Phase 의 구현 기준 |
 |---|---|
-| Transaction 시작/종료 | WorldEngine이 불변 Delta 계산을 완료한 뒤 `SavePort.commit`을 호출하고 SaveCoordinator 구현이 실제 Room write를 시작한다. 변경행/receipt/RNG/event/manifest→검증→commit 후에만 게시한다. compute/read/tool 은 live transaction 해당없음. |
+| Transaction 시작/종료 | 일반 command는 DomainDelta→current rows/RNG/event/receipt를 한 write transaction에 저장한다. checkpoint command는 frozen snapshot→chunk/complete manifest/slot/receipt를 별도 한 transaction에 저장하며 mutation을 재적용하지 않는다. load/import는 candidate DB 완전 검증 뒤 file-swap recovery protocol을 사용한다. |
 | Rollback | 필수입력/FK/버전/금액/소유권/일정/메소드예외,affectedRows 예상불일치면해당 semantic 작업전부 rollback.이미게시된 UI 값으로 DB 복구하지않음. |
 | 부분 실패 | 하나의거래/강화/승계/보상은부분성공없음. 서로독립정비항목/검증 case/선택 background 활동만항목 receipt 로부분결과를허용. |
 | 동시 처리/중복 | UI 연속탭·시간경계·NPC 명령이같은 data 를건드려도단일 writer 로직렬화. epoch/version/unique receipt 로재기동중복차단. |
@@ -862,7 +881,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P3-TASK-001 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 외부 `WorldSession.execute(CheckpointWorld(...))`, 내부 `WorldEngine` 계산, `SavePort.commit(delta, expected)`의 DTO/오류/불변식을 정의한다. `:core:save`의 SaveCoordinator는 SavePort를 구현하고 새 CommandEnvelope·commandId·중첩 receipt/Event 없이 바깥 command transaction에 expectedVersion, dirtyRows[], rngChanges[], events[], commandReceipt를 저장한다. |
+| 상세 구현 내용 | 외부 `WorldSession.execute(SaveCommand)`, 내부 frozen snapshot, `SavePort.commit(DomainDelta)`/`checkpoint(WorldSnapshot)`의 DTO·오류·불변식을 정의한다. SaveCoordinator는 새 CommandEnvelope·commandId·중첩 receipt/Event 없이 DomainDelta를 persistence plan과 dirty shard key로 변환한다. |
 | 대상 모듈 | :core:simulation / :core:database / :core:save / :core:data |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, command_receipt, world_event, rng_state, save_generation; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -896,7 +915,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P3-UT-001, P3-BT-001, P3-FT-001 |
@@ -920,7 +939,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-CT-001, P3-IT-001 |
@@ -944,7 +963,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-CT-001, P3-IT-001 |
@@ -968,7 +987,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-UT-001, P3-BT-001, P3-FT-001, P3-CT-001, P3-IT-001 |
@@ -1016,7 +1035,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P3-UT-002, P3-BT-002, P3-FT-002 |
@@ -1040,7 +1059,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-CT-002, P3-IT-002 |
@@ -1064,7 +1083,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-CT-002, P3-IT-002 |
@@ -1088,7 +1107,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002 |
@@ -1136,7 +1155,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P3-UT-003, P3-BT-003, P3-FT-003 |
@@ -1160,7 +1179,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-CT-003, P3-IT-003 |
@@ -1184,7 +1203,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-CT-003, P3-IT-003 |
@@ -1208,7 +1227,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 |
@@ -1256,7 +1275,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P3-UT-004, P3-BT-004, P3-FT-004 |
@@ -1280,7 +1299,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-CT-004, P3-IT-004 |
@@ -1304,7 +1323,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-CT-004, P3-IT-004 |
@@ -1328,7 +1347,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-UT-004, P3-BT-004, P3-FT-004, P3-CT-004, P3-IT-004 |
@@ -1376,7 +1395,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P3-UT-005, P3-BT-005, P3-FT-005 |
@@ -1400,7 +1419,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-CT-005, P3-IT-005 |
@@ -1424,7 +1443,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-CT-005, P3-IT-005 |
@@ -1448,7 +1467,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005 |
@@ -1496,7 +1515,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P3-UT-006, P3-BT-006, P3-FT-006 |
@@ -1520,7 +1539,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-CT-006, P3-IT-006 |
@@ -1544,7 +1563,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-CT-006, P3-IT-006 |
@@ -1568,7 +1587,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P3-UT-006, P3-BT-006, P3-FT-006, P3-CT-006, P3-IT-006 |
@@ -1592,7 +1611,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14, C15, C16 |
-| 현재 차단/상태 | C14, C15, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P3-UT-001, P3-BT-001, P3-FT-001, P3-CT-001, P3-IT-001, P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002, P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003, P3-UT-004, P3-BT-004, P3-FT-004, P3-CT-004, P3-IT-004, P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005, P3-UT-006, P3-BT-006, P3-FT-006, P3-CT-006, P3-IT-006, P3-RT-001, P3-CN-001, P3-REC-001, P3-PT-001, P3-OP-001, P3-ET-001, P3-IT-007 |
@@ -2034,14 +2053,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P3-IT-004 |
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P3-004 |
-| 사전 조건 | P0 SchemaBaselineMode 결과, 실제 Room exported schema, 불변 fixture registry와 앱/`:tools:headless` 실제 adapter가 존재한다. LEGACY_CHAIN은 실제 과거 DB fixture 없이는 BLOCKED다. |
+| 사전 조건 | P0 SchemaBaselineMode 결정값, 실제 Room exported schema, 불변 fixture registry와 앱/`:core:save` JVM 통합 test adapter가 존재한다. LEGACY_CHAIN은 실제 과거 DB fixture 없이는 BLOCKED다. |
 | 입력값 | GREENFIELD_V1: exported v1 fresh DB; LEGACY_CHAIN: oldest supported 실제 DB fixture→current schema |
-| 수행 절차 | ① source fixture와 SHA-256 기록 ② 앱 entry에서 fresh-open 또는 실제 N→N+1 chain 실행 ③ connection/WAL 닫기 ④ `:tools:headless`에서 복제본 재오픈 ⑤ 대표 item/money/token, schemaVersion, migration_history, stateHash 비교 |
-| 예상 결과 | GREENFIELD_V1은 v1 fresh create/reopen·migration 0개; LEGACY_CHAIN은 실제 단계만 적용·대표 권위값 보존; 앱/headless 재조회 결과 동일 |
+| 수행 절차 | ① source fixture와 SHA-256 기록 ② 앱 entry에서 fresh-open 또는 실제 N→N+1 chain 실행 ③ connection/WAL 닫기 ④ `:core:save` JVM 통합 test에서 복제본 재오픈 ⑤ 대표 item/money/token, schemaVersion, migration_history, stateHash 비교 |
+| 예상 결과 | GREENFIELD_V1은 v1 fresh create/reopen·migration 0개; LEGACY_CHAIN은 실제 단계만 적용·대표 권위값 보존; 앱/JVM test 재조회 결과 동일 |
 | DB/파일 확인 | source hash 불변, 활성 DB integrity/FK 정상, schemaVersion=current. migration_history는 GREENFIELD 0개 또는 LEGACY 실제 단계 수와 일치한다. |
-| 로그 확인 | testId=P3-IT-004, baselineMode, sourceSchemaHash, fixtureId, appliedMigrationIds, app/headless stateHash와 exit code를 기록한다. |
+| 로그 확인 | testId=P3-IT-004, baselineMode, sourceSchemaHash, fixtureId, appliedMigrationIds, app/jvmTest stateHash와 exit code를 기록한다. |
 | 상태 확인 | 선택 baseline 외 경로 실행 0건, 가상 schema fixture 0건, connection/임시복제본 누수 0건 |
-| 성공 기준 | 실제 exported schema와 adapter로 선택 baseline 경로가 재현되고 원본 보존·버전·권위값·앱/headless 동치 증거가 모두 존재한다. |
+| 성공 기준 | 실제 exported schema와 adapter로 선택 baseline 경로가 재현되고 원본 보존·버전·권위값·앱/JVM test 동치 증거가 모두 존재한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-ut-005"></a>
@@ -2287,13 +2306,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | PT |
 | 대상 기능 | PHASE-3 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 아이템 이동+금화지출+RNG 1 회; seed0..99 를반복하고대표최대 fixture 사용 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
+| 입력값 | 10년/100년 synthetic current rows, dirty shard 1%/50%, 일반 command 1,000회, checkpoint 10회, g1→g2→g1 restore swap |
+| 수행 절차 | ① 일반 commit latency/DB 증가와 generation 증가 0 확인 ② 1%/50% checkpoint의 새/재사용 chunk와 size 측정 ③ candidate DB materialize/FK/hash 검증 ④ 두 rename 지점마다 kill injection ⑤ 재실행 후 old 또는 new 완전 DB만 선택되는지 확인 |
+| 예상 결과 | 일반 command마다 SaveGeneration이 생기지 않음, checkpoint 크기는 변경 shard에 비례, restore 중 live DB 혼합 0, kill 후 이전 또는 새 완전 DB만 열림 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-3, testId=P3-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | generation/chunk/receipt/event 수, 파일별 checksum/stateHash, restore.intent 상태, query plan, P50/P95 latency/PSS/DB bytes |
+| 성공 기준 | 정합성 조건 전부와 bounded 종료를 충족하고 10년/100년 크기·latency baseline을 증거로 저장한다. 미측정 PASS 금지. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-op-001"></a>

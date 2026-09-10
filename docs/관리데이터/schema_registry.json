@@ -123,6 +123,7 @@
       "balance_version TEXT NOT NULL",
       "rng_version TEXT NOT NULL",
       "engine_order_version INTEGER NOT NULL",
+      "state_hash_version TEXT NOT NULL DEFAULT 'StateHash.v1'",
       "player_id TEXT",
       "state_hash TEXT NOT NULL"
     ],
@@ -138,7 +139,9 @@
     "fields": [
       "command_id TEXT NOT NULL",
       "epoch TEXT NOT NULL",
+      "payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1'",
       "payload_hash TEXT NOT NULL",
+      "lifecycle_status TEXT NOT NULL DEFAULT 'COMMITTED' CHECK(lifecycle_status IN ('RUNNING','COMMITTED','INTERRUPTED','REJECTED'))",
       "result_code TEXT NOT NULL",
       "result_json TEXT NOT NULL",
       "state_version INTEGER NOT NULL",
@@ -148,9 +151,10 @@
       "epoch,command_id"
     ],
     "indexes": [
-      "state_version"
+      "state_version",
+      "lifecycle_status,epoch,state_version"
     ],
-    "note": "같은 ID+다른 payload는 거절. generation snapshot에 함께 포함.",
+    "note": "같은 ID+다른 payload는 거절. 일반 command는 terminal 1회, resumable command는 같은 row를 RUNNING에서 terminal로 갱신한다.",
     "store": "save"
   },
   "world_event": {
@@ -261,18 +265,23 @@
   "time_advance_state": {
     "name": "time_advance_state",
     "fields": [
+      "command_epoch TEXT NOT NULL",
       "request_id TEXT NOT NULL",
+      "segment_no INTEGER NOT NULL DEFAULT 0 CHECK(segment_no>=0)",
       "target_minute INTEGER NOT NULL",
       "last_boundary_key TEXT",
       "next_boundary_minute INTEGER",
+      "next_event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_event_sequence>=0)",
       "interrupt_policy_json TEXT NOT NULL",
-      "status TEXT NOT NULL"
+      "status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED'))"
     ],
     "unique": [
-      "request_id"
+      "command_epoch,request_id"
     ],
-    "indexes": [],
-    "note": "",
+    "indexes": [
+      "status,next_boundary_minute,request_id"
+    ],
+    "note": "AdvanceTime 외부 receipt 1개에 연결된 resumable segment cursor. segment별 receipt를 만들지 않는다.",
     "store": "save"
   },
   "save_generation": {
@@ -783,7 +792,9 @@
       "combat_version TEXT NOT NULL",
       "content_version TEXT NOT NULL",
       "combat_ms INTEGER NOT NULL CHECK(combat_ms>=0)",
+      "combat_payload_codec TEXT NOT NULL",
       "combat_payload BLOB NOT NULL",
+      "rng_payload_codec TEXT NOT NULL",
       "rng_payload BLOB NOT NULL",
       "checksum TEXT NOT NULL"
     ],
@@ -842,6 +853,7 @@
       "grade TEXT NOT NULL",
       "room_id TEXT",
       "group_id TEXT",
+      "state_payload_codec TEXT NOT NULL",
       "state_payload BLOB NOT NULL",
       "status TEXT NOT NULL"
     ],

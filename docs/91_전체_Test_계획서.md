@@ -12,12 +12,12 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 
 751개 ID는 요구 추적 목록이며 모두가 즉시 실행 가능한 test script라는 뜻이 아니다. Phase를 활성화하기 전에 해당 Gate 필수 case와 기능별 대표 정상/경계/실패 case를 실제 fixture 경로, 조립할 구현/adapter, 순서가 있는 실행 절차, 독립 oracle, DB/파일 확인 SQL, timeout/종료조건, 증거 경로까지 구체화한다. 공통 템플릿 문구만 남은 case는 `NOT_RUN`을 유지하고 Gate 증거로 사용할 수 없다.
 
-우선 구체화 대상은 P0-BT-002·P0-IT-002, P3 crash-cut·P3-IT-004, P6-IT-007, P22-CT-004, P25-IT-002다. 검증기는 이 핵심 case가 범용 절차/DB 확인 문구로 되돌아가면 실패한다. 나머지 case는 해당 Phase 착수 직전에 필요한 범위만 구체화하며 751개를 선행 일괄 구현하지 않는다.
+P0 Gate 실행 계약은 `P0-UT-001`, `P0-UT-002`, `P0-BT-002`, `P0-BT-003`, `P0-CT-003`, `P0-CN-001`, `P0-CT-004`, `P0-IT-002` 정확히 8개다. 각 case는 실제 test source path, 최소 fixture, 실행 명령, 독립 oracle, 파일 확인, timeout, evidence path를 갖춘다. 나머지 P0 case는 비차단 후속 계획이고, P2/P3/P6/P22/P25의 실행 계약은 해당 Phase 진입 직전 실제 코드와 schema를 기준으로 구체화한다. 751개를 선행 일괄 구현하지 않는다.
 
 ## 3. Phase별 전략
 | Phase | 주요 초점 | Test 수 | 대표 회귀 |
 |---|---|---|---|
-| 0 | 기준선 충돌 C01~C06 검토와 core JVM smoke 통과 | 27 | P0-RT-001 |
+| 0 | C01·C02·C03 적용, C14 빌드 검증과 P0 Gate 8개 통과 | 27 | P0-RT-001 |
 | 1 | 원문 ID 수량 일치·필수 참조 0 건 오류·자산 검증 리포트 | 27 | P1-RT-001 |
 | 2 | 시간 역행·중복 경계 처리 0 건·배속과 RNG 독립 | 32 | P2-RT-001 |
 | 3 | 모든 crash cut 에서 이전 또는 다음 완전 세대만 로드 | 37 | P3-RT-001 |
@@ -50,33 +50,33 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 
 | Test ID / 상세 | 종류 | 대상 기능 | 검증 입력 | 예상 결과 | 상태 |
 |---|---|---|---|---|---|
-| [P0-UT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-001) | UT | FUNC-P0-001 | §28 6 명, §1737 조직10/출전6 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 | NOT_RUN |
+| [P0-UT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-001) | UT | FUNC-P0-001 | 원문 SHA-256, Phase 0 결정 집합 `{C01,C02,C03,C14}`, active P0 REQUIRED/DATA Assertion 상태 | hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건 | NOT_RUN |
 | [P0-BT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-001) | BT | FUNC-P0-001 | 같은 규칙의 모순이며 교체 문구 없음 | 결정 대기; 해당 기능의 운영 활성화 차단 | NOT_RUN |
 | [P0-FT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-001) | FT | FUNC-P0-001 | 요구사항 번호 하나 누락 | 문서 검증 실패; 릴리즈 범위에서 숨기지 않음 | NOT_RUN |
 | [P0-CT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-001) | CT | FUNC-P0-001 | §28 6 명, §1737 조직10/출전6; 같은요청2 회 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 같은입력2 회 결과동일·live state/RNG 쓰기0 | NOT_RUN |
-| [P0-IT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-001) | IT | FUNC-P0-001 | §28 6 명, §1737 조직10/출전6; 모듈 adapter 를실제 구현으로교체 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 | NOT_RUN |
-| [P0-UT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-002) | UT | FUNC-P0-002 | simulation 소스에 Android import 없음 | 순수 JVM test 태스크 단독 성공 | NOT_RUN |
-| [P0-BT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-002) | BT | FUNC-P0-002 | 금지 edge/API 6종: simulation→save/Room, feature:party→feature:guild, core:data→feature:party, core:model→Android, feature→WorldEngine/SaveCoordinator, feature→mutable Repository; 허용 edge: save→simulation/database, tools:headless→simulation/database/save/testing | 금지 edge/API 6종은 각각 실패하고 허용 edge와 두 JVM compile은 통과 | NOT_RUN |
+| [P0-IT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-001) | IT | FUNC-P0-001 | C01 fixture와 원문/결정/추적 JSON | C01 근거가 보존되고 같은 입력의 검사 결과가 동치이며 Android/DB 경로를 호출하지 않는다. | NOT_RUN |
+| [P0-UT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-002) | UT | FUNC-P0-002 | P0 Build Manifest와 `gradlew.bat :core:simulation:test` | 물리 project가 `:app`, `:core:simulation`뿐이고 JVM test가 성공한다. | NOT_RUN |
+| [P0-BT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-002) | BT | FUNC-P0-002 | 정상 edge `:app→:core:simulation`; 금지 edge `:core:simulation→:app`; simulation의 Android/Room/Compose/네트워크 import; 미선언 P0 module/plugin/dependency | 모든 금지 fixture는 실패하고 정상 `:app→:core:simulation` graph와 JVM test는 통과 | NOT_RUN |
 | [P0-FT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-002) | FT | FUNC-P0-002 | 잠금 버전 의존성 resolve 실패 | 빌드 차단; 자동 최신 버전으로 변경하지 않음 | NOT_RUN |
 | [P0-CT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-002) | CT | FUNC-P0-002 | simulation 소스에 Android import 없음; 같은요청2 회 | 순수 JVM test 태스크 단독 성공; 같은입력2 회 결과동일·live state/RNG 쓰기0 | NOT_RUN |
-| [P0-IT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-002) | IT | FUNC-P0-002 | 동일 EMPTY_WORLD/seed42를 :app instrumentation entry와 :tools:headless entry에서 각각 실행 | 두 entry가 동일 WorldSession/SavePort 계약과 서로 다른 조립 루트를 사용하고 재조회 stateHash·receipt·schemaVersion이 일치하며 운영 DB 경로는 거절 | NOT_RUN |
+| [P0-IT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-002) | IT | FUNC-P0-002 | `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`와 AppRoot launch smoke | 세 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다. | NOT_RUN |
 | [P0-UT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-003) | UT | FUNC-P0-003 | Money(100), debit=40 | Money(60), 원본 값은 불변 | NOT_RUN |
-| [P0-BT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-003) | BT | FUNC-P0-003 | Long.MAX_VALUE+1 금액 연산 | ArithmeticOverflow 오류·상태 변경 없음 | NOT_RUN |
+| [P0-BT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-003) | BT | FUNC-P0-003 | `Money(Long.MAX_VALUE).plus(Money(1))`, `BasisPoint(10_001)`, `ProbabilityPpm(1_000_001)` | ArithmeticOverflow 오류·상태 변경 없음 | NOT_RUN |
 | [P0-FT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-003) | FT | FUNC-P0-003 | 잘못된 sessionEpoch 명령 | StaleSession; 다른 슬롯 변경 없음 | NOT_RUN |
-| [P0-CT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-003) | CT | FUNC-P0-003 | Money(100), debit=40; 같은요청2 회 | Money(60), 원본 값은 불변; 같은입력2 회 결과동일·live state/RNG 쓰기0 | NOT_RUN |
-| [P0-IT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-003) | IT | FUNC-P0-003 | Money(100), debit=40; 모듈 adapter 를실제 구현으로교체 | Money(60), 원본 값은 불변; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 | NOT_RUN |
+| [P0-CT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-003) | CT | FUNC-P0-003 | 동일 `CommandEnvelope`/`DomainEvent` 객체와 canonical golden bytes | 동일 입력의 bytes가 완전히 같고 roundtrip field loss 0건이며 unknown codec을 성공 처리하지 않는다. | NOT_RUN |
+| [P0-IT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-003) | IT | FUNC-P0-003 | `:app`의 WorldSession 공개 API 사용과 저장 구현 타입 직접 참조 fixture | 공개 API 사용만 compile되고 저장 구현 직접 참조는 실패하며 in-memory 결과는 정확히 1회 반환된다. | NOT_RUN |
 | [P0-UT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-004) | UT | FUNC-P0-004 | fixture=EMPTY_WORLD, seed=42 | 같은 초기 stateHash 와 홈 empty state | NOT_RUN |
 | [P0-BT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-004) | BT | FUNC-P0-004 | 선행 기능 port 가 UnsupportedFeature | 기능 준비 안 됨 표시; 앱 crash 없음 | NOT_RUN |
-| [P0-FT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-004) | FT | FUNC-P0-004 | headless runner 가 실게임 DB 경로를 받음 | 실행 거절; 원본 DB hash 불변 | NOT_RUN |
-| [P0-CT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-004) | CT | FUNC-P0-004 | fixture=EMPTY_WORLD, seed=42; 같은요청2 회 | 같은 초기 stateHash 와 홈 empty state; 같은입력2 회 결과동일·live state/RNG 쓰기0 | NOT_RUN |
-| [P0-IT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-004) | IT | FUNC-P0-004 | fixture=EMPTY_WORLD, seed=42; 모듈 adapter 를실제 구현으로교체 | 같은 초기 stateHash 와 홈 empty state; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 | NOT_RUN |
+| [P0-FT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-004) | FT | FUNC-P0-004 | unknown Screen ID와 실패하는 retry callback | Blocked/Error가 유지되고 crash·가짜 성공·navigation 실행이 없다. | NOT_RUN |
+| [P0-CT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-004) | CT | FUNC-P0-004 | 5개 AppShellState, unknown Screen ID, retry callback | 각 상태가 구분되고 미구현 기능은 Blocked이며 crash·가짜 성공·중복 callback 0건 | NOT_RUN |
+| [P0-IT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-004) | IT | FUNC-P0-004 | 앱 최초 실행·process recreation과 5-state fixture | shell이 crash 없이 재생성되고 권위 저장 성공을 주장하지 않으며 DB 파일을 만들지 않는다. | NOT_RUN |
 | [P0-RT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-rt-001) | RT | PHASE-0 | §28 6 명, §1737 조직10/출전6; 선행 Phase 의승인 fixture 전체 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 | NOT_RUN |
-| [P0-CN-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-cn-001) | CN | PHASE-0 | §28 6 명, §1737 조직10/출전6; 요청2 개동시에제출/이전 epoch 응답지연 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 | NOT_RUN |
-| [P0-REC-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-rec-001) | REC | PHASE-0 | 요구사항 번호 하나 누락; 정상요청직전/커밋직전/직후 kill | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 | NOT_RUN |
-| [P0-PT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-pt-001) | PT | PHASE-0 | §28 6 명, §1737 조직10/출전6; seed0..99 를반복하고대표최대 fixture 사용 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 | NOT_RUN |
-| [P0-OP-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-op-001) | OP | PHASE-0 | fixture=EMPTY_WORLD, seed=42; 네트워크차단·앱재실행/도구재실행 | 같은 초기 stateHash 와 홈 empty state; 필수 네트워크요청0·게임현실시간 catchup0 | NOT_RUN |
-| [P0-ET-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-et-001) | ET | PHASE-0 | headless runner 가 실게임 DB 경로를 받음 | 실행 거절; 원본 DB hash 불변; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 | NOT_RUN |
-| [P0-IT-005](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-005) | IT | PHASE-0 | §28 6 명, §1737 조직10/출전6→fixture=EMPTY_WORLD, seed=42 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존 및 같은 초기 stateHash 와 홈 empty state; 선행 port/DTO/version 인계완료 | NOT_RUN |
+| [P0-CN-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-cn-001) | CN | PHASE-0 | command A/B 동시 enqueue, stale epoch C, enqueue 전 취소 D, enqueue 후 caller 취소 E, close 중 F | A→B 수락 순서와 stateVersion이 일치하고 stale epoch/close 이후 쓰기 0, enqueue 전 취소 효과 0, 수락 후 E는 정확히 1회 완료 | NOT_RUN |
+| [P0-REC-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-rec-001) | REC | PHASE-0 | 보고서 쓰기 전·staging 완료 후·rename 직전 프로세스 중단 | 기존 또는 새 완전한 보고서만 존재하고 부분 파일·깨진 JSON 0건 | NOT_RUN |
+| [P0-PT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-pt-001) | PT | PHASE-0 | `:core:simulation:test`와 `:app:assembleDebug` 각 3회 | 측정치와 환경이 보고서에 남는다. P0에는 장기 시뮬레이션 성능 합격 임계치를 두지 않으며 이 Test는 Gate 비차단이다. | NOT_RUN |
+| [P0-OP-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-op-001) | OP | PHASE-0 | 앱 최초 실행·재실행, 네트워크 차단, AppShellState.Empty/Blocked | 동일 shell 상태, 필수 네트워크 요청 0, 현실시간 catch-up 0, DB 생성 0 | NOT_RUN |
+| [P0-ET-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-et-001) | ET | PHASE-0 | source hash mismatch, Gradle task 실패, unknown Screen ID, UnsupportedFeature | 문서/빌드 오류는 non-zero로 차단되고 UI는 Error/Blocked를 구분하며 crash·가짜 성공·DB 생성이 없다. | NOT_RUN |
+| [P0-IT-005](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-005) | IT | PHASE-0 | Phase 0 Gate evidence index | Gate evidence 누락 0, C01/C02/C03 적용, C14 build PASS, P3 저장 책임 인계 완료 | NOT_RUN |
 | [P1-UT-001](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-ut-001) | UT | FUNC-P1-001 | WPN-0001 물리19 레벨1 | 원문 ID 와 수치가 content_template 에 일치 | NOT_RUN |
 | [P1-BT-001](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-bt-001) | BT | FUNC-P1-001 | 같은 ID 두 행, 서로 다른 효과 | 중복 오류와 두 원문 행번호 반환 | NOT_RUN |
 | [P1-FT-001](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-ft-001) | FT | FUNC-P1-001 | 참조되지 않는 MON ID 가 loot 에 있음 | 정적 번들 발행 차단 | NOT_RUN |
@@ -132,7 +132,7 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 | [P2-RT-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-rt-001) | RT | PHASE-2 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100; 선행 Phase 의승인 fixture 전체 | 잔액60·receipt 1 개·stateVersion 1 회 증가; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 | NOT_RUN |
 | [P2-CN-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-cn-001) | CN | PHASE-2 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100; 요청2 개동시에제출/이전 epoch 응답지연 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 | NOT_RUN |
 | [P2-REC-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-rec-001) | REC | PHASE-2 | commit 실패; 정상요청직전/커밋직전/직후 kill | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 | NOT_RUN |
-| [P2-PT-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-pt-001) | PT | PHASE-2 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100; seed0..99 를반복하고대표최대 fixture 사용 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 | NOT_RUN |
+| [P2-PT-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-pt-001) | PT | PHASE-2 | mailbox 64+1개 burst, UI command 10개와 30일 AdvanceTime(최소 10,000 경계), 중간 process kill; PCG32 reference/golden vector | mailbox 무한증가·drop 0, segment별 transaction 상한 준수, UI starvation 없음, 외부 receipt 1개, 이미 완료한 boundary 재실행 0, 단일 실행과 terminal stateHash/RNG counter 동일 | NOT_RUN |
 | [P2-OP-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-op-001) | OP | PHASE-2 | 앱 종료 후 현실24 시간 경과 후 재실행; 네트워크차단·앱재실행/도구재실행 | worldTime·치료 잔여시간 동일; 필수 네트워크요청0·게임현실시간 catchup0 | NOT_RUN |
 | [P2-ET-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-et-001) | ET | PHASE-2 | 프로세스 즉시 kill 로 onStop 미실행 | 마지막 committed 상태만 복원; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 | NOT_RUN |
 | [P2-IT-006](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-it-006) | IT | PHASE-2 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100→앱 종료 후 현실24 시간 경과 후 재실행 | 잔액60·receipt 1 개·stateVersion 1 회 증가 및 worldTime·치료 잔여시간 동일; 선행 port/DTO/version 인계완료 | NOT_RUN |
@@ -155,7 +155,7 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 | [P3-BT-004](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-bt-004) | BT | FUNC-P3-004 | 지원보다 새로운 schema | UnsupportedSaveVersion·원본 hash 동일 | NOT_RUN |
 | [P3-FT-004](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-ft-004) | FT | FUNC-P3-004 | 실제 N→N+1 체인의 한 단계에 FaultInjector로 중간 migration 실패 주입 | 실패 복제본 격리·원본으로 복귀 | NOT_RUN |
 | [P3-CT-004](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-ct-004) | CT | FUNC-P3-004 | GREENFIELD_V1 fresh-open 요청 2회; LEGACY_CHAIN이면 실제 동일 archive migration 요청 2회 | GREENFIELD_V1은 migration 0개와 동치 open; LEGACY_CHAIN은 실제 단계별 이력 1회씩; 반복 효과 1회, 다른 payload는 IdempotencyKeyReuse | NOT_RUN |
-| [P3-IT-004](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-it-004) | IT | FUNC-P3-004 | GREENFIELD_V1: exported v1 fresh DB; LEGACY_CHAIN: oldest supported 실제 DB fixture→current schema | GREENFIELD_V1은 v1 fresh create/reopen·migration 0개; LEGACY_CHAIN은 실제 단계만 적용·대표 권위값 보존; 앱/headless 재조회 결과 동일 | NOT_RUN |
+| [P3-IT-004](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-it-004) | IT | FUNC-P3-004 | GREENFIELD_V1: exported v1 fresh DB; LEGACY_CHAIN: oldest supported 실제 DB fixture→current schema | GREENFIELD_V1은 v1 fresh create/reopen·migration 0개; LEGACY_CHAIN은 실제 단계만 적용·대표 권위값 보존; 앱/JVM test 재조회 결과 동일 | NOT_RUN |
 | [P3-UT-005](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-ut-005) | UT | FUNC-P3-005 | 정상 archive 가져오기 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원 | NOT_RUN |
 | [P3-BT-005](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-bt-005) | BT | FUNC-P3-005 | archive 에 ../save.db 경로 | UnsafeArchive 오류·외부 파일 생성0 | NOT_RUN |
 | [P3-FT-005](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-ft-005) | FT | FUNC-P3-005 | export 중 공간 부족 | 완성 표시하지 않음·부분파일 제거·기존 save 보존 | NOT_RUN |
@@ -169,7 +169,7 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 | [P3-RT-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-rt-001) | RT | PHASE-3 | 아이템 이동+금화지출+RNG 1 회; 선행 Phase 의승인 fixture 전체 | 세 요소와 receipt 가 같은 generation 에서 보임; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 | NOT_RUN |
 | [P3-CN-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-cn-001) | CN | PHASE-3 | 아이템 이동+금화지출+RNG 1 회; 요청2 개동시에제출/이전 epoch 응답지연 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 | NOT_RUN |
 | [P3-REC-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-rec-001) | REC | PHASE-3 | RNG row 쓰기 단계에서 예외; 정상요청직전/커밋직전/직후 kill | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 | NOT_RUN |
-| [P3-PT-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-pt-001) | PT | PHASE-3 | 아이템 이동+금화지출+RNG 1 회; seed0..99 를반복하고대표최대 fixture 사용 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 | NOT_RUN |
+| [P3-PT-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-pt-001) | PT | PHASE-3 | 10년/100년 synthetic current rows, dirty shard 1%/50%, 일반 command 1,000회, checkpoint 10회, g1→g2→g1 restore swap | 일반 command마다 SaveGeneration이 생기지 않음, checkpoint 크기는 변경 shard에 비례, restore 중 live DB 혼합 0, kill 후 이전 또는 새 완전 DB만 열림 | NOT_RUN |
 | [P3-OP-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-op-001) | OP | PHASE-3 | 현재 g3 손상, g2 정상; 네트워크차단·앱재실행/도구재실행 | g2 복원 제안·손실 경계와 시간 표시; 필수 네트워크요청0·게임현실시간 catchup0 | NOT_RUN |
 | [P3-ET-001](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-et-001) | ET | PHASE-3 | GC 중단 | 트랜잭션 rollback·모든 보존 root 로드 가능; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 | NOT_RUN |
 | [P3-IT-007](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-it-007) | IT | PHASE-3 | 아이템 이동+금화지출+RNG 1 회→현재 g3 손상, g2 정상 | 세 요소와 receipt 가 같은 generation 에서 보임 및 g2 복원 제안·손실 경계와 시간 표시; 선행 port/DTO/version 인계완료 | NOT_RUN |
@@ -265,7 +265,7 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 | [P6-RT-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-rt-001) | RT | PHASE-6 | T=1000 에 A/B 각 HP10, 서로10 피해 확정; 선행 Phase 의승인 fixture 전체 | A/B 동시 전투불능·먼저 정렬된 ID 우대 없음; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 | NOT_RUN |
 | [P6-CN-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-cn-001) | CN | PHASE-6 | T=1000 에 A/B 각 HP10, 서로10 피해 확정; 요청2 개동시에제출/이전 epoch 응답지연 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 | NOT_RUN |
 | [P6-REC-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-rec-001) | REC | PHASE-6 | eventTime 이 현재보다 작음; 정상요청직전/커밋직전/직후 kill | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 | NOT_RUN |
-| [P6-PT-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-pt-001) | PT | PHASE-6 | T=1000 에 A/B 각 HP10, 서로10 피해 확정; seed0..99 를반복하고대표최대 fixture 사용 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 | NOT_RUN |
+| [P6-PT-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-pt-001) | PT | PHASE-6 | 소형/최대 파티 fixture, 일반/상태이상 과밀/보스 전투 각 1,000회, 동일 PCG32 seed pack, UI render 없음 | 모든 전투 bounded 종료, event/reaction budget 초과는 typed 실패, 반복에 따른 heap 선형 증가 없음, 동일 seed/명령의 상세·배속 stateHash/RNG counter 동일 | NOT_RUN |
 | [P6-OP-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-op-001) | OP | PHASE-6 | 동일 seed/입력 네 재생모드; 네트워크차단·앱재실행/도구재실행 | stateHash·worldDuration·loot seed 동일; 필수 네트워크요청0·게임현실시간 catchup0 | NOT_RUN |
 | [P6-ET-001](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-et-001) | ET | PHASE-6 | 미지원 combatVersion replay | 요약 표시·현재엔진으로 다른 결과를 재연하지 않음; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 | NOT_RUN |
 | [P6-IT-007](07_Phase6_전투시간축_수치_상태이상_상세설계서.md#p6-it-007) | IT | PHASE-6 | 고정 파티/장비/몬스터/전리품 fixture로 파티 준비→자동 전투→전리품 정산→save/load; T=1000 에 A/B 각 HP10, 서로10 피해 확정→동일 seed/입력 네 재생모드 | Early Playable Gate에서 실제 WorldEngine/SavePort로 전투·정산·복원하고 Fake/Mock/UnsupportedFeature 성공0건; load 후 stateHash·전리품 소유권·worldDuration 동일; A/B 동시 전투불능·먼저 정렬된 ID 우대 없음; 선행 port/DTO/version 인계완료 | NOT_RUN |
@@ -567,7 +567,7 @@ Unit:순수규칙의독립 oracle. Component:validator/usecase/repository port �
 | [P17-RT-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-rt-001) | RT | PHASE-17 | 중상 NPC·가용치료비충분; 선행 Phase 의승인 fixture 전체 | 치료후보우선·위험원정강제선택없음; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 | NOT_RUN |
 | [P17-CN-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-cn-001) | CN | PHASE-17 | 중상 NPC·가용치료비충분; 요청2 개동시에제출/이전 epoch 응답지연 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 | NOT_RUN |
 | [P17-REC-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-rec-001) | REC | PHASE-17 | 목표대상아이템삭제; 정상요청직전/커밋직전/직후 kill | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 | NOT_RUN |
-| [P17-PT-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-pt-001) | PT | PHASE-17 | 중상 NPC·가용치료비충분; seed0..99 를반복하고대표최대 fixture 사용 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 | NOT_RUN |
+| [P17-PT-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-pt-001) | PT | PHASE-17 | 활성 NPC 2,200명, S1~S4 비율 고정, 1개월/1년/10년 진행, seed0..9, 상세↔축약 승격 경계 포함 | NPC별 Thread/DAO tick 0, 처리량은 이벤트 수에 bounded, 활동/보상 이중 처리 0, PSS/DB bytes가 설명 없는 선형 폭증 없음, 축약 편차는 승인된 통계 구간 내 | NOT_RUN |
 | [P17-OP-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-op-001) | OP | PHASE-17 | 은퇴 NPC 가가계도/전설장비원소유자로참조됨; 네트워크차단·앱재실행/도구재실행 | 상세일지압축가능·인물/핵심참조보존; 필수 네트워크요청0·게임현실시간 catchup0 | NOT_RUN |
 | [P17-ET-001](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-et-001) | ET | PHASE-17 | 압축중 checksum 실패 | 원본남김·참조변경0; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 | NOT_RUN |
 | [P17-IT-005](18_Phase17_NPC장기AI_인구순환_상세설계서.md#p17-it-005) | IT | PHASE-17 | 중상 NPC·가용치료비충분→은퇴 NPC 가가계도/전설장비원소유자로참조됨 | 치료후보우선·위험원정강제선택없음 및 상세일지압축가능·인물/핵심참조보존; 선행 port/DTO/version 인계완료 | NOT_RUN |

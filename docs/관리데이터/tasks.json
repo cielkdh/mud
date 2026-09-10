@@ -5,8 +5,8 @@
     "name": "원문 기준선과 충돌 판정 — 계약·Fixture",
     "function": "FUNC-P0-001",
     "stage": "계약",
-    "detail": "BaselineResolver.resolve(sectionId: SourceId, ruleKey: RuleKey) -> RuleDecision의 DTO/오류/불변식 정의. 입력 sectionId, ruleKey, candidateClauses[], sourceHash. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "원문 파일·document_manifest.json·decisions.json·추적 데이터의 입력/오류/검증 결과를 고정하고 FUNC-P0-001의 REQUIRED/DATA Assertion을 승인하거나 결정 ID 근거로 강도를 재분류한다. 별도 BaselineResolver production 타입은 만들지 않고 기존 validate_docs.py 검사를 확장한다.",
+    "module": "docs/검증도구 / docs/관리데이터",
     "depends": [],
     "importance": "필수",
     "kind": "implementation",
@@ -16,7 +16,7 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "검증 계약·fixture 승인, FUNC-P0-001 미승인 REQUIRED/DATA 0건, 별도 production resolver 0",
     "tests": [
       "P0-UT-001",
       "P0-BT-001",
@@ -46,7 +46,7 @@
     "function": "FUNC-P0-001",
     "stage": "알고리즘",
     "detail": "원문 전체와 SHA-256을 고정하고 번호·행범위로 추적한다; 명시적 교체/최종 조항을 우선하되 단순히 번호가 크다는 이유만으로 덮어쓰지 않는다; 해결 근거가 없는 충돌은 DESIGN_DECISION_REQUIRED로 표시하고 영향 Task를 차단한다; 본 문서의 보완 정책은 원문 규칙과 다른 namespace로 관리한다. 정해진 입력에서는 '조직과 출전을 분리하고 R-PARTY-001에 원문 근거 2개 보존'을 만족해야 한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "module": "docs/검증도구 / docs/관리데이터",
     "depends": [
       "P0-TASK-001"
     ],
@@ -58,7 +58,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "충돌 우선순위·차단 규칙과 C01 근거 추적 검사 PASS",
     "tests": [
       "P0-UT-001",
       "P0-BT-001",
@@ -66,9 +66,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-005"
@@ -85,8 +83,8 @@
     "name": "원문 기준선과 충돌 판정 — 저장·연계",
     "function": "FUNC-P0-001",
     "stage": "어댑터",
-    "detail": "파일/빌드 산출물 adapter. 조회/계산/검증결과adapter를구현하고live world mutation이없음을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "문서 검증 결과는 staging 후 97_문서정합성_검증보고서.md에 원자 교체하고 실패 시 종료코드 1을 반환한다. DB·SavePort·앱 adapter는 사용하지 않는다.",
+    "module": "docs/검증도구 / docs/관리데이터",
     "depends": [
       "P0-TASK-001"
     ],
@@ -98,16 +96,14 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "검증보고서 원자 교체·실패 종료코드 1·game DB/앱 호출 0",
     "tests": [
       "P0-CT-001",
       "P0-IT-001"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-005"
@@ -124,8 +120,8 @@
     "name": "원문 기준선과 충돌 판정 — UI·호출 경로",
     "function": "FUNC-P0-001",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "검증 도구는 CLI와 Markdown 보고서만 제공한다. Android UI·관리 화면·DomainError/SavePort 경로는 만들지 않는다.",
+    "module": "docs/검증도구",
     "depends": [
       "P0-TASK-001"
     ],
@@ -137,16 +133,14 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "CLI 종료코드·Markdown 보고서로 실패 관측, Android UI·SavePort 경로 0",
     "tests": [
       "P0-CT-001",
       "P0-IT-001"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-005"
@@ -164,7 +158,7 @@
     "function": "FUNC-P0-001",
     "stage": "검증",
     "detail": "P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "module": "docs/검증도구 / docs/관리데이터",
     "depends": [
       "P0-TASK-002",
       "P0-TASK-003",
@@ -188,9 +182,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-021"
@@ -207,8 +199,8 @@
     "name": "빌드·모듈·기술버전 고정 — 계약·Fixture",
     "function": "FUNC-P0-002",
     "stage": "계약",
-    "detail": "BuildBaseline.verify(lock: ToolchainLock, graph: ModuleGraph) -> BuildReport의 DTO/오류/불변식 정의. 입력 versions{AGP,Gradle,JDK,Kotlin,KSP,Room}, modules{edges,imports,publicSymbols}, compositionRoots{:app,:tools:headless}, schemaBaselineMode. WorldSession·SavePort·SaveCoordinator 소유와 정상/금지 graph fixture를 고정한다.",
-    "module": ":app / :tools:headless / :core:simulation / :core:save / :core:data / :core:testing",
+    "detail": "P0 Build Manifest를 실제 Gradle 파일로 옮긴다. root IMSI, Android identity, JDK 17, :app/:core:simulation 두 project, plugin/dependency allowlist, 실행 명령과 evidence 경로를 고정하고 FUNC-P0-002의 REQUIRED/DATA를 승인하며 채택한 RECOMMENDED Assertion을 결정 ID에 연결한다. 별도 BuildBaseline class는 만들지 않는다.",
+    "module": "Gradle root / :app / :core:simulation",
     "depends": [],
     "importance": "필수",
     "kind": "implementation",
@@ -218,7 +210,7 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "P0 Build Manifest·두 project graph·fixture 승인, FUNC-P0-002 미승인 REQUIRED/DATA 0건, 채택 RECOMMENDED 결정 ID 연결",
     "tests": [
       "P0-UT-002",
       "P0-BT-002",
@@ -247,8 +239,8 @@
     "name": "빌드·모듈·기술버전 고정 — 핵심 규칙",
     "function": "FUNC-P0-002",
     "stage": "알고리즘",
-    "detail": "원문 §3031 모듈명을 유지하고 기존 저장소를 인벤토리한다. allowlist 밖 내부 edge와 simulation의 Android/Room/Compose/네트워크 import를 검사하고, feature의 WorldEngine·SaveCoordinator·mutable Repository 직접 참조를 금지한다. WorldSession·SavePort는 :core:simulation, SaveCoordinator는 :core:save에 두며 :app과 :tools:headless만 조립한다. toolchain·schema export·SchemaBaselineMode를 증거로 잠근다.",
-    "module": ":app / :tools:headless / :core:simulation / :core:save / :core:data / :core:testing",
+    "detail": "P0 물리 graph는 :app→:core:simulation 하나로 제한한다. simulation의 Android/Room/Compose/네트워크 import와 미선언 module/plugin/dependency를 실패시키고 toolchain·dependency lock·GREENFIELD_V1 결정 증거를 보관한다.",
+    "module": "Gradle root / :app / :core:simulation",
     "depends": [
       "P0-TASK-006"
     ],
@@ -260,7 +252,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "전체 모듈 allowlist·금지 API·두 조립 루트 compile/동치 검증; toolchain·SchemaBaselineMode 증거 잠금; 미정 규칙 활성 금지",
+    "done": "두 project graph·allowlist·금지 import·toolchain/lock 증거 검사 PASS",
     "tests": [
       "P0-UT-002",
       "P0-BT-002",
@@ -268,9 +260,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-010"
@@ -287,8 +277,8 @@
     "name": "빌드·모듈·기술버전 고정 — 저장·연계",
     "function": "FUNC-P0-002",
     "stage": "어댑터",
-    "detail": "실제 Gradle graph/source symbol 검사와 schema export 검증 adapter를 연결한다. :tools:headless는 격리 DB root만 받고 운영 DB 경로를 거절하며, 두 조립 루트의 구현 class·schemaVersion·stateHash 증거를 남긴다.",
-    "module": ":app / :tools:headless / :core:simulation / :core:save / :core:data / :core:testing",
+    "detail": "실제 Gradle graph/source import 검사와 dependency lock 검증을 연결한다. P0에서는 Room schema·DB·headless adapter를 만들지 않고 P3 인계 경로 core/save/schemas만 검사한다.",
+    "module": "Gradle root / :app / :core:simulation",
     "depends": [
       "P0-TASK-006"
     ],
@@ -300,16 +290,14 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "graph/import/lock·P3 인계 경로 검사 PASS, P0 schema/DB/headless 산출물 0",
     "tests": [
       "P0-CT-002",
       "P0-IT-002"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-010"
@@ -326,8 +314,8 @@
     "name": "빌드·모듈·기술버전 고정 — UI·호출 경로",
     "function": "FUNC-P0-002",
     "stage": "표현/진입",
-    "detail": ":app instrumentation entry와 :tools:headless CLI entry가 동일 WorldSession/SavePort 계약을 조립하도록 한다. feature UI는 명령은 WorldSession, 조회는 typed ReadPort만 사용하고 저장소를 직접 수정하지 않는다.",
-    "module": ":app / :tools:headless / :core:simulation / :core:data",
+    "detail": ":app이 :core:simulation 공개 계약만 의존해 AppRoot를 조립하고 debug build를 실행한다. save/headless/feature 모듈 및 실제 DB는 연결하지 않는다.",
+    "module": ":app / :core:simulation",
     "depends": [
       "P0-TASK-006"
     ],
@@ -339,16 +327,14 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": ":app → :core:simulation만으로 AppRoot assemble/smoke PASS, DB/save/headless 0",
     "tests": [
       "P0-CT-002",
       "P0-IT-002"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-010"
@@ -366,7 +352,7 @@
     "function": "FUNC-P0-002",
     "stage": "검증",
     "detail": "P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "module": "Gradle root / :app / :core:simulation",
     "depends": [
       "P0-TASK-007",
       "P0-TASK-008",
@@ -390,9 +376,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-021"
@@ -409,8 +393,8 @@
     "name": "공통 타입·명령·오류·이벤트 계약 — 계약·Fixture",
     "function": "FUNC-P0-003",
     "stage": "계약",
-    "detail": "ContractRegistry.validate(command: WorldCommand, event: DomainEvent) -> ContractResult의 DTO/오류/불변식 정의. 입력 commandId, epoch, expectedVersion, actorId, payloadType, payload. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "공통 value object, sealed Command/Event/Error, CommandEnvelope, WorldSession, SavePort의 public contract와 fixture를 정의한다. 별도 ContractRegistry는 만들지 않는다.",
+    "module": ":core:simulation",
     "depends": [],
     "importance": "필수",
     "kind": "implementation",
@@ -420,7 +404,7 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "value object·Command/Event/Error·WorldSession/SavePort 계약과 fixture 승인",
     "tests": [
       "P0-UT-003",
       "P0-BT-003",
@@ -449,8 +433,8 @@
     "name": "공통 타입·명령·오류·이벤트 계약 — 핵심 규칙",
     "function": "FUNC-P0-003",
     "stage": "알고리즘",
-    "detail": "GameMinute·CombatMillis·Money·BasisPoint·EntityId를 구분하고 혼합 연산을 차단한다; 공통 CommandEnvelope는 commandId/sessionEpoch/expectedVersion/payload를 포함한다; DomainEvent는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload를 포함한다; 기능 미구현 port는 UnsupportedFeature를 반환하며 성공을 가장한 no-op을 금지한다. 정해진 입력에서는 'Money(60), 원본 값은 불변'을 만족해야 한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "GameMinute·CombatMillis·Money·BasisPoint·ProbabilityPpm·EntityId를 구분하고 혼합 연산을 차단한다; CommandEnvelope는 commandId/sessionEpoch/expectedVersion/payload를 포함한다; DomainEvent는 eventId/sourceId/sourceEventId/sourceEpoch/sourceCommandId/sourceVersion/gameMinute/subMinuteMs/eventSequence/visibility/importance/payload를 포함한다; UnsupportedFeature를 성공으로 가장한 no-op을 금지하고 Money overflow는 exact arithmetic로 거절한다.",
+    "module": ":core:simulation",
     "depends": [
       "P0-TASK-011"
     ],
@@ -462,7 +446,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "type 경계·overflow·UnsupportedFeature·Command/Event field 검사 PASS",
     "tests": [
       "P0-UT-003",
       "P0-BT-003",
@@ -470,9 +454,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-015"
@@ -489,8 +471,8 @@
     "name": "공통 타입·명령·오류·이벤트 계약 — 저장·연계",
     "function": "FUNC-P0-003",
     "stage": "어댑터",
-    "detail": "파일/빌드 산출물 adapter. 조회/계산/검증결과adapter를구현하고live world mutation이없음을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "Command/Event codec golden과 test-only in-memory SavePort를 구현한다. Room/파일 adapter·DDL·migration은 만들지 않으며 P3 인계 계약만 검증한다.",
+    "module": ":core:simulation test source",
     "depends": [
       "P0-TASK-011"
     ],
@@ -502,16 +484,14 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "codec golden·test-only in-memory SavePort PASS, production persistence 산출물 0",
     "tests": [
       "P0-CT-003",
       "P0-IT-003"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-015"
@@ -528,8 +508,8 @@
     "name": "공통 타입·명령·오류·이벤트 계약 — UI·호출 경로",
     "function": "FUNC-P0-003",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": ":app은 WorldSession 공개 API와 typed 결과만 참조한다. 실제 gameplay handler·ReadPort·DB 조립은 소유 Phase까지 추가하지 않는다.",
+    "module": ":app / :core:simulation",
     "depends": [
       "P0-TASK-011"
     ],
@@ -541,16 +521,14 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": ":app 공개 API compile PASS, 저장 구현/DAO 직접 참조 0",
     "tests": [
       "P0-CT-003",
       "P0-IT-003"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-015"
@@ -568,7 +546,7 @@
     "function": "FUNC-P0-003",
     "stage": "검증",
     "detail": "P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "module": ":core:simulation / :app",
     "depends": [
       "P0-TASK-012",
       "P0-TASK-013",
@@ -592,9 +570,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-021"
@@ -611,8 +587,8 @@
     "name": "최소 검증 하네스·공통 UI 껍데기 — 계약·Fixture",
     "function": "FUNC-P0-004",
     "stage": "계약",
-    "detail": "SmokeHarness.run(seed: Long, fixture: FixtureId) -> SmokeReport의 DTO/오류/불변식 정의. 입력 seed, fixtureId, dbPath, supportedPorts[]. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "AppShellState와 AppRoot(state,onRetry) 계약, 전역 Screen ID placeholder 규칙을 정의한다. 별도 SmokeHarness production 클래스는 만들지 않는다.",
+    "module": ":app",
     "depends": [],
     "importance": "필수",
     "kind": "implementation",
@@ -622,7 +598,7 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "AppShellState·AppRoot·placeholder 계약과 fixture 승인",
     "tests": [
       "P0-UT-004",
       "P0-BT-004",
@@ -651,8 +627,8 @@
     "name": "최소 검증 하네스·공통 UI 껍데기 — 핵심 규칙",
     "function": "FUNC-P0-004",
     "stage": "알고리즘",
-    "detail": "새게임·던전·전투·세이브 진입용 최소 route와 loading/empty/error 상태를 먼저 만든다; 공통 FakeClock·ScriptedRng·FaultInjector를 JVM test에서 제공한다; core import 규칙·문서 ID 링크·Schema smoke를 CI 초기 단계에 둔다; 후속 Phase의 실제 화면은 각 Phase에서 추가하고 P22에서 디자인 전체 통합한다. 정해진 입력에서는 '같은 초기 stateHash와 홈 empty state'을 만족해야 한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "Loading/Ready/Empty/Error/Blocked를 구현하고 88 문서의 기존 Screen ID만 placeholder로 등록한다. 실제 Navigation graph와 새게임·던전·전투·세이브 화면은 만들지 않는다.",
+    "module": ":app",
     "depends": [
       "P0-TASK-016"
     ],
@@ -664,7 +640,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "AppRoot 5-state·기존 Screen ID placeholder 구현, 실제 gameplay navigation 0",
     "tests": [
       "P0-UT-004",
       "P0-BT-004",
@@ -672,9 +648,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-020"
@@ -691,8 +665,8 @@
     "name": "최소 검증 하네스·공통 UI 껍데기 — 저장·연계",
     "function": "FUNC-P0-004",
     "stage": "어댑터",
-    "detail": "파일/빌드 산출물 adapter. 조회/계산/검증결과adapter를구현하고live world mutation이없음을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "FakeClock·ScriptedRng·FaultInjector는 실제 사용하는 JVM test source에만 둔다. production adapter와 DB fixture를 만들지 않는다.",
+    "module": ":core:simulation test source / :app test source",
     "depends": [
       "P0-TASK-016"
     ],
@@ -704,16 +678,14 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "사용하는 test source에만 fixture 생성, production adapter/DB fixture 0",
     "tests": [
       "P0-CT-004",
       "P0-IT-004"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P0-TASK-020"
@@ -730,8 +702,8 @@
     "name": "최소 검증 하네스·공통 UI 껍데기 — UI·호출 경로",
     "function": "FUNC-P0-004",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "5-state, retry, unknown route, contentDescription/role/focus order, 48dp touch target을 Compose test로 검증한다.",
+    "module": ":app",
     "depends": [
       "P0-TASK-016"
     ],
@@ -743,16 +715,14 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "5-state·retry·unknown route·접근성 Compose test PASS",
     "tests": [
       "P0-CT-004",
       "P0-IT-004"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-020"
@@ -770,7 +740,7 @@
     "function": "FUNC-P0-004",
     "stage": "검증",
     "detail": "P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "module": ":app / :core:simulation",
     "depends": [
       "P0-TASK-017",
       "P0-TASK-018",
@@ -794,9 +764,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P0-TASK-021"
@@ -813,8 +781,8 @@
     "name": "Phase 0 통합 검증·인계 Gate",
     "function": "PHASE-0",
     "stage": "Gate",
-    "detail": "기준선 충돌 C01~C06 검토와 core JVM smoke 통과; 기능별리뷰/예외/회귀/세이브호환/후속port확인. 미승인설계보완안은해당기능구현활성화를차단하고상태를은폐하지않는다.",
-    "module": ":app / :core:common / :core:model / :core:testing",
+    "detail": "C01·C02·C03 적용과 C14 Build Manifest를 확인하고 8개 Gate Test를 실행한다. 실제 Room schema·SaveCoordinator·DDL/migration·crash recovery는 P3 인계 항목으로 확인하며 P0 PASS 조건에 넣지 않는다.",
+    "module": "docs/검증도구 / Gradle root / :app / :core:simulation",
     "depends": [
       "P0-TASK-005",
       "P0-TASK-010",
@@ -829,41 +797,20 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "필수Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0",
+    "done": "Gate 8개 PASS·C01/C02/C03 적용·C14 빌드 증거·인계 contract/fixture·미해결 P0/P1 결함 0",
     "tests": [
       "P0-UT-001",
-      "P0-BT-001",
-      "P0-FT-001",
-      "P0-CT-001",
-      "P0-IT-001",
       "P0-UT-002",
       "P0-BT-002",
-      "P0-FT-002",
-      "P0-CT-002",
-      "P0-IT-002",
-      "P0-UT-003",
       "P0-BT-003",
-      "P0-FT-003",
       "P0-CT-003",
-      "P0-IT-003",
-      "P0-UT-004",
-      "P0-BT-004",
-      "P0-FT-004",
-      "P0-CT-004",
-      "P0-IT-004",
-      "P0-RT-001",
       "P0-CN-001",
-      "P0-REC-001",
-      "P0-PT-001",
-      "P0-OP-001",
-      "P0-ET-001",
-      "P0-IT-005"
+      "P0-CT-004",
+      "P0-IT-002"
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P1-TASK-001",
@@ -960,12 +907,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P1-TASK-005"
@@ -1005,12 +947,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P1-TASK-005"
@@ -1050,12 +987,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-005"
@@ -1100,12 +1032,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-021"
@@ -1191,12 +1118,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P1-TASK-010"
@@ -1236,12 +1158,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P1-TASK-010"
@@ -1281,12 +1198,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-010"
@@ -1331,12 +1243,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-021"
@@ -1422,12 +1329,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P1-TASK-015"
@@ -1467,12 +1369,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P1-TASK-015"
@@ -1512,12 +1409,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-015"
@@ -1562,12 +1454,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-021"
@@ -1653,12 +1540,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P1-TASK-020"
@@ -1698,12 +1580,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P1-TASK-020"
@@ -1743,12 +1620,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-020"
@@ -1793,12 +1665,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P1-TASK-021"
@@ -1866,12 +1733,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C10",
-      "C13",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-001",
@@ -1978,9 +1840,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P2-TASK-005"
@@ -2017,9 +1877,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P2-TASK-005"
@@ -2056,9 +1914,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-005"
@@ -2100,9 +1956,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-026"
@@ -2182,9 +2036,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P2-TASK-010"
@@ -2221,9 +2073,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P2-TASK-010"
@@ -2260,9 +2110,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-010"
@@ -2304,9 +2152,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-026"
@@ -2386,9 +2232,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P2-TASK-015"
@@ -2425,9 +2269,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P2-TASK-015"
@@ -2464,9 +2306,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-015"
@@ -2508,9 +2348,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-026"
@@ -2590,9 +2428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P2-TASK-020"
@@ -2629,9 +2465,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P2-TASK-020"
@@ -2668,9 +2502,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-020"
@@ -2712,9 +2544,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-026"
@@ -2794,9 +2624,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P2-TASK-025"
@@ -2833,9 +2661,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P2-TASK-025"
@@ -2872,9 +2698,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-025"
@@ -2916,9 +2740,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P2-TASK-026"
@@ -2989,9 +2811,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-001",
@@ -3107,11 +2927,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P3-TASK-005"
@@ -3150,11 +2966,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-005"
@@ -3193,11 +3005,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-005"
@@ -3241,11 +3049,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-031"
@@ -3331,11 +3135,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P3-TASK-010"
@@ -3374,11 +3174,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-010"
@@ -3417,11 +3213,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-010"
@@ -3465,11 +3257,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-031"
@@ -3555,11 +3343,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P3-TASK-015"
@@ -3598,11 +3382,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-015"
@@ -3641,11 +3421,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-015"
@@ -3689,11 +3465,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-031"
@@ -3779,11 +3551,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P3-TASK-020"
@@ -3822,11 +3590,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-020"
@@ -3865,11 +3629,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-020"
@@ -3913,11 +3673,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-031"
@@ -4003,11 +3759,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P3-TASK-025"
@@ -4046,11 +3798,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-025"
@@ -4089,11 +3837,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-025"
@@ -4137,11 +3881,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-031"
@@ -4227,11 +3967,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P3-TASK-030"
@@ -4270,11 +4006,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P3-TASK-030"
@@ -4313,11 +4045,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-030"
@@ -4361,11 +4089,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P3-TASK-031"
@@ -4444,11 +4168,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C15",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P4-TASK-001",
@@ -4565,11 +4285,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P4-TASK-005"
@@ -4608,11 +4324,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P4-TASK-005"
@@ -4651,11 +4363,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-005"
@@ -4699,11 +4407,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-026"
@@ -4789,11 +4493,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P4-TASK-010"
@@ -4832,11 +4532,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P4-TASK-010"
@@ -4875,11 +4571,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-010"
@@ -4923,11 +4615,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-026"
@@ -5013,11 +4701,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P4-TASK-015"
@@ -5056,11 +4740,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P4-TASK-015"
@@ -5099,11 +4779,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-015"
@@ -5147,11 +4823,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-026"
@@ -5237,11 +4909,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P4-TASK-020"
@@ -5280,11 +4948,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P4-TASK-020"
@@ -5323,11 +4987,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-020"
@@ -5371,11 +5031,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-026"
@@ -5461,11 +5117,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P4-TASK-025"
@@ -5504,11 +5156,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P4-TASK-025"
@@ -5547,11 +5195,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-025"
@@ -5595,11 +5239,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P4-TASK-026"
@@ -5672,11 +5312,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P5-TASK-001",
@@ -5790,11 +5426,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P5-TASK-005"
@@ -5833,11 +5465,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P5-TASK-005"
@@ -5876,11 +5504,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-005"
@@ -5924,11 +5548,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-021"
@@ -6015,11 +5635,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P5-TASK-010"
@@ -6058,11 +5674,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P5-TASK-010"
@@ -6101,11 +5713,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-010"
@@ -6149,11 +5757,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-021"
@@ -6240,11 +5844,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P5-TASK-015"
@@ -6283,11 +5883,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P5-TASK-015"
@@ -6326,11 +5922,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-015"
@@ -6374,11 +5966,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-021"
@@ -6465,11 +6053,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P5-TASK-020"
@@ -6508,11 +6092,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P5-TASK-020"
@@ -6551,11 +6131,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-020"
@@ -6599,11 +6175,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P5-TASK-021"
@@ -6670,11 +6242,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-001",
@@ -6784,12 +6352,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P6-TASK-005"
@@ -6829,12 +6392,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-005"
@@ -6874,12 +6432,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-005"
@@ -6924,12 +6477,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-031"
@@ -7018,12 +6566,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P6-TASK-010"
@@ -7063,12 +6606,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-010"
@@ -7108,12 +6646,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-010"
@@ -7158,12 +6691,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-031"
@@ -7252,12 +6780,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P6-TASK-015"
@@ -7297,12 +6820,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-015"
@@ -7342,12 +6860,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-015"
@@ -7392,12 +6905,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-031"
@@ -7486,12 +6994,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P6-TASK-020"
@@ -7531,12 +7034,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-020"
@@ -7576,12 +7074,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-020"
@@ -7626,12 +7119,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-031"
@@ -7720,12 +7208,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P6-TASK-025"
@@ -7765,12 +7248,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-025"
@@ -7810,12 +7288,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-025"
@@ -7860,12 +7333,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-031"
@@ -7954,12 +7422,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P6-TASK-030"
@@ -7999,12 +7462,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P6-TASK-030"
@@ -8044,12 +7502,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-030"
@@ -8094,12 +7547,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P6-TASK-031"
@@ -8179,12 +7627,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C10",
-      "C15"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P7-TASK-001",
@@ -8286,11 +7729,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P7-TASK-005"
@@ -8329,11 +7768,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P7-TASK-005"
@@ -8372,11 +7807,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-005"
@@ -8420,11 +7851,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-021"
@@ -8509,11 +7936,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P7-TASK-010"
@@ -8552,11 +7975,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P7-TASK-010"
@@ -8595,11 +8014,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-010"
@@ -8643,11 +8058,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-021"
@@ -8732,11 +8143,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P7-TASK-015"
@@ -8775,11 +8182,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P7-TASK-015"
@@ -8818,11 +8221,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-015"
@@ -8866,11 +8265,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-021"
@@ -8955,11 +8350,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P7-TASK-020"
@@ -8998,11 +8389,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P7-TASK-020"
@@ -9041,11 +8428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-020"
@@ -9089,11 +8472,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P7-TASK-021"
@@ -9160,11 +8539,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C05",
-      "C06",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P8-TASK-001",
@@ -10084,12 +9459,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P9-TASK-005"
@@ -10129,12 +9499,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P9-TASK-005"
@@ -10174,12 +9539,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-005"
@@ -10224,12 +9584,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-026"
@@ -10319,12 +9674,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P9-TASK-010"
@@ -10364,12 +9714,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P9-TASK-010"
@@ -10409,12 +9754,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-010"
@@ -10459,12 +9799,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-026"
@@ -10554,12 +9889,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P9-TASK-015"
@@ -10599,12 +9929,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P9-TASK-015"
@@ -10644,12 +9969,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-015"
@@ -10694,12 +10014,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-026"
@@ -10789,12 +10104,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P9-TASK-020"
@@ -10834,12 +10144,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P9-TASK-020"
@@ -10879,12 +10184,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-020"
@@ -10929,12 +10229,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-026"
@@ -11024,12 +10319,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P9-TASK-025"
@@ -11069,12 +10359,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P9-TASK-025"
@@ -11114,12 +10399,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-025"
@@ -11164,12 +10444,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P9-TASK-026"
@@ -11243,12 +10518,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C06",
-      "C15",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P10-TASK-001",
@@ -11354,9 +10624,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P10-TASK-005"
@@ -11393,9 +10661,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P10-TASK-005"
@@ -11432,9 +10698,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-005"
@@ -11476,9 +10740,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-021"
@@ -11562,9 +10824,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P10-TASK-010"
@@ -11601,9 +10861,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P10-TASK-010"
@@ -11640,9 +10898,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-010"
@@ -11684,9 +10940,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-021"
@@ -11770,9 +11024,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P10-TASK-015"
@@ -11809,9 +11061,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P10-TASK-015"
@@ -11848,9 +11098,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-015"
@@ -11892,9 +11140,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-021"
@@ -11978,9 +11224,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P10-TASK-020"
@@ -12017,9 +11261,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P10-TASK-020"
@@ -12056,9 +11298,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-020"
@@ -12100,9 +11340,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P10-TASK-021"
@@ -12167,9 +11405,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C20"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P11-TASK-001",
@@ -13107,12 +12343,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P12-TASK-005"
@@ -13152,12 +12383,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P12-TASK-005"
@@ -13197,12 +12423,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-005"
@@ -13247,12 +12468,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-021"
@@ -13340,12 +12556,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P12-TASK-010"
@@ -13385,12 +12596,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P12-TASK-010"
@@ -13430,12 +12636,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-010"
@@ -13480,12 +12681,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-021"
@@ -13573,12 +12769,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P12-TASK-015"
@@ -13618,12 +12809,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P12-TASK-015"
@@ -13663,12 +12849,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-015"
@@ -13713,12 +12894,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-021"
@@ -13806,12 +12982,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P12-TASK-020"
@@ -13851,12 +13022,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P12-TASK-020"
@@ -13896,12 +13062,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-020"
@@ -13946,12 +13107,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P12-TASK-021"
@@ -14019,12 +13175,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C07",
-      "C10",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P13-TASK-001",
@@ -14124,9 +13275,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P13-TASK-005"
@@ -14163,9 +13312,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P13-TASK-005"
@@ -14202,9 +13349,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-005"
@@ -14246,9 +13391,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-021"
@@ -14330,9 +13473,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P13-TASK-010"
@@ -14369,9 +13510,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P13-TASK-010"
@@ -14408,9 +13547,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-010"
@@ -14452,9 +13589,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-021"
@@ -14536,9 +13671,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P13-TASK-015"
@@ -14575,9 +13708,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P13-TASK-015"
@@ -14614,9 +13745,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-015"
@@ -14658,9 +13787,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-021"
@@ -14742,9 +13869,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P13-TASK-020"
@@ -14781,9 +13906,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P13-TASK-020"
@@ -14820,9 +13943,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-020"
@@ -14864,9 +13985,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P13-TASK-021"
@@ -14931,9 +14050,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P14-TASK-001",
@@ -15036,11 +14153,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P14-TASK-005"
@@ -15079,11 +14192,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P14-TASK-005"
@@ -15122,11 +14231,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-005"
@@ -15170,11 +14275,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-021"
@@ -15260,11 +14361,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P14-TASK-010"
@@ -15303,11 +14400,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P14-TASK-010"
@@ -15346,11 +14439,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-010"
@@ -15394,11 +14483,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-021"
@@ -15484,11 +14569,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P14-TASK-015"
@@ -15527,11 +14608,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P14-TASK-015"
@@ -15570,11 +14647,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-015"
@@ -15618,11 +14691,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-021"
@@ -15708,11 +14777,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P14-TASK-020"
@@ -15751,11 +14816,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P14-TASK-020"
@@ -15794,11 +14855,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-020"
@@ -15842,11 +14899,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P14-TASK-021"
@@ -15913,11 +14966,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C07",
-      "C20",
-      "C21"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P15-TASK-001",
@@ -16858,9 +15907,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P16-TASK-005"
@@ -16897,9 +15944,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P16-TASK-005"
@@ -16936,9 +15981,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-005"
@@ -16980,9 +16023,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-021"
@@ -17064,9 +16105,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P16-TASK-010"
@@ -17103,9 +16142,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P16-TASK-010"
@@ -17142,9 +16179,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-010"
@@ -17186,9 +16221,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-021"
@@ -17270,9 +16303,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P16-TASK-015"
@@ -17309,9 +16340,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P16-TASK-015"
@@ -17348,9 +16377,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-015"
@@ -17392,9 +16419,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-021"
@@ -17476,9 +16501,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P16-TASK-020"
@@ -17515,9 +16538,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P16-TASK-020"
@@ -17554,9 +16575,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-020"
@@ -17598,9 +16617,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P16-TASK-021"
@@ -17665,9 +16682,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P17-TASK-001",
@@ -17770,11 +16785,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P17-TASK-005"
@@ -17813,11 +16824,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P17-TASK-005"
@@ -17856,11 +16863,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-005"
@@ -17904,11 +16907,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-021"
@@ -17998,11 +16997,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P17-TASK-010"
@@ -18041,11 +17036,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P17-TASK-010"
@@ -18084,11 +17075,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-010"
@@ -18132,11 +17119,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-021"
@@ -18226,11 +17209,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P17-TASK-015"
@@ -18269,11 +17248,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P17-TASK-015"
@@ -18312,11 +17287,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-015"
@@ -18360,11 +17331,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-021"
@@ -18454,11 +17421,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P17-TASK-020"
@@ -18497,11 +17460,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P17-TASK-020"
@@ -18540,11 +17499,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-020"
@@ -18588,11 +17543,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P17-TASK-021"
@@ -18659,11 +17610,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C08",
-      "C09",
-      "C17"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P18-TASK-001",
@@ -18763,10 +17710,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P18-TASK-005"
@@ -18804,10 +17748,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P18-TASK-005"
@@ -18845,10 +17786,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-005"
@@ -18891,10 +17829,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-021"
@@ -18978,10 +17913,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P18-TASK-010"
@@ -19019,10 +17951,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P18-TASK-010"
@@ -19060,10 +17989,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-010"
@@ -19106,10 +18032,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-021"
@@ -19193,10 +18116,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P18-TASK-015"
@@ -19234,10 +18154,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P18-TASK-015"
@@ -19275,10 +18192,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-015"
@@ -19321,10 +18235,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-021"
@@ -19408,10 +18319,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P18-TASK-020"
@@ -19449,10 +18357,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P18-TASK-020"
@@ -19490,10 +18395,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-020"
@@ -19536,10 +18438,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P18-TASK-021"
@@ -19605,10 +18504,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C09",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P19-TASK-001",
@@ -19707,9 +18603,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P19-TASK-005"
@@ -19746,9 +18640,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P19-TASK-005"
@@ -19785,9 +18677,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-005"
@@ -19829,9 +18719,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-021"
@@ -19914,9 +18802,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P19-TASK-010"
@@ -19953,9 +18839,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P19-TASK-010"
@@ -19992,9 +18876,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-010"
@@ -20036,9 +18918,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-021"
@@ -20121,9 +19001,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P19-TASK-015"
@@ -20160,9 +19038,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P19-TASK-015"
@@ -20199,9 +19075,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-015"
@@ -20243,9 +19117,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-021"
@@ -20328,9 +19200,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P19-TASK-020"
@@ -20367,9 +19237,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P19-TASK-020"
@@ -20406,9 +19274,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-020"
@@ -20450,9 +19316,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P19-TASK-021"
@@ -20517,9 +19381,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P20-TASK-001",
@@ -20618,10 +19480,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P20-TASK-005"
@@ -20659,10 +19518,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P20-TASK-005"
@@ -20700,10 +19556,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-005"
@@ -20746,10 +19599,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-021"
@@ -20834,10 +19684,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P20-TASK-010"
@@ -20875,10 +19722,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P20-TASK-010"
@@ -20916,10 +19760,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-010"
@@ -20962,10 +19803,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-021"
@@ -21050,10 +19888,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P20-TASK-015"
@@ -21091,10 +19926,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P20-TASK-015"
@@ -21132,10 +19964,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-015"
@@ -21178,10 +20007,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-021"
@@ -21266,10 +20092,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P20-TASK-020"
@@ -21307,10 +20130,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P20-TASK-020"
@@ -21348,10 +20168,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-020"
@@ -21394,10 +20211,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P20-TASK-021"
@@ -21463,10 +20277,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C11",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P21-TASK-001",
@@ -21565,11 +20376,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P21-TASK-005"
@@ -21608,11 +20415,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P21-TASK-005"
@@ -21651,11 +20454,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-005"
@@ -21699,11 +20498,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-021"
@@ -21792,11 +20587,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P21-TASK-010"
@@ -21835,11 +20626,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P21-TASK-010"
@@ -21878,11 +20665,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-010"
@@ -21926,11 +20709,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-021"
@@ -22019,11 +20798,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P21-TASK-015"
@@ -22062,11 +20837,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P21-TASK-015"
@@ -22105,11 +20876,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-015"
@@ -22153,11 +20920,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-021"
@@ -22246,11 +21009,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 2.12,
     "successors": [
       "P21-TASK-020"
@@ -22289,11 +21048,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P21-TASK-020"
@@ -22332,11 +21087,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-020"
@@ -22380,11 +21131,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P21-TASK-021"
@@ -22451,11 +21198,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C12",
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-001",
@@ -22556,10 +21299,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-005"
@@ -22597,10 +21337,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-005"
@@ -22638,10 +21375,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-005"
@@ -22684,10 +21418,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-021"
@@ -22780,10 +21511,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-010"
@@ -22821,10 +21549,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-010"
@@ -22862,10 +21587,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-010"
@@ -22908,10 +21630,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-021"
@@ -23004,10 +21723,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-015"
@@ -23045,10 +21761,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-015"
@@ -23086,10 +21799,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-015"
@@ -23132,10 +21842,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-021"
@@ -23228,10 +21935,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-020"
@@ -23269,10 +21973,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P22-TASK-020"
@@ -23310,10 +22011,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-020"
@@ -23356,10 +22054,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P22-TASK-021"
@@ -23425,10 +22120,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C12"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-001",
@@ -23524,17 +22216,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-005"
@@ -23579,17 +22261,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-005"
@@ -23634,17 +22306,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-005"
@@ -23694,17 +22356,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-021"
@@ -23804,17 +22456,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-010"
@@ -23859,17 +22501,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-010"
@@ -23914,17 +22546,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-010"
@@ -23974,17 +22596,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-021"
@@ -24171,17 +22783,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-015",
@@ -24313,17 +22915,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-015"
@@ -24368,17 +22960,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-015"
@@ -24428,17 +23010,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-021"
@@ -24538,17 +23110,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-020"
@@ -24593,17 +23155,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-020"
@@ -24648,17 +23200,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-020"
@@ -24708,17 +23250,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P23-TASK-021"
@@ -24882,17 +23414,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-001",
@@ -24984,10 +23506,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-005"
@@ -25025,10 +23544,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-005"
@@ -25066,10 +23582,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-005"
@@ -25112,10 +23625,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-021"
@@ -25197,10 +23707,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-010"
@@ -25238,10 +23745,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-010"
@@ -25279,10 +23783,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-010"
@@ -25325,10 +23826,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-021"
@@ -25410,10 +23908,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-015"
@@ -25451,10 +23946,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-015"
@@ -25492,10 +23984,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-015"
@@ -25538,10 +24027,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-021"
@@ -25623,10 +24109,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-020"
@@ -25664,10 +24147,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P24-TASK-020"
@@ -25705,10 +24185,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-020"
@@ -25751,10 +24228,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P24-TASK-021"
@@ -25820,10 +24294,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C13",
-      "C16"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-001",
@@ -25909,11 +24380,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-005"
@@ -25952,11 +24419,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-005"
@@ -25995,11 +24458,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-005"
@@ -26043,11 +24502,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-021"
@@ -26131,11 +24586,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-010"
@@ -26174,11 +24625,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-010"
@@ -26217,11 +24664,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-010"
@@ -26265,11 +24708,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-021"
@@ -26353,11 +24792,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-015"
@@ -26396,11 +24831,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-015"
@@ -26439,11 +24870,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-015"
@@ -26487,11 +24914,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-021"
@@ -26575,11 +24998,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-020"
@@ -26618,11 +25037,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P25-TASK-020"
@@ -26661,11 +25076,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-020"
@@ -26709,11 +25120,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.06,
     "successors": [
       "P25-TASK-021"
@@ -26780,11 +25187,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C14",
-      "C16",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [],
     "earliest_start": 139.38,
@@ -26825,17 +25228,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -26885,17 +25278,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -26945,17 +25328,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27005,17 +25378,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27065,17 +25428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27125,17 +25478,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27185,17 +25528,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27245,17 +25578,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27305,17 +25628,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27365,17 +25678,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27425,17 +25728,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27485,17 +25778,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27545,17 +25828,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27605,17 +25878,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27665,17 +25928,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27725,17 +25978,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27785,17 +26028,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27845,17 +26078,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27905,17 +26128,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -27965,17 +26178,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28025,17 +26228,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28085,17 +26278,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28145,17 +26328,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28205,17 +26378,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28265,17 +26428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28325,17 +26478,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28385,17 +26528,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28445,17 +26578,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28505,17 +26628,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28565,17 +26678,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28625,17 +26728,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28685,17 +26778,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28745,17 +26828,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28805,17 +26878,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28865,17 +26928,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28925,17 +26978,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -28985,17 +27028,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29045,17 +27078,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29105,17 +27128,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29165,17 +27178,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29225,17 +27228,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29285,17 +27278,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29345,17 +27328,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29405,17 +27378,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29465,17 +27428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29525,17 +27478,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29585,17 +27528,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29645,17 +27578,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29705,17 +27628,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29765,17 +27678,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29825,17 +27728,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29885,17 +27778,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -29945,17 +27828,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30005,17 +27878,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30065,17 +27928,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30125,17 +27978,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30185,17 +28028,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30245,17 +28078,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30305,17 +28128,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30365,17 +28178,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30425,17 +28228,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30485,17 +28278,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30545,17 +28328,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30605,17 +28378,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30665,17 +28428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30725,17 +28478,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30785,17 +28528,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30845,17 +28578,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30905,17 +28628,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -30965,17 +28678,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31025,17 +28728,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31085,17 +28778,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31145,17 +28828,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31205,17 +28878,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31265,17 +28928,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31325,17 +28978,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31385,17 +29028,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31445,17 +29078,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31505,17 +29128,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31565,17 +29178,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31625,17 +29228,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31685,17 +29278,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31745,17 +29328,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31805,17 +29378,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31865,17 +29428,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31925,17 +29478,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -31985,17 +29528,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 1.59,
     "successors": [
       "P23-TASK-021",
@@ -32045,17 +29578,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 3.17,
     "successors": [
       "P23-TASK-021",
@@ -32104,17 +29627,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 3.17,
     "successors": [
       "P23-TASK-021",
@@ -32163,17 +29676,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 3.17,
     "successors": [
       "P23-TASK-021",
@@ -32311,17 +29814,7 @@
     ],
     "pr": null,
     "actual_days": null,
-    "blocked_by": [
-      "C04",
-      "C05",
-      "C06",
-      "C07",
-      "C08",
-      "C10",
-      "C11",
-      "C17",
-      "C18"
-    ],
+    "blocked_by": [],
     "expected_days": 3.17,
     "successors": [
       "P23-TASK-021"

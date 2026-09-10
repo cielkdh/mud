@@ -12,7 +12,7 @@
 기존 소스가 제공되지 않아 실제 구조에 대한 영향은 확정하지 않았다. 신규 클래스와 테이블은 구현 제안이며, 기존 코드가 확인되면 공통 Interface, DAO, SQL 재사용을 우선한다.
 
 ## 2. Phase 목표
-완료 후 상태: **즉시결과·배속·복구 hash 일치와 동시 전투불능 재현 및 Early Playable Gate 통과**. 고정 파티·장비·몬스터·전리품 fixture로 준비→자동 전투→정산→save/load를 실제 `WorldEngine`/`SavePort`에서 완주한다. 후속 Phase 에는 검증된 DTO/port, 실제 도메인 결과, 세이브 codec/DDL 변경, fixture 와 기준선을 전달한다. 기능 이름만 등록하거나 Fake·Mock·`UnsupportedFeature` 성공 응답만 반환하는 상태는 완료로 보지 않는다.
+완료 후 상태: **즉시결과·배속·복구 hash 일치와 동시 전투불능 재현 및 Early Playable Gate(Combat-Save Engine Slice) 통과**. 고정 파티·장비·몬스터·전리품 fixture로 준비→자동 전투→정산→save/load를 실제 `WorldEngine`/`SavePort`에서 완주한다. 후속 Phase 에는 검증된 DTO/port, 실제 도메인 결과, 세이브 codec/DDL 변경, fixture 와 기준선을 전달한다. 기능 이름만 등록하거나 Fake·Mock·`UnsupportedFeature` 성공 응답만 반환하는 상태는 완료로 보지 않는다.
 
 ## 3. 선행 조건
 | 선행 Phase | Gate | 전달받는 기능 | 미충족시 차단 Task |
@@ -26,10 +26,10 @@
 
 | 결정 ID | 검토 주제 | 상태 | 적용/차단 내용 |
 |---|---|---|---|
-| C05 | 피해증가 이중적용·회피 이중판정 | 설계 보완안·승인 대기 | 피해증가는 한 계층에서 한 번; 명중에회피 포함후 별도 회피추첨 생략 후보. |
-| C06 | 동시 HP/보호막/흡혈 배분 | 설계 보완안·승인 대기 | 동시 HP 합산·흡수기여 안정비례배분·잔여정수 stable tie-break; golden fixture 승인. |
-| C10 | 퍼센트/%p 및 불완전 효과 데이터 | 설계 보완안·승인 대기 | unit=RATIO/BASIS_POINT/FLAT, typed effect AST; description-only effect 를임의숫자로출시하지않음. |
-| C15 | 월드분과전투10ms 연결 | 설계 보완안·승인 대기 | subMinuteMs 누적, 6×10 초=1 분; 동일시각월드 phase order 버전 고정. |
+| C05 | 피해증가 이중적용·회피 이중판정 | 승인·기준선 반영 | 피해증가는 한 계층에서 한 번만 적용하고 명중식에 회피가 포함되므로 별도 회피추첨은 생략한다. |
+| C06 | 동시 HP/보호막/흡혈 배분 | 승인·기준선 반영 | 동시 HP 합산·흡수기여 안정비례배분·잔여정수 stable tie-break; golden fixture 승인. |
+| C10 | 퍼센트/%p 및 불완전 효과 데이터 | 승인·기준선 반영 | unit=RATIO/BASIS_POINT/FLAT, typed effect AST; description-only effect 를임의숫자로출시하지않음. |
+| C15 | 월드분과전투10ms 연결 | 승인·기준선 반영 | subMinuteMs 누적, 6×10 초=1 분; 동일시각월드 phase order 버전 고정. |
 
 ## 4. 기능 범위 및 요구 연결
 | 기능 ID | 기능명 | 중요도 | 선행 기능/Phase | 원문요구/공통근거 |
@@ -44,15 +44,11 @@
 ## 5. 기능별 상세 설계
 
 ### 공통 계약의 적용 범위
-모든 새 메소드/클래스명과 물리 DDL 은 **설계 보완안**이다. 제공된 자료에는 실제 저장소·DAO·SQL 이 없으므로 기존 구현에 대한 변경 완료를 뜻하지 않는다. 원문의 객체명/데이터 항목은 최대한 유지하며 기존 코드가 발견되면 adapter 로 연결한다.
+이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
-`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload)`를 사용한다. `GameMinute`, `CombatMillis`, `Money(Long)`, `BasisPoint`, `EntityId`는 혼합 연산을 금지한다. 확률의 기본 표현은 **ppm(0..1,000,000)**이며 세밀한 0.01%도 정수로 표현한다. 표시 반올림과 판정은 분리한다. 정수연산 overflow 는 오류이며 clamp 로 은폐하지 않는다.
+`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
-`ReadView`는 불변이다. `Delta`는 변경행·RNG 새 상태·도메인 이벤트·명령 receipt 를 포함한다. 콘텐츠 참조/외부 파일 읽기는 transaction 진입 전에 끝낸다. 실패 가능한 대규모 계산은 transaction 밖에서 하고, 성공한 커밋 이후에만 메모리 및 화면 상태를 게시한다. `stateHash`는 canonical 직렬화(키 정렬·정수 표현·버전 포함)에 대한 SHA-256 이며 현실시각·UI 재생위치는 제외한다.
-
-중복 명령은 동일 epoch/commandId 와 payload hash 를 함께 검사한다. 동일 ID/동일 payload 이면 이전 결과를 반환하고, 다른 payload 이면 `IdempotencyKeyReuse`를 반환한다. 인메모리 중복 제거만으로 복구 후 중복을 막았다고 판단하지 않는다.
-
-게임은 한 프로세스·한 활성 WorldSession 을 기준으로 한다. 여러 노드/서버/분산 Lock 은 **해당 없음**이다. 다만 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 간의 동시성은 실제로 검증한다.
+게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
 
 <a id="func-p6-001"></a>
 ### 5.1. FUNC-P6-001 — 이벤트 큐·동시 해결 배치
@@ -400,7 +396,7 @@
 |---|---|---|---|---|---|
 | combat_checkpoint | save.db | P6 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK | run_id,combat_ms |
 | combat_result | save.db | P6 | R/I/U(도메인명령에따름); tombstone/GC 만 D | encounter_id | run_id |
-| command_receipt | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | epoch,command_id | state_version |
+| command_receipt | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | epoch,command_id | state_version, lifecycle_status,epoch,state_version |
 | status_effect | save.db | P6 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK | subject_id,definition_id |
 
 모든일반 SQL 테이블은 `id TEXT NOT NULL PRIMARY KEY`, `row_version INTEGER NOT NULL DEFAULT 0`을공통필드로갖는다. nullable 는 DDL 에 NOT NULL 없는필드만이다. 단위는 `_minute`게임분/`_ms`밀리초/`_bp`0.01%p/`_ppm`0.0001%p,금액/수량 Long 정수. ID 는재사용하지않는다.
@@ -413,11 +409,13 @@
 | combat_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | combat_ms INTEGER NOT NULL CHECK(combat_ms>=0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| combat_payload_codec TEXT NOT NULL | 전투 snapshot codec ID와 version |
 | combat_payload BLOB NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| rng_payload_codec TEXT NOT NULL | RNG snapshot codec ID와 version |
 | rng_payload BLOB NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | checksum TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
-전투 actor/action/status/queue/projectile 의 완전 codec. Tick 별 SQL 하지 않음.
+전투/RNG payload별 codec을 명시하며 Tick별 SQL하지 않는다.
 #### `combat_result` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -435,13 +433,15 @@
 |---|---|
 | command_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | epoch TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1' | canonical payload codec ID를 보존 |
 | payload_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| lifecycle_status TEXT NOT NULL | RUNNING/COMMITTED/INTERRUPTED/REJECTED 상태 |
 | result_code TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | result_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | state_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | game_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
-같은 ID+다른 payload 는 거절. generation snapshot 에 함께 포함.
+같은 ID+다른 payload는 거절한다. resumable command도 같은 receipt 한 행을 갱신하며 generation 생성 여부와 분리한다.
 #### `status_effect` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -479,7 +479,9 @@ CREATE TABLE IF NOT EXISTS combat_checkpoint (
   combat_version TEXT NOT NULL,
   content_version TEXT NOT NULL,
   combat_ms INTEGER NOT NULL CHECK(combat_ms>=0),
+  combat_payload_codec TEXT NOT NULL,
   combat_payload BLOB NOT NULL,
+  rng_payload_codec TEXT NOT NULL,
   rng_payload BLOB NOT NULL,
   checksum TEXT NOT NULL
 );
@@ -504,7 +506,9 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   command_id TEXT NOT NULL,
   epoch TEXT NOT NULL,
+  payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1',
   payload_hash TEXT NOT NULL,
+  lifecycle_status TEXT NOT NULL DEFAULT 'COMMITTED' CHECK(lifecycle_status IN ('RUNNING','COMMITTED','INTERRUPTED','REJECTED')),
   result_code TEXT NOT NULL,
   result_json TEXT NOT NULL,
   state_version INTEGER NOT NULL,
@@ -512,6 +516,7 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   UNIQUE(epoch,command_id)
 );
 CREATE INDEX IF NOT EXISTS ix_command_receipt_1 ON command_receipt(state_version);
+CREATE INDEX IF NOT EXISTS ix_command_receipt_2 ON command_receipt(lifecycle_status,epoch,state_version);
 
 CREATE TABLE IF NOT EXISTS status_effect (
   id TEXT PRIMARY KEY NOT NULL,
@@ -603,7 +608,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P6-UT-001, P6-BT-001, P6-FT-001 |
@@ -627,7 +632,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-CT-001, P6-IT-001 |
@@ -651,7 +656,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-CT-001, P6-IT-001 |
@@ -675,7 +680,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-UT-001, P6-BT-001, P6-FT-001, P6-CT-001, P6-IT-001 |
@@ -723,7 +728,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P6-UT-002, P6-BT-002, P6-FT-002 |
@@ -747,7 +752,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-CT-002, P6-IT-002 |
@@ -771,7 +776,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-CT-002, P6-IT-002 |
@@ -795,7 +800,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-UT-002, P6-BT-002, P6-FT-002, P6-CT-002, P6-IT-002 |
@@ -843,7 +848,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P6-UT-003, P6-BT-003, P6-FT-003 |
@@ -867,7 +872,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-CT-003, P6-IT-003 |
@@ -891,7 +896,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-CT-003, P6-IT-003 |
@@ -915,7 +920,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-UT-003, P6-BT-003, P6-FT-003, P6-CT-003, P6-IT-003 |
@@ -963,7 +968,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P6-UT-004, P6-BT-004, P6-FT-004 |
@@ -987,7 +992,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-CT-004, P6-IT-004 |
@@ -1011,7 +1016,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-CT-004, P6-IT-004 |
@@ -1035,7 +1040,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-UT-004, P6-BT-004, P6-FT-004, P6-CT-004, P6-IT-004 |
@@ -1083,7 +1088,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P6-UT-005, P6-BT-005, P6-FT-005 |
@@ -1107,7 +1112,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-CT-005, P6-IT-005 |
@@ -1131,7 +1136,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-CT-005, P6-IT-005 |
@@ -1155,7 +1160,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-UT-005, P6-BT-005, P6-FT-005, P6-CT-005, P6-IT-005 |
@@ -1203,7 +1208,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P6-UT-006, P6-BT-006, P6-FT-006 |
@@ -1227,7 +1232,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-CT-006, P6-IT-006 |
@@ -1251,7 +1256,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-CT-006, P6-IT-006 |
@@ -1275,7 +1280,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P6-UT-006, P6-BT-006, P6-FT-006, P6-CT-006, P6-IT-006 |
@@ -1299,7 +1304,7 @@ CREATE INDEX IF NOT EXISTS ix_status_effect_1 ON status_effect(subject_id,defini
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C05, C06, C10, C15 |
-| 현재 차단/상태 | C05, C06, C10, C15 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P6-UT-001, P6-BT-001, P6-FT-001, P6-CT-001, P6-IT-001, P6-UT-002, P6-BT-002, P6-FT-002, P6-CT-002, P6-IT-002, P6-UT-003, P6-BT-003, P6-FT-003, P6-CT-003, P6-IT-003, P6-UT-004, P6-BT-004, P6-FT-004, P6-CT-004, P6-IT-004, P6-UT-005, P6-BT-005, P6-FT-005, P6-CT-005, P6-IT-005, P6-UT-006, P6-BT-006, P6-FT-006, P6-CT-006, P6-IT-006, P6-RT-001, P6-CN-001, P6-REC-001, P6-PT-001, P6-OP-001, P6-ET-001, P6-IT-007 |
@@ -1994,13 +1999,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | PT |
 | 대상 기능 | PHASE-6 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | T=1000 에 A/B 각 HP10, 서로10 피해 확정; seed0..99 를반복하고대표최대 fixture 사용 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
+| 입력값 | 소형/최대 파티 fixture, 일반/상태이상 과밀/보스 전투 각 1,000회, 동일 PCG32 seed pack, UI render 없음 |
+| 수행 절차 | ① warm-up 5회 ② 각 fixture instant 전투 1,000회 실행 ③ 전투별 event/action/reaction 수와 P50/P95/PSS 기록 ④ 같은 seed 상세/배속 결과 stateHash·RNG counter 비교 ⑤ budget 초과 첫 trace 보존 |
+| 예상 결과 | 모든 전투 bounded 종료, event/reaction budget 초과는 typed 실패, 반복에 따른 heap 선형 증가 없음, 동일 seed/명령의 상세·배속 stateHash/RNG counter 동일 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-6, testId=P6-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | P50/P95, 최대 queue/event/reaction 수, 전후 PSS/잔존 combat 객체, stateHash/RNG counter/trace hash |
+| 성공 기준 | 정합성·종료·누수 조건을 충족하고 NFR-PERF-003 후보와 차이를 기록한다. 미측정 PASS 금지. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p6-op-001"></a>

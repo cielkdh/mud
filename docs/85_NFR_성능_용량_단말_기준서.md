@@ -1,6 +1,6 @@
 # 85. NFR · 성능 · 용량 · 단말 기준서
 
-> 원문은 “체감 즉시/짧은 대기/수초 내”와 같은 정성 목표를 제시하고 정확 ms/MB는 실제 기기 측정 후 확정하도록 한다. 따라서 아래 숫자는 **「설계 보완안: 초기 Release Gate 후보」**이며 P24 실측 Baseline 승인 후 고정한다.
+> C19 승인 기준 `BASELINE_V1` · 2026-09-09. 아래 숫자는 구현·릴리즈의 합격 기준이며 실제 측정 결과는 아직 `NOT_RUN`이다. 목표 승인과 시험 PASS를 혼동하지 않는다.
 
 ## 1. 적용 대상
 
@@ -13,28 +13,33 @@
 
 | Profile | 용도 | 정의 |
 |---|---|---|
-| MIN | 최저지원 Gate | 64-bit Android, RAM 4GB급, 중저가 CPU, 저장공간 여유 4GB 이상. 실제 모델은 P24에서 고정 |
-| STD | 일반 사용자 Gate | RAM 6~8GB급, 중급 CPU/GPU. 실제 모델은 P24에서 고정 |
-| DEV | 대량 검증 | JVM/개발 PC. 10k~1M seed 배치에 사용 |
+| MIN | 최저지원 Gate | API 26, arm64, RAM 4GB, 60Hz, 측정 시작 시 가용 저장공간 4GB 이상 |
+| STD | 일반 사용자 Gate | API 36, arm64, RAM 8GB, 60Hz와 120Hz 각 1회, 측정 시작 시 가용 저장공간 8GB 이상 |
+| DEV | 대량 검증 | 고정 JVM/개발 PC runner. CPU/RAM/OS/JDK와 worker 수를 결과에 기록하고 같은 runner끼리만 회귀 비교 |
 
-## 3. 성능 Gate 후보
+MIN/STD의 실제 제조사·모델·SoC·OS build fingerprint는 첫 측정에서 증거로 등록한다. 모델명은 단종되므로 설계 결정을 다시 여는 값이 아니며, 교체 단말은 위 profile 이상이어야 하고 구·신 단말 결과를 한 시계열로 섞지 않는다. Emulator는 기능 반복에는 사용할 수 있지만 MIN/STD 성능 승인 증거를 대체하지 못한다.
+
+## 3. 성능 Gate `BASELINE_V1`
+
+P24는 최초 성능 확인 시점이 아니다. P2의 queue/시간 진행, P3의 save/load·DB 증가, P6의 1,000회 전투, P17의 2,200 NPC·10년 진행을 각 Phase exit 조건으로 먼저 측정한다. 이 네 smoke가 예산을 초과하거나 반복 횟수에 따라 PSS/DB가 선형 증가하면 후속 Phase를 열지 않고 원인을 제거한다. P24는 실제 MIN/STD 단말에서 회귀·장기 안정화와 최종 합격 판정을 담당한다.
 
 | NFR ID | 대상 | MIN | STD | 측정 | 상태 |
 |---|---|---:|---:|---|---|
-| NFR-PERF-001 | Cold start P95 | ≤ 3.0s | ≤ 2.0s | Macrobenchmark | PROVISIONAL |
-| NFR-PERF-002 | Warm start P95 | ≤ 1.5s | ≤ 1.0s | Macrobenchmark | PROVISIONAL |
-| NFR-PERF-003 | 전투 1회 instant 결과 P95 | ≤ 500ms | ≤ 250ms | headless benchmark | PROVISIONAL |
-| NFR-PERF-004 | 30일 시간 진행 P95 | ≤ 4.0s | ≤ 2.0s | event-boundary scenario | PROVISIONAL |
-| NFR-PERF-005 | NPC 2,000 목록 최초 표시 P95 | ≤ 1.5s | ≤ 1.0s | Macrobenchmark | PROVISIONAL |
-| NFR-PERF-006 | 100년 연대기 검색 P95 | ≤ 1.0s | ≤ 500ms | indexed query benchmark | PROVISIONAL |
-| NFR-PERF-007 | 자동 incremental save UI blocking | 0 main-thread I/O | 0 main-thread I/O | StrictMode/trace | REQUIRED |
-| NFR-PERF-008 | 수동 저장 P95 | ≤ 3.0s | ≤ 2.0s | save fixture | PROVISIONAL |
-| NFR-PERF-009 | 일반 load P95 | ≤ 4.0s | ≤ 2.5s | load fixture | PROVISIONAL |
-| NFR-PERF-010 | 2,000 NPC list jank | ≤ 8% slow frames | ≤ 5% slow frames | Macrobenchmark frame timing | PROVISIONAL |
+| NFR-PERF-001 | Cold start P95 | ≤ 3.0s | ≤ 2.0s | Macrobenchmark | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-002 | Warm start P95 | ≤ 1.5s | ≤ 1.0s | Macrobenchmark | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-003 | 전투 1회 instant 결과 P95 | ≤ 500ms | ≤ 250ms | headless benchmark | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-004 | 30일 시간 진행 P95 | ≤ 4.0s | ≤ 2.0s | event-boundary scenario | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-005 | NPC 2,000 목록 최초 표시 P95 | ≤ 1.5s | ≤ 1.0s | Macrobenchmark | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-006 | 100년 연대기 검색 P95 | ≤ 1.0s | ≤ 500ms | indexed query benchmark | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-007 | 자동 incremental save UI blocking | 0 main-thread I/O | 0 main-thread I/O | StrictMode/trace | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-008 | 수동 저장 P95 | ≤ 3.0s | ≤ 2.0s | save fixture | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-009 | 일반 load P95 | ≤ 4.0s | ≤ 2.5s | load fixture | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-010 | 2,000 NPC list jank | ≤ 8% slow frames | ≤ 5% slow frames | Macrobenchmark frame timing | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-011 | 명령 입력 접수 피드백 P95 | ≤ 100ms | ≤ 100ms | Compose interaction trace | BASELINE_V1 / NOT_RUN |
 
 ### 개발 배치 목표
 
-| NFR ID | 배치 | 초기 Gate 후보 | 원문 정성 기준 |
+| NFR ID | 배치 | `BASELINE_V1` | 원문 정성 기준 |
 |---|---|---|---|
 | NFR-BATCH-001 | 전투 10,000회 | DEV에서 ≤ 30s 우선 목표 | “수초~수십초” |
 | NFR-BATCH-002 | 던전 1,000개 생성+validator | DEV에서 ≤ 60s 우선 목표 | “배치 검증 가능 수준” |
@@ -46,12 +51,13 @@
 | NFR ID | 항목 | 기준 |
 |---|---|---|
 | NFR-MEM-001 | Domain model Bitmap 보유 | **0건**. PortraitKey만 저장 |
-| NFR-MEM-002 | NPC 2,200 일상 플레이 | OOM/지속 증가 없음; 30분 반복 후 안정 plateau 확인 |
-| NFR-MEM-003 | 전투 반복 | 1,000회 instant 후 heap 잔존 객체가 반복 횟수에 선형 증가하지 않음 |
-| NFR-SIZE-001 | 100년 save | 절대 MB는 실측 후 freeze. 저중요 데이터 압축으로 연수에 선형 무한 증가 금지 |
-| NFR-SIZE-002 | 300년 save | 100년 대비 성장률을 측정하고 압축 미작동 여부 Gate. 목표식은 Baseline 승인 후 고정 |
-| NFR-SIZE-003 | portrait 10,000 | 앱 시작 시 전체 decode 금지; 화면 request size 기반 decode |
-| NFR-SIZE-004 | Export | staging 여유공간 사전 계산, 기존 save 원본 불변 |
+| NFR-MEM-002 | NPC 2,200 일상 플레이 | MIN steady PSS ≤ 384 MiB, save/load/export 일시 peak ≤ 512 MiB, OOM 0건 |
+| NFR-MEM-003 | 전투 반복·화면 왕복 | 10분 warm-up 후 다음 30분 PSS 증가가 `max(32 MiB, 기준값의 10%)` 이하이며 반복 횟수에 선형 증가하지 않음 |
+| NFR-SIZE-001 | 100년 save | WAL checkpoint 후 생성한 compact export archive ≤ 128 MiB |
+| NFR-SIZE-002 | 300년 save | 같은 profile의 compact export archive ≤ 256 MiB |
+| NFR-SIZE-003 | live save 총량 | `save.db + WAL/SHM + generation manifest/chunk` ≤ 같은 fixture compact export의 1.5배 |
+| NFR-SIZE-004 | portrait 10,000 | install-time pack compressed ≤ 512 MiB, 전체 install-time compressed ≤ 768 MiB; 시작 시 전체 decode 금지 |
+| NFR-SIZE-005 | Export | 예상 archive의 2배+256 MiB 여유공간을 사전 확인하고 기존 save 원본 불변 |
 
 ## 5. 결정론·정합성 NFR
 
@@ -86,8 +92,8 @@
 
 ## 8. Release Gate 운영
 
-1. P24에서 실제 MIN/STD 단말 모델과 OS/API level을 고정한다.
-2. 후보 수치를 3회 이상 반복 측정하여 median/P95와 분산을 기록한다.
+1. P24에서 profile을 만족하는 실제 MIN/STD 단말의 제조사·모델·SoC·OS/API·build fingerprint를 실행 증거에 고정한다.
+2. `BASELINE_V1` 수치를 동일 signed release build로 판정한다. 자동 완화하지 않으며 실패 시 원인 개선 후 재측정한다.
 3. Baseline Profile/R8 적용 전후에 기능 stateHash 동치를 먼저 확인한다.
 4. 기준 미달은 “느림”으로만 기록하지 말고 CPU/DB/GC/image/Compose 구간으로 원인을 분류한다.
 5. 기준 변경 시 94 결정대장에 이유·기기·build hash를 남긴다.
@@ -107,7 +113,7 @@
 
 1. 같은 signed build, 같은 content/balance/schema version으로 측정한다.
 2. Cold/Warm start는 다른 지표로 기록하고 캐시 상태를 섞지 않는다.
-3. 최소 5회 warm-up 후 20회 이상 측정하고 P50/P95를 기록한다. 장기 배치는 seed 수와 worker 수를 함께 기록한다.
+3. 최소 5회 warm-up 후 20회 이상 측정하고 P50/P95를 기록한다. P99는 100회 이상 표본에서만 승인 지표로 사용하고 그 미만은 max를 참고값으로 기록한다. 장기 배치는 seed 수와 worker 수를 함께 기록한다.
 4. 전투/시간진행 benchmark는 UI render를 포함한 시나리오와 headless core 시나리오를 구분한다.
 5. DB query는 row 수, index, query plan, 반환 row 수를 증거에 포함한다.
 6. 이미지 테스트는 decode size/crop profile/cache hit 여부를 기록한다.
@@ -120,14 +126,13 @@
 | `NFR_BLOCKER` | OOM, save 손상, 결정론 깨짐, main-thread DB 등 핵심 위반 | RC 차단 |
 | `NFR_MAJOR` | P95 목표 초과, 장기 데이터 비정상 증가, 높은 jank | 원인/예외 승인 없이는 RC 차단 |
 | `NFR_MINOR` | 특정 비핵심 화면의 경미한 목표 초과 | 일정/영향을 기록해 제한 승인 가능 |
-| `NFR_MEASURE_REQUIRED` | 실제 단말/asset 미제공으로 기준 미확정 | 해당 Gate 전에 측정·freeze 필수 |
+| `NFR_MEASURE_REQUIRED` | 승인 기준은 있으나 실제 단말/asset 측정 증거가 없음 | 해당 Gate 전에 측정 PASS 필수 |
 
 ## 12. NFR Definition of Done
 
-- [ ] MIN/STD 실제 단말이 고정되어 있다.
-- [ ] PROVISIONAL 목표가 측정 결과와 리뷰를 거쳐 BASELINE 또는 승인된 예외로 바뀌었다.
+- [ ] MIN/STD 실제 단말 identity와 signed build가 증거에 고정되어 있다.
+- [ ] 모든 `BASELINE_V1` 목표가 PASS이거나 영향·기한·복구안이 있는 예외로 승인됐다.
 - [ ] P24/P25 대표 Test에 benchmark artifact가 연결되어 있다.
 - [ ] 100년/300년 Save 크기 곡선과 메모리 곡선이 보관되어 있다.
 - [ ] R8/Baseline Profile 적용 후 stateHash 회귀가 없다.
 - [ ] 오프라인 설치 후 네트워크 없이 전체 핵심 흐름이 동작한다.
-

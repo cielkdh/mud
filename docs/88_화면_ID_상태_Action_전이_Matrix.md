@@ -5,10 +5,11 @@
 ## 1. 공통 화면 상태
 
 ```text
-LOADING → READY / EMPTY / ERROR
+LOADING → READY / EMPTY / ERROR / BLOCKED
 READY → MUTATING → READY
 READY → NAVIGATING → DESTINATION
 MUTATING → ERROR(재시도/복구 가능)
+BLOCKED → READY / 이전 화면
 STOPPED → RESTORED
 ```
 
@@ -19,13 +20,18 @@ STOPPED → RESTORED
 | `EMPTY` | 정상이나 데이터 없음 | 원인+다음 행동 제공 |
 | `MUTATING` | Command 처리 중 | 중복 탭 방지, 취소 가능성 표시 |
 | `ERROR` | 조회/명령 실패 | 기존 정상 상태 보존, 재시도/복구 |
+| `BLOCKED` | 기능 미구현·권한·선행 조건 미충족 | 가짜 성공을 표시하지 않고 이유·가능한 다음 행동·돌아가기 제공 |
 | `INTERRUPTED` | 시간/작업이 중요 사건으로 중단 | 중단 이유와 남은 목표 표시 |
 | `RESTORED` | Process death/Back 후 복원 | 필터/스크롤/편집중 draft 정책 준수 |
 
 ## 2. Screen Registry 및 전이 Matrix
 
+P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 않는다. `AppRoot`는 Loading/Ready/Empty/Error/Blocked shell을 검증하기 위해 기존 ID를 placeholder destination으로만 사용하며, 각 화면의 실제 route·action·저장 조립은 표의 Owner Phase가 소유한다.
+
 | Screen ID | 화면 | Route | Owner | 상태 | 대표 Action | Destination | Guard | 실행 계약 |
 |---|---|---|---|---|---|---|---|---|
+| SCR-START-001 | 시작/이어하기 | start | P3/P22 | LOADING/READY/EMPTY/ERROR | 최근 슬롯 이어하기/새 게임/Import | HOME 또는 SCR-START-002 | 슬롯 checksum/version | `QUERY` / `NAVIGATION` |
+| SCR-START-002 | 새 게임/슬롯 생성 | start/new | P3/P4/P22 | DRAFT/CREATING/ERROR | 슬롯·seed·기본 profile 확인/생성 | HOME | content/balance 호환·중복 실행 방지 | `CMD-P3-F001` (`CreateNewWorld`) |
 | SCR-HOME-001 | 홈 | home | P22 | READY/LOADING/ERROR | 던전 카드 선택 | SCR-DUN-001 | - | `NAVIGATION` |
 | SCR-DUN-001 | 던전 목록 | dungeon/list | P8/P22 | LOADING/READY/EMPTY/ERROR | 필터/던전 선택 | SCR-DUN-002 | 공개정보 정책 | `QUERY` |
 | SCR-DUN-002 | 던전 상세 | dungeon/detail/{id} | P8/P22 | LOADING/READY/ERROR | 입장/등록/추적 | SCR-DUN-003 | 파티·거리·상태 Guard | `CMD-P9-F001` |
@@ -42,18 +48,23 @@ STOPPED → RESTORED
 | SCR-MER-002 | 용병 상세 | mercenary/{id} | P4/P15 | LOADING/READY/ERROR | 영입/대화/장비/관계 | SCR-DLG-001 또는 SCR-REC-001 | 정보 비대칭 정책 | `QUERY FUNC-P4-005` / `CMD-P11-F002` |
 | SCR-REC-001 | 모집 공고 | recruitment | P11 | READY/EMPTY | 공고등록/지원자 | SCR-REC-002 | 모집 조건 | `CMD-P11-F002` |
 | SCR-REC-002 | 협상 | recruitment/negotiate/{id} | P11 | PROPOSED/COUNTERED/ACCEPTED/REJECTED | 역제안/수락/거절 | SCR-PTY-001 | 계약 Guard | `CMD-P11-F002` |
+| SCR-QST-001 | 의뢰 목록 | contracts | P11/P22 | LOADING/READY/EMPTY/ERROR | 필터/의뢰 선택 | SCR-QST-002 | 공개 정보·기한 | `QUERY ContractListView` |
+| SCR-QST-002 | 의뢰 상세/수락 | contract/{id} | P11/P22 | LOADING/READY/MUTATING/ERROR | 수락/거절/추적 | 이전 또는 SCR-TIME-002 | 적격·기한·동시 의뢰 상한 | `CMD-P11-F001` |
 | SCR-DLG-001 | 대화 | dialogue/{npcId} | P11/P15 | OPEN/CHOICE_PENDING/RESOLVED | topic/선택 | 이전 | 관계/상태 | `CMD-P11-F004` |
 | SCR-ITM-001 | 장비/인벤토리 | inventory | P5/P22 | LOADING/READY/EMPTY | 필터/장착/상세 | SCR-ITM-002 | 소유권/보호 | `QUERY` / `CMD-P5-F001` |
 | SCR-ITM-002 | 장비 상세/비교 | item/{id} | P5 | READY | 장착/강화/정련 | SCR-ENH-001 | 아이템 상태 | `QUERY` / `CMD-P5-F001` |
 | SCR-SKL-001 | 스킬 | skills | P5 | READY/EMPTY | 장착/해제/상세 | SCR-SKL-002 | 슬롯 제한 | `QUERY` / `CMD-P5-F003` |
 | SCR-SKL-002 | 스킬 상세 | skill/{id} | P5 | READY | 장착/학습 | SCR-SKL-001 | 클래스/보유 조건 | `CMD-P5-F002` / `CMD-P5-F003` |
 | SCR-ENH-001 | 장비 강화 | enhancement/{itemId} | P12 | QUOTED/MUTATING/RESULT/ERROR | 촉매/보호석/강화 | SCR-ITM-002 | 비용·attempt·확률 | `CMD-P12-F001` |
+| SCR-RFN-001 | 정련/재각성/유물 복원 | refinement/{itemId} | P12 | QUOTED/MUTATING/RESULT/ERROR | 방식·재료 선택/미리보기/확정 | SCR-ITM-002 | 아이템 상태·비용·확률·보호 | `CMD-P12-F003` |
 | SCR-CRF-001 | 제작/연금/연구 | craft | P12 | DRAFT/RESERVED/RUNNING/COMPLETE | 레시피/시작/취소 | SCR-CITY-002 | 재료 선점 | `LOCAL_DRAFT` / `CMD-P12-F004` |
 | SCR-CITY-001 | 도시 | city | P10/P22 | READY | 시설/이동/빠른정비 | SCR-CITY-002 | 영업/위치 | `QUERY` |
 | SCR-CITY-002 | 시설 | city/facility/{id} | P10 | READY/QUEUED/CLOSED | 이용/대기 | SCR-CITY-001 | 영업시간/점유 | `CMD-P10-F001` / `CMD-P10-F002` |
 | SCR-MNT-001 | 귀환 후 정비 | maintenance | P10 | QUOTED/EXECUTING/PARTIAL/COMPLETE | 자동정비 미리보기/실행 | HOME | 비용/시간 | `QUERY` / `CMD-P10-F004` |
 | SCR-MKT-001 | 시장 | market | P14 | OPEN/READY/ERROR | 구매/판매/흥정 | SCR-ITM-002 | 재고/금액 | `CMD-P14-F002` |
 | SCR-AUC-001 | 경매 | auction | P14 | LISTED/BIDDING/SETTLED/EXPIRED | 입찰/등록 | SCR-MKT-001 | 자금 선점 | `CMD-P14-F002` |
+| SCR-LOAN-001 | 장비 대여 | rental | P14 | LOADING/READY/MUTATING/EMPTY/ERROR | 조건 확인/대여/반환 | SCR-ITM-002 | 소유권·보증금·기한 | `CMD-P14-F003` |
+| SCR-LOG-001 | 물류/운송 | logistics | P14 | LOADING/READY/MUTATING/EMPTY/ERROR | 출발지·목적지·물품/배송 확인 | SCR-ITM-001 | 보관 위치·수량·운송 가능 | `CMD-P14-F004` |
 | SCR-HOU-001 | 주거 | residence | P10 | ACTIVE/ARREARS/RELOCATING | 확장/이사/창고 | SCR-ITM-001 | 소유/임대 | `CMD-P10-F003` |
 | SCR-GIL-001 | 길드 홈 | guild | P16/P22 | READY/OUTSIDER | 가입/직위/시설 | SCR-GIL-002 | 권한 | `QUERY` / `CMD-P16-F001` / `CMD-P16-F002` |
 | SCR-GIL-002 | 길드 랭킹 | guild/ranking | P16 | READY | 상세/이력 | SCR-GIL-001 | 공식 일마감 | `QUERY` |
@@ -68,7 +79,7 @@ STOPPED → RESTORED
 | SCR-RECOR-002 | 통계 | records/stats | P21 | LOADING/READY | 기간/지표 | SCR-RECOR-001 | aggregate 검증 | `QUERY` |
 | SCR-SEARCH-001 | 전역 검색 | search | P21/P22 | IDLE/LOADING/READY/MUTATING/EMPTY/ERROR | 검색/필터/정렬/북마크 전환 | 대상 상세 | 공개정보 authorization·observer 권한 | `QUERY FUNC-P21-003` / `CMD-P21-F003` |
 | SCR-NOTI-001 | 알림 센터 | notifications | P22 | READY/EMPTY | 읽음/이동 | 딥링크 대상 | event visibility | `LOCAL_PROJECTION` / `NAVIGATION` |
-| SCR-SAVE-001 | 세이브/로드 | save | P3/P22 | READY/SAVING/LOADING/ERROR | 수동저장/로드/export/import | SCR-SAVE-002 | 세션/무결성 | `CMD-P3-F002` / `CMD-P3-F005` / `QUERY` |
+| SCR-SAVE-001 | 세이브/로드 | save | P3/P22 | READY/SAVING/LOADING/ERROR | 수동저장/로드/export/import | SCR-SAVE-002 | 세션/무결성 | `CMD-P3-F001` (`CheckpointWorld`) / `CMD-P3-F003` / `CMD-P3-F005` / `QUERY` |
 | SCR-SAVE-002 | 세이브 복구 | save/recovery | P3 | RECOVERABLE/CORRUPTED/RESTORED | 세대선택/복원 | HOME | checksum/version | `CMD-P3-F003` |
 | SCR-RET-001 | 귀환 조건 | return | P20 | PROGRESSING/ELIGIBLE | 증표/조건/귀환 | SCR-RET-002 | 모든 필수조건 | `QUERY` / `CMD-P20-F004` |
 | SCR-RET-002 | 귀환/후일담 | return/ending | P20 | ELIGIBLE/ENDING_COMMITTED/PRESENTED | 귀환/잔류/연대기 | 종료 또는 HOME | ending commit | `CMD-P20-F004` |
@@ -88,6 +99,8 @@ STOPPED → RESTORED
 
 기본은 위 5개다. 커스터마이즈 시에도 슬롯 수는 5개를 유지하며, 사용자는 도시/기록 슬롯을 의뢰·캐릭터·길드 등 등록된 상위 화면으로 교체할 수 있다. 나머지 화면은 홈 또는 등록된 상위 화면에서 진입한다.
 
+앱 시작 시 정상 슬롯이 하나 이상이면 `SCR-START-001`에서 최근 슬롯 이어하기를 기본 CTA로 제공하고, 슬롯이 없으면 `EMPTY` 상태에서 `새 게임`과 `Import`만 제공한다. 새 게임 생성 중에는 HOME을 먼저 보여주지 않으며 `CreateNewWorld` receipt와 첫 complete generation이 모두 확인된 뒤 이동한다. checksum/version 실패는 손상 슬롯을 덮어쓰지 않고 `SCR-SAVE-002`로 보낸다.
+
 ## 4. UiAction → Command 규칙
 
 1. 화면 버튼은 먼저 `UiAction`으로 들어가며, 실행 계약이 `CMD-*`인 mutation만 ViewModel/UseCase가 CommandEnvelope로 변환한다.
@@ -95,6 +108,8 @@ STOPPED → RESTORED
 3. 금화·아이템·시간·관계·랭킹·던전 상태뿐 아니라 지도 주석, 안전 복귀, 전략/자동화 설정·위임 실행, 북마크처럼 live save.db를 바꾸는 Action은 Command receipt를 요구한다.
 4. 동일 CTA 연타는 같은 commandId 재사용 또는 UI disable로 중복 효과를 막는다.
 5. 화면이 STOPPED된 뒤 늦게 도착한 이전 sessionEpoch 결과는 적용하지 않는다.
+6. Android 화면은 ViewModel의 `StateFlow<UiState>`를 `collectAsStateWithLifecycle()`로 수집한다. 화면 lifecycle마다 임의 `launch` collector를 중복 생성하지 않고, 슬롯/route key 변경 시 이전 수집과 검색 job을 취소한다.
+7. NPC 2,000개·인벤토리 1,000개·100년 연대기는 전체 행을 한 번에 메모리에 올리지 않는다. Room query는 `(sortKey,id)` keyset과 초기 page size 100을 사용하고 Compose `LazyColumn`은 안정 key를 지정한다. Paging 라이브러리는 이 계약으로 P95를 못 맞춘 실측이 있을 때만 추가한다.
 
 ## 5. 위험 Action Matrix
 
@@ -129,11 +144,14 @@ STOPPED → RESTORED
 - Mutation CTA는 정상/중복탭/DB실패/process death를 검증한다.
 - Back/딥링크는 Guard 실패 시 안전한 root로 redirect한다.
 - 2,000 NPC/1,000 inventory/100년 연대기 fixture로 목록 복귀와 성능을 검증한다.
+- STOPPED/STARTED 100회에서 collector·query job 수가 증가하지 않고 이전 epoch 결과가 0건 적용되는지 검증한다.
+- keyset 경계에서 insert/delete가 발생해도 같은 항목 중복/누락이 없고 복귀 위치가 stable ID로 복원되는지 검증한다.
 - 중요한 선택은 선택 결과가 화면 복원 후 중복 적용되지 않는지 receipt로 확인한다.
 
 ## 9. Definition of Done
 
-- [ ] 현재 정의된 49개 Screen ID가 Navigation graph에 등록 또는 명시적으로 제외된다.
+- [ ] 현재 정의된 56개 Screen ID가 Navigation graph에 등록 또는 명시적으로 제외된다.
 - [ ] 각 Screen의 authoritative-changing Action이 실행 계약 열의 `CMD-*`를 통해 84 Mutation Registry에 연결된다.
 - [ ] 모든 Screen이 공통 Loading/Empty/Error/Restore 정책을 따른다.
+- [ ] Android Flow 수집은 lifecycle-aware이며 대형 목록은 bounded keyset loading과 stable key를 사용한다.
 - [ ] P22 UI 자동화와 P25 E2E가 Screen ID를 공통 식별자로 사용한다.

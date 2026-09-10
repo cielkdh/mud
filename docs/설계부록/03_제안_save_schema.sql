@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS world_state (
   balance_version TEXT NOT NULL,
   rng_version TEXT NOT NULL,
   engine_order_version INTEGER NOT NULL,
+  state_hash_version TEXT NOT NULL DEFAULT 'StateHash.v1',
   player_id TEXT,
   state_hash TEXT NOT NULL
 );
@@ -23,7 +24,9 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   command_id TEXT NOT NULL,
   epoch TEXT NOT NULL,
+  payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1',
   payload_hash TEXT NOT NULL,
+  lifecycle_status TEXT NOT NULL DEFAULT 'COMMITTED' CHECK(lifecycle_status IN ('RUNNING','COMMITTED','INTERRUPTED','REJECTED')),
   result_code TEXT NOT NULL,
   result_json TEXT NOT NULL,
   state_version INTEGER NOT NULL,
@@ -31,6 +34,7 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   UNIQUE(epoch,command_id)
 );
 CREATE INDEX IF NOT EXISTS ix_command_receipt_1 ON command_receipt(state_version);
+CREATE INDEX IF NOT EXISTS ix_command_receipt_2 ON command_receipt(lifecycle_status,epoch,state_version);
 
 CREATE TABLE IF NOT EXISTS world_event (
   id TEXT PRIMARY KEY NOT NULL,
@@ -112,14 +116,19 @@ CREATE INDEX IF NOT EXISTS ix_resource_reservation_2 ON resource_reservation(act
 CREATE TABLE IF NOT EXISTS time_advance_state (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
+  command_epoch TEXT NOT NULL,
   request_id TEXT NOT NULL,
+  segment_no INTEGER NOT NULL DEFAULT 0 CHECK(segment_no>=0),
   target_minute INTEGER NOT NULL,
   last_boundary_key TEXT,
   next_boundary_minute INTEGER,
+  next_event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_event_sequence>=0),
   interrupt_policy_json TEXT NOT NULL,
-  status TEXT NOT NULL,
-  UNIQUE(request_id)
+  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED')),
+  UNIQUE(command_epoch,request_id),
+  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT
 );
+CREATE INDEX IF NOT EXISTS ix_time_advance_state_1 ON time_advance_state(status,next_boundary_minute,request_id);
 
 CREATE TABLE IF NOT EXISTS save_generation (
   id TEXT PRIMARY KEY NOT NULL,
@@ -481,7 +490,9 @@ CREATE TABLE IF NOT EXISTS combat_checkpoint (
   combat_version TEXT NOT NULL,
   content_version TEXT NOT NULL,
   combat_ms INTEGER NOT NULL CHECK(combat_ms>=0),
+  combat_payload_codec TEXT NOT NULL,
   combat_payload BLOB NOT NULL,
+  rng_payload_codec TEXT NOT NULL,
   rng_payload BLOB NOT NULL,
   checksum TEXT NOT NULL
 );
@@ -524,6 +535,7 @@ CREATE TABLE IF NOT EXISTS monster_state (
   grade TEXT NOT NULL,
   room_id TEXT,
   group_id TEXT,
+  state_payload_codec TEXT NOT NULL,
   state_payload BLOB NOT NULL,
   status TEXT NOT NULL
 );

@@ -45,8 +45,9 @@ data class RemoveStatus(val selector: StatusSelector, val count: Int?) : EffectN
 data class AddShield(val amount: ValueExpr, val duration: DurationSpec?) : EffectNode
 data class RestoreResource(val resource: ResourceType, val amount: ValueExpr) : EffectNode
 data class MoveTarget(val mode: MoveMode, val distance: ValueExpr) : EffectNode
-data class EmitEvent(val eventType: String, val payload: Map<String, ValueExpr>) : EffectNode
 ```
+
+v1에는 임의 `eventType: String`/`Map<String, ValueExpr>`를 받는 escape hatch를 두지 않는다. 위 typed node가 성공하면 evaluator가 engine-owned sealed `EffectOutcome`을 만들고, 외부 command handler가 필요에 따라 versioned `DomainEventPayload`로 변환한다. 콘텐츠가 새 종류의 결과를 요구하면 기존 node로 표현 가능한지 먼저 확인하고, 불가능할 때만 sealed node·codec·validator·golden test를 같은 변경에서 추가한다. 콘텐츠 데이터만으로 임의 authoritative event나 command를 호출할 수 없다.
 
 ## 4. Trigger Registry
 
@@ -198,7 +199,7 @@ Overflow는 오류로 처리하며 clamp로 overflow를 은폐하지 않는다.
 | Reference | 존재하지 않는 stat/status/tag/content ID |
 | Target | trigger에서 불가능한 target selector |
 | Recursion | AST depth/node count 상한 초과 |
-| Cycle | EmitEvent가 자기 자신을 무한 재귀시키는 graph |
+| Cycle | nested TriggeredEffect가 같은 `(effectSetId,nodePath,trigger)`를 재진입하거나 reaction budget을 초과 |
 | Stack | maxStacks/refresh policy 불일치 |
 | Class/Tag | 장비/몬스터 허용 태그 위반 |
 | Determinism | RANDOM selector가 지정 RNG stream 없이 사용 |
@@ -214,7 +215,7 @@ Overflow는 오류로 처리하며 clamp로 overflow를 은폐하지 않는다.
 4. ValueExpr 계산
 5. Effect Delta 생성
 6. 동일시각 batch 규칙에 따라 Apply
-7. Reaction/secondary trigger 수집
+7. engine-owned typed EffectOutcome에서 Reaction/secondary trigger 수집
 8. recursion/event budget 검사
 9. 결과 trace 기록
 ```
@@ -233,6 +234,7 @@ Overflow는 오류로 처리하며 clamp로 overflow를 은폐하지 않는다.
 - Evaluator unit: 각 node의 순수 계산.
 - Determinism: 동일 state/seed/effect AST → 동일 Delta/trace.
 - Fuzz: AST depth/빈 배열/큰 수/overflow/순환 event.
+- Escape-hatch 방지: 알 수 없는 node, 임의 eventType/payload map, command 호출 필드는 parser 단계에서 거절.
 - Content-wide compile: 모든 WPN/ARM/ACC/SKL/MON/affix/set effect를 startup이 아니라 build-time에 검증.
 
 ## 14. Definition of Done
@@ -241,4 +243,5 @@ Overflow는 오류로 처리하며 clamp로 overflow를 은폐하지 않는다.
 - [ ] 모든 효과가 typed AST compile/validation을 통과한다.
 - [ ] 원문에 수치가 없는 효과는 승인된 balance profile 전에는 활성화하지 않는다.
 - [ ] evaluator가 Android/Room/Compose에 의존하지 않는다.
+- [ ] 콘텐츠 AST가 임의 DomainEvent/Command 문자열을 만들 수 없다.
 - [ ] Golden Seed에서 effect trace가 재현된다.

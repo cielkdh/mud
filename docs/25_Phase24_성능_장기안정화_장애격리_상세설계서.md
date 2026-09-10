@@ -1,6 +1,6 @@
 # Phase 24. 성능 · 장기안정화 · 장애격리 상세 설계서
 
-> 버전 v31.0 · 기준원문 v30 · 작성일 2026-09-08  
+> 버전 v31.1 · 기준원문 v30 · 작성일 2026-09-09
 > 상태: **설계 검토 초안 / 구현 NOT_STARTED / Test NOT_RUN**  
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
@@ -23,9 +23,9 @@
 
 | 결정 ID | 검토 주제 | 상태 | 적용/차단 내용 |
 |---|---|---|---|
-| C13 | 한글 FTS 부분검색/tokenizer | 설계 보완안·승인 대기 | 정규화/토큰 전략 비교후선택; 성능·품질샘플과정보공개경계 동시검증. |
-| C16 | 세대번호만 존재하는 과거상태 복원 | 설계 보완안·승인 대기 | 불변청크+완전 manifest+정규화 current projection 원자저장. GC root 보호. |
-| C19 | 장기성능/용량 목표와단말기준 | 설계 보완안·측정 전 | 문서의수치예산은초기 목표. 실측하지않았고300 년상수용량보장하지않음. |
+| C13 | 한글 FTS 부분검색/tokenizer | 승인·기준선 반영 | NFC·대소문자·공백 정규화와 결정적 2-gram shadow token table을 기본으로 한다. |
+| C16 | 세대번호만 존재하는 과거상태 복원 | 승인·기준선 반영 | 불변 청크+완전 manifest+정규화 current projection 원자 저장, GC root 보호. |
+| C19 | 장기성능/용량 목표와단말기준 | 승인·BASELINE_V1 / 실측 NOT_RUN | [85 NFR](85_NFR_성능_용량_단말_기준서.md)의 MIN/STD·P95·PSS·save size 상한이 합격 기준이다. |
 
 ## 4. 기능 범위 및 요구 연결
 | 기능 ID | 기능명 | 중요도 | 선행 기능/Phase | 원문요구/공통근거 |
@@ -38,15 +38,11 @@
 ## 5. 기능별 상세 설계
 
 ### 공통 계약의 적용 범위
-모든 새 메소드/클래스명과 물리 DDL 은 **설계 보완안**이다. 제공된 자료에는 실제 저장소·DAO·SQL 이 없으므로 기존 구현에 대한 변경 완료를 뜻하지 않는다. 원문의 객체명/데이터 항목은 최대한 유지하며 기존 코드가 발견되면 adapter 로 연결한다.
+이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
-`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload)`를 사용한다. `GameMinute`, `CombatMillis`, `Money(Long)`, `BasisPoint`, `EntityId`는 혼합 연산을 금지한다. 확률의 기본 표현은 **ppm(0..1,000,000)**이며 세밀한 0.01%도 정수로 표현한다. 표시 반올림과 판정은 분리한다. 정수연산 overflow 는 오류이며 clamp 로 은폐하지 않는다.
+`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
-`ReadView`는 불변이다. `Delta`는 변경행·RNG 새 상태·도메인 이벤트·명령 receipt 를 포함한다. 콘텐츠 참조/외부 파일 읽기는 transaction 진입 전에 끝낸다. 실패 가능한 대규모 계산은 transaction 밖에서 하고, 성공한 커밋 이후에만 메모리 및 화면 상태를 게시한다. `stateHash`는 canonical 직렬화(키 정렬·정수 표현·버전 포함)에 대한 SHA-256 이며 현실시각·UI 재생위치는 제외한다.
-
-중복 명령은 동일 epoch/commandId 와 payload hash 를 함께 검사한다. 동일 ID/동일 payload 이면 이전 결과를 반환하고, 다른 payload 이면 `IdempotencyKeyReuse`를 반환한다. 인메모리 중복 제거만으로 복구 후 중복을 막았다고 판단하지 않는다.
-
-게임은 한 프로세스·한 활성 WorldSession 을 기준으로 한다. 여러 노드/서버/분산 Lock 은 **해당 없음**이다. 다만 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 간의 동시성은 실제로 검증한다.
+게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
 
 <a id="func-p24-001"></a>
 ### 5.1. FUNC-P24-001 — 실측 성능·이미지·목록·DB 예산
@@ -251,8 +247,8 @@
 
 ### Phase 특화 알고리즘·수치·판단
 
-### 초기 성능 예산(보완안, 미측정)
-테스트기준단말후보:RAM4GB/arm64 의중간급단말과개발실보유최저지원단말.상태 fixture 는현역2200,NPC 역사100 년,아이템100000,연대기1000000 이다.
+### 승인 성능 예산(`BASELINE_V1`, 미측정)
+합격 수치와 측정 프로토콜은 [85 NFR](85_NFR_성능_용량_단말_기준서.md)이 단일 기준이다. 상태 fixture는 현역 2,200명, NPC 역사 100년, 아이템 100,000개, 연대기 1,000,000건이다. 아래 원문 보완 수치는 대응 NFR과 충돌하면 85의 `BASELINE_V1`을 따른다.
 
 | 여정 | 초기 목표 | 측정방법 |
 |---|---:|---|
@@ -264,7 +260,7 @@
 | 1 게임일 진행 | p95 1 초 이하 | 2200NPC 정상일 profile |
 | 장기진행 취소 | 다음 bounded 경계 250ms 목표 | hard guarantee 아님·최악시간측정 |
 
-미달이면실측근거와원인/개선 Task/재측정으로관리한다.원문에없는수치를기성사실/보장으로사용하지않는다.300 년기록은중요사건수에따라커지므로 MB 고정상한은측정후승인한다.
+미달이면 실측 근거와 원인/개선 Task/재측정으로 관리한다. 300년 중요 사건 수가 많더라도 compact export 256 MiB와 live save 1.5배 상한은 자동 완화하지 않는다. 목표 조정이 필요하면 C19 revision과 사용자 영향·대안을 별도 승인한다.
 
 
 ## 6. DB 상세 설계
@@ -418,7 +414,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-UT-001, P24-BT-001, P24-FT-001 |
@@ -442,7 +438,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-CT-001, P24-IT-001 |
@@ -466,7 +462,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-CT-001, P24-IT-001 |
@@ -490,7 +486,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-UT-001, P24-BT-001, P24-FT-001, P24-CT-001, P24-IT-001 |
@@ -538,7 +534,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-UT-002, P24-BT-002, P24-FT-002 |
@@ -562,7 +558,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-CT-002, P24-IT-002 |
@@ -586,7 +582,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-CT-002, P24-IT-002 |
@@ -610,7 +606,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-UT-002, P24-BT-002, P24-FT-002, P24-CT-002, P24-IT-002 |
@@ -658,7 +654,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-UT-003, P24-BT-003, P24-FT-003 |
@@ -682,7 +678,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-CT-003, P24-IT-003 |
@@ -706,7 +702,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-CT-003, P24-IT-003 |
@@ -730,7 +726,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-UT-003, P24-BT-003, P24-FT-003, P24-CT-003, P24-IT-003 |
@@ -778,7 +774,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-UT-004, P24-BT-004, P24-FT-004 |
@@ -802,7 +798,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-CT-004, P24-IT-004 |
@@ -826,7 +822,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-CT-004, P24-IT-004 |
@@ -850,7 +846,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P24-UT-004, P24-BT-004, P24-FT-004, P24-CT-004, P24-IT-004 |
@@ -874,7 +870,7 @@ CREATE INDEX IF NOT EXISTS ix_recovery_journal_1 ON recovery_journal(source_gene
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C13, C16 |
-| 현재 차단/상태 | C13, C16 / NOT_STARTED |
+| 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P24-UT-001, P24-BT-001, P24-FT-001, P24-CT-001, P24-IT-001, P24-UT-002, P24-BT-002, P24-FT-002, P24-CT-002, P24-IT-002, P24-UT-003, P24-BT-003, P24-FT-003, P24-CT-003, P24-IT-003, P24-UT-004, P24-BT-004, P24-FT-004, P24-CT-004, P24-IT-004, P24-RT-001, P24-CN-001, P24-REC-001, P24-PT-001, P24-OP-001, P24-ET-001, P24-IT-005 |
