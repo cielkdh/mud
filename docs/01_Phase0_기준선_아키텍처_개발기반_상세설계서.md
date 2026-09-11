@@ -1,7 +1,7 @@
 # Phase 0. 기준선 · 아키텍처 · 개발기반 상세 설계서
 
 > 버전 v31.2 · 기준원문 v30 · 작성일 2026-09-09
-> 상태: **구현·Gate 검증 완료 / Phase 완료 보류(담당자·리뷰·PR·revision 보존 미지정)**
+> 상태: **ACCEPTED — revision `714941d`에서 구현·Gate 재검증·독립 리뷰 완료**
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
 ## 1. 문서 개요
@@ -860,12 +860,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | QA/리뷰어 / 미지정 |
+| 현재 차단/상태 | ACCEPTED — 2026-09-11 revision `714941d`, Gate 8개 PASS, 독립 리뷰 ACCEPT |
+| 담당 역할/담당자 | QA/독립 리뷰 / Codex |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | **Gate 8개:** P0-UT-001, P0-UT-002, P0-BT-002, P0-BT-003, P0-CT-003, P0-CN-001, P0-CT-004, P0-IT-002. 나머지 P0 Test는 중복되지 않는 결함을 검증할 때만 실행하는 보조 계획이며 Gate를 막지 않는다. |
 | 완료 조건 | Gate 8개 PASS·C01/C02/C03 적용·C14 빌드 증거·인계 contract/fixture·미해결 P0/P1 결함 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | 독립 코드 리뷰 ACCEPT / local revision `714941d` / [2026-09-11 P0 cancellation 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 
 ## 10. Phase 내부 Task Dependency
@@ -1438,7 +1438,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 조건부이월 | 문구/선택표정/비필수장식/원문 선택 확장 | 담당자/대체동작/목표 Phase/승인기록필수 |
 | 이월불가 | 저장손상·중복자원·숨은정보노출·핵심소프트락·미지원 schema 파괴 | 출시및관련후속 Gate 차단 |
 
-Phase Gate Task 는 **P0-TASK-021**, 결과상태는 DESIGN_REVIEW→IMPLEMENTED→TESTED→REVIEWED→ACCEPTED 로분리한다.현재는설계초안만작성된상태다.
+Phase Gate Task 는 **P0-TASK-021**이며, 결과상태 DESIGN_REVIEW→IMPLEMENTED→TESTED→REVIEWED→ACCEPTED를 revision `714941d`에서 완료했다.
 
 ## 14. Phase 리스크 관리
 
