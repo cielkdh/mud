@@ -18,18 +18,32 @@
 - Android 오프라인 싱글 플레이 게임에 필요한 수준만 구현한다. 실제 압력이 없는 Interface, Factory, Manager, 공통 Framework와 Enterprise 패턴은 추가하지 않는다.
 - RNG 결정론, Save/Recovery 재현성, DB·Save 증가량, Coroutine/Thread 안전성, Transaction 경계를 항상 검토한다.
 
-## 고정 팀 Thread
+## 고정 팀 역할 및 Thread 재사용 정책
 
-기존 문맥을 보존해 아래 Thread를 새 Thread보다 먼저 재사용한다.
+팀원의 정체성은 Thread URI가 아니라 아래 역할과 책임이다. URI는 현재 환경에서 기존 문맥을 복원하기 위한 우선 접근 경로일 뿐이며, PC 변경·Codex 재설치·계정 또는 환경 차이로 URI가 바뀌어도 역할, 책임, Workflow와 개발 리더의 최종 승인 권한은 바뀌지 않는다.
 
-| 역할 | Thread | 주 책임 |
-|---|---|---|
-| 디자이너 | `codex://threads/01a08f8f-6ad7-7de1-955d-f50e10183a66` | UI/UX, Compose 화면 구조, 사용자 동선, 디자인 시스템, 시각 자산, 접근성, 설계 대비 UI 검토 |
-| QA | `codex://threads/01a08f84-2809-7c21-9651-dadac06b9c93` | Acceptance Criteria, Unit/Integration/UI/Regression/Runtime Test, Emulator·Device, 경계·장애·Save/Load·Migration 검증, 독립 품질 판정 |
-| 고급개발자 | `codex://threads/01a088f7-d739-7331-864e-1f57d19bd845` | Architecture, Core Domain, Room/DB, Transaction, Coroutine, Save/Recovery/Migration, RNG, State Machine, Command/Event, 성능, 중요 코드 2차 리뷰 |
-| 일반개발자 | `codex://threads/01a08f82-fcd8-7441-8031-b24dc9b6c7d7` | 확정된 일반 Domain, Repository/DAO, UseCase, Compose 화면, CRUD, 변환, Fixture, 독립 반복 구현 |
+| 고정 역할 | 우선 재사용 Thread | 인수인계 문서 | 주 책임 |
+|---|---|---|---|
+| 디자이너 | `codex://threads/01a08f8f-6ad7-7de1-955d-f50e10183a66` | `.codex-team/designer.md` | UI/UX, Compose 화면 구조, 사용자 동선, 디자인 시스템, 시각 자산, 접근성, 설계 대비 UI 검토 |
+| QA | `codex://threads/01a08f84-2809-7c21-9651-dadac06b9c93` | `.codex-team/qa.md` | Acceptance Criteria, Unit/Integration/UI/Regression/Runtime Test, Emulator·Device, 경계·장애·Save/Load·Migration 검증, 독립 품질 판정 |
+| 고급개발자 | `codex://threads/01a088f7-d739-7331-864e-1f57d19bd845` | `.codex-team/senior-developer.md` | Architecture, Core Domain, Room/DB, Transaction, Coroutine, Save/Recovery/Migration, RNG, State Machine, Command/Event, 성능, 중요 코드 2차 리뷰 |
+| 일반개발자 | `codex://threads/01a08f82-fcd8-7441-8031-b24dc9b6c7d7` | `.codex-team/developer.md` | 확정된 일반 Domain, Repository/DAO, UseCase, Compose 화면, CRUD, 변환, Fixture, 독립 반복 구현 |
 
-각 팀 Thread는 표에 지정된 역할을 수행한다. 사용자가 개발 리더로 지정하지 않은 팀 Thread는 스스로 최종 승인자라고 가정하지 않는다.
+### Thread 선택과 복구
+
+1. 현재 Codex 환경에서 표의 우선 재사용 Thread에 접근할 수 있으면 기존 문맥을 보존해 먼저 재사용한다.
+2. 기존 Thread가 없거나 접근할 수 없으면 해당 역할 이름으로 현재 프로젝트 checkout에 새 Thread를 생성한다. 접근 불가만을 이유로 Goal을 차단하거나 완료로 간주하지 않는다.
+3. 새 Thread에는 이 문서의 동일한 역할·책임, 작업 배정 계약, 리뷰 기준과 공식 설계서 우선 원칙을 전달한다. 기존 URI는 과거 문맥 포인터로 보존한다.
+4. 새 URI가 필요하면 해당 역할의 `.codex-team` 인수인계 문서에 현재 환경용 Thread와 변경 사유를 기록한다. URI가 달라져도 디자이너·QA·고급개발자·일반개발자 역할, 개발 리더의 최종 승인 권한, 작업 분배·교차 리뷰·QA Workflow는 변경하지 않는다.
+5. 사용자가 개발 리더로 지정하지 않은 팀 Thread는 스스로 최종 승인자라고 가정하지 않는다.
+
+### 프로젝트 인수인계 기록
+
+- Thread 내부 문맥은 편의 정보이며 프로젝트의 단일 근거가 아니다. 공식 설계서와 코드·관리데이터·검증 증거가 우선하고, 역할별 연속성이 필요한 실제 상태는 해당 `.codex-team/*.md`에 남긴다.
+- 인수인계 문서는 실제 담당 또는 전달할 상태가 생길 때 생성·갱신한다. 빈 문서나 Thread 전문 복사본은 만들지 않는다.
+- 각 문서에는 필요한 항목만 유지한다: 역할과 책임, 현재 담당 영역, 최근 완료 작업, 진행 중 작업, 중요 설계/Architecture 결정과 근거, 미해결 이슈, 다음 작업, 인수인계 주의사항, 현재 환경의 Thread 참조.
+- 비밀정보, 전체 대화 전문, 장황한 진행 로그는 기록하지 않는다. 변경 revision, 관련 설계 문서, Test ID와 검증 증거 경로를 사용한다.
+- PC 또는 Codex 환경이 바뀌면 `AGENTS.md` → 공식 설계서·관리데이터·검증 증거 → 해당 `.codex-team` 문서 순으로 읽고, 우선 URI 접근을 시도한 다음 필요 시 새 Thread를 생성해 문맥을 복구한다. 복구 후 개발 리더가 현재 Goal·차단 항목·수정 경계를 확인하기 전에는 구현을 시작하지 않는다.
 
 ## 기본 Workflow
 
