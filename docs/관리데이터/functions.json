@@ -67,7 +67,7 @@
     "i": 2,
     "id": "FUNC-P0-002",
     "name": "빌드·모듈·기술버전 고정",
-    "method": "Gradle :core:simulation:test + :app:testDebugUnitTest/:app:lintDebug/:app:assembleDebug",
+    "method": "Gradle :core:simulation:test + :app:testDebugUnitTest/:app:lintDebug/:app:assembleDebug/:app:assembleRelease",
     "tables": [],
     "rules": [
       "원문 §3031 모듈명은 논리 namespace로 유지하고 P0 물리 Gradle project는 :app과 :core:simulation 두 개로 제한한다",

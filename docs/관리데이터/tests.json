@@ -5,17 +5,17 @@
     "type": "UT",
     "function": "FUNC-P0-001",
     "title": "원문 hash·Phase 결정 매핑",
-    "input": "원문 SHA-256, Phase 0 결정 집합 {C01,C02,C03,C14}, active P0 REQUIRED/DATA Assertion 상태",
-    "expected": "hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건",
+    "input": "원문 SHA-256, Phase 0 결정 집합 {C01,C02,C03,C14,C23}, active P0 REQUIRED/DATA Assertion 상태",
+    "expected": "hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태와 C23 Assertion 범위·소유 분류 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건",
     "precondition": "원문 파일, document_manifest.json, decisions.json, Phase 0 문서의 읽기 전용 복제본이 준비되어 있다. DB/RNG/Android adapter는 사용하지 않는다.",
-    "steps": "① 원문 SHA-256 계산 ② manifest 값 비교 ③ Phase 0 문서와 decisions.json의 결정 ID/상태 비교 ④ C04~C06이 P0 Gate에 없는지 검사 ⑤ active P0 기능의 REQUIRED/DATA가 모두 APPROVED_REQUIREMENT 이상인지 검사 ⑥ build/reports/phase0/P0-UT-001.txt에 결과 저장",
+    "steps": "① 원문 SHA-256 계산 ② manifest 값 비교 ③ Phase 0 문서와 decisions.json의 C01·C02·C03·C14·C23 결정 ID/상태 비교 ④ C04~C06이 P0 Gate에 없는지 검사 ⑤ C23 범위·소유 분류와 active P0 REQUIRED/DATA가 모두 APPROVED_REQUIREMENT 이상인지 검사 ⑥ versioned docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md에 결과 저장",
     "db": "원문과 관리 JSON hash는 검사 전후 동일하며 검증보고서 외 파일 변경이 없다.",
     "logs": "testId=P0-UT-001, sourceHash, decisionId, expectedPhase, actualPhase, exitCode를 기록한다.",
     "state": "source/decision mismatch 0건, 구현 착수 대상 atomic approval mismatch 0건",
     "success": "py -3 docs/검증도구/validate_docs.py가 결정·Assertion Gate 검사를 포함해 종료코드 0이고 증거 파일이 존재한다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-10: C23으로 117개 자동 후보를 개별 범위·소유 기준으로 분류했다. active FUNC-P0-001/002 REQUIRED/DATA assertion 117개는 APPROVED_REQUIREMENT 117개, 미승인 0개이며 C14는 빌드 PASS다.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#p0-ut-001"
   },
   {
     "id": "P0-BT-001",
@@ -98,14 +98,14 @@
     "input": "P0 Build Manifest와 gradlew.bat :core:simulation:test",
     "expected": "물리 project가 :app, :core:simulation뿐이고 JVM test가 성공한다.",
     "precondition": "wrapper/version catalog/settings와 :core:simulation source가 존재하고 JDK 17을 사용한다. DB/RNG fixture는 필요 없다.",
-    "steps": "① Java/Gradle 버전 기록 ② settings project 목록 비교 ③ dependency lock 사용 확인 ④ :core:simulation:test 실행 ⑤ build/reports/phase0/P0-UT-002.txt에 command/exit code 저장",
+    "steps": "① Java/Gradle 버전 기록 ② settings project 목록 비교 ③ dependency lock 사용 확인 ④ :core:simulation:test 실행 ⑤ versioned docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md에 command/exit code 저장",
     "db": "DB를 열지 않으며 build output과 lock/report만 변경된다.",
     "logs": "testId=P0-UT-002, javaVersion, gradleVersion, projects, command, exitCode를 기록한다.",
     "state": "P0 Build Manifest mismatch 0건, JVM test failure 0건",
     "success": "선언된 명령 종료코드 0과 재현 가능한 lock/report가 존재한다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-11: :core:simulation:test --rerun-tasks --offline --no-daemon 통과; WorldSessionTest 12건 failure 0, error 0; Gradle 9.6.0/JDK 17과 lockfile 확인.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#실행-결과"
   },
   {
     "id": "P0-BT-002",
@@ -116,14 +116,14 @@
     "input": "정상 edge :app→:core:simulation; 금지 edge :core:simulation→:app; simulation의 Android/Room/Compose/네트워크 import; 미선언 P0 module/plugin/dependency",
     "expected": "모든 금지 fixture는 실패하고 정상 :app→:core:simulation graph와 JVM test는 통과",
     "precondition": "실제 Gradle project graph와 Kotlin source set을 복제한 격리 fixture. allowlist와 공개 API 금지 symbol 목록이 P0 revision으로 고정됨.",
-    "steps": "① 정상 graph 검사 ② 각 금지 edge/import/module/plugin/dependency fixture를 하나씩 적용한 격리 복제본 검사 ③ 실패가 정확한 source/target/symbol을 지목하는지 확인 ④ 정상 graph에서 :core:simulation:test 실행 ⑤ build/reports/phase0/P0-BT-002.txt 저장",
+    "steps": "① 정상 graph 검사 ② 각 금지 edge/import/module/plugin/dependency fixture를 하나씩 적용한 격리 복제본 검사 ③ 실패가 정확한 source/target/symbol을 지목하는지 확인 ④ 정상 graph에서 :core:simulation:test 실행 ⑤ versioned docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md에 결과 저장",
     "db": "게임 DB를 열지 않는다. 검사 전후 저장소 fixture hash가 동일하고 build 산출물은 격리된 build directory에만 생성된다.",
     "logs": "testId=P0-BT-002, ruleId, sourceModule, targetModule 또는 forbiddenSymbol, Gradle task와 exit code를 기록한다.",
     "state": "production graph 변경 0건, 금지 fixture false-negative 0건, 정상 graph false-positive 0건",
     "success": "금지 fixture false-negative 0건, 정상 graph false-positive 0건, JVM test 종료코드 0과 증거 로그가 존재한다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-10: verifyPhase0Architecture 정상 graph 통과; extra-module, forbidden-edge, forbidden-plugin, forbidden-kotlin-plugin, forbidden-dependency, forbidden-app-dependency, forbidden-import, forbidden-unit-mix 실제 Gradle fixture 8개가 모두 기대 오류로 거절됨. root check dry-run에도 verifyPhase0Architecture가 포함됨.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#p0-bt-002-실제-gradle-fixture"
   },
   {
     "id": "P0-FT-002",
@@ -167,17 +167,17 @@
     "type": "IT",
     "function": "FUNC-P0-002",
     "title": "Android build·launch smoke",
-    "input": "gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug와 AppRoot launch smoke",
-    "expected": "세 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다.",
+    "input": "gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease와 AppRoot launch smoke",
+    "expected": "네 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다.",
     "precondition": "P0 Build Manifest가 적용된 :app과 :core:simulation, Android test target이 존재한다. Room/save/headless module은 없어야 한다.",
-    "steps": "① project/plugin/dependency 목록 기록 ② unit/lint/assemble 실행 ③ debug APK의 applicationId/namespace/version 확인 ④ AppRoot를 실행해 기본 Blocked/Empty 상태 확인 ⑤ build/reports/phase0/P0-IT-002.txt에 command/exit code/APK metadata 저장",
+    "steps": "① project/plugin/dependency 목록 기록 ② unit/lint/debug·release assemble 실행 ③ debug·release APK의 applicationId/namespace/version 확인 ④ AppRoot를 실행해 기본 Blocked/Empty 상태 확인 ⑤ versioned docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md에 command/exit code/APK metadata 저장",
     "db": "save.db·Room schema JSON·WAL 파일 생성 0건. build output과 report만 생성된다.",
     "logs": "testId=P0-IT-002, applicationId, namespace, versionCode, versionName, plugins, tasks, exitCode를 기록한다.",
     "state": "build/lint/smoke failure 0건, forbidden plugin/module 0건",
-    "success": "명시된 Gradle task 종료코드 0, APK metadata 일치, AppRoot smoke PASS 증거가 존재한다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "success": "명시된 Gradle task 종료코드 0, debug·release APK metadata 일치, AppRoot smoke PASS 증거가 존재한다.",
+    "status": "PASS",
+    "actual": "2026-09-10: API 36 Google APIs x86_64 emulator에서 :app:installDebug 성공 후 com.imsi.mud/.MainActivity cold launch 1.729초. foreground activity와 Feature unavailable/SCR-START-001/blocked body UI tree를 확인했고 crash buffer FATAL EXCEPTION은 0건이다. :app:connectedDebugAndroidTest와 :app:lintDebug, :app:assembleRelease --write-locks도 성공했다. debug app-debug.apk와 release app-release-unsigned.apk metadata는 applicationId com.imsi.mud, versionCode 1, versionName 0.1.0-dev, minSdk 26으로 일치한다. 최종 통합 Gradle 실행은 129 task, 7분 49초, 종료코드 0이다.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#android-emulator-실행"
   },
   {
     "id": "P0-UT-003",
@@ -211,9 +211,9 @@
     "logs": "testId=P0-BT-003, type, operand, boundary, resultCode를 JUnit report에 기록한다.",
     "state": "ArithmeticOverflow 오류·상태 변경 없음",
     "success": "overflow·범위 밖 생성이 typed 오류이고 유효 경계값은 성공하며 상태/RNG 변경이 없다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-10: value object boundary와 overflow typed rejection, Checked.Value에서 실제 GameMinute/Money를 해제한 forbidden-unit-mix compile-negative, SavePort 실패 전후 in-memory state/RNG hash 불변을 WorldSessionTest로 확인.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#실행-결과"
   },
   {
     "id": "P0-FT-003",
@@ -247,9 +247,9 @@
     "logs": "testId=P0-CT-003, codecId, payloadHash, expectedBytesHash, actualBytesHash를 기록한다.",
     "state": "codec mismatch 0건, unknown codec false-success 0건",
     "success": "golden roundtrip과 unknown codec 거절이 모두 PASS한다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-11: :core:simulation:test에서 Command/Event golden bytes roundtrip, NFC/NFD canonical payload 및 payload hash 동등성, unknown codec typed rejection 통과.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#실행-결과"
   },
   {
     "id": "P0-IT-003",
@@ -337,9 +337,9 @@
     "logs": "testId=P0-CT-004, uiState, screenId, retryCount, semanticsFailureCount를 기록한다.",
     "state": "5-state mismatch 0, accessibility failure 0, unauthorized navigation 0",
     "success": "Compose UI test가 5-state·retry·unknown route·접근성 검사를 모두 통과한다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-10: API 36 Google APIs x86_64 emulator의 :app:connectedDebugAndroidTest에서 AppRootTest 2건이 failure 0, error 0으로 통과했다. Loading/Ready/Empty/Error/Blocked의 title·body contentDescription과 traversal 순번, Blocked title→screenId→body, Error Retry role·48dp·순번, unknown route를 실제 실행했다.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#android-emulator-실행"
   },
   {
     "id": "P0-IT-004",
@@ -391,9 +391,9 @@
     "logs": "testId=P0-CN-001, commandId, submissionSequence, epoch, beforeVersion, afterVersion, outcome을 기록한다.",
     "state": "concurrent mutation 0, order mismatch 0, duplicate effect 0, drain 후 child job 0",
     "success": "100회 모두 동일 결과·state hash를 내고 close 후 consumer가 join되며 timeout 5초를 넘지 않는다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-10: controllable dispatcher에서 A/B 순서·C stale·D enqueue 전 취소·E enqueue 후 caller 취소의 정확히 1회 commit·F close 거절을 100회 반복했고 in-memory state hash가 매회 동일함을 확인. LRU 축출 뒤 accepted receipt는 durable 조회가 stale expectedVersion 검사보다 먼저 반환되어 재commit 0건을 확인.",
+    "evidence": "docs/검증증거/2026-09-10_Phase0_Gate_실행증거.md#실행-결과"
   },
   {
     "id": "P0-REC-001",

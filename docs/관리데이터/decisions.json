@@ -194,9 +194,9 @@
   {
     "id": "C14",
     "title": "기술버전·SDK 및 실제코드 미제공",
-    "status": "승인·기준선 반영 / 빌드 NOT_RUN",
+    "status": "승인·기준선 반영 / 빌드 PASS",
     "sources": "§3022~3135",
-  "proposal": "Android-only greenfield: compileSdk37/targetSdk36/minSdk26, AGP9.4.0/Gradle9.6.0/JDK17/Kotlin2.4.20/KSP2.3.11/Compose BOM2026.08.00/Room3.0.2/Coil3.5.0 exact pin, SchemaBaselineMode=GREENFIELD_V1. 실제 출시 이력이 발견될 때만 재승인 후 LEGACY_CHAIN으로 전환한다. P0는 resolve/JVM·app compile·launch, P3는 Room compile/최초 v1 schema export를 검증한다.",
+  "proposal": "Android-only greenfield: compileSdk37/targetSdk36/minSdk26, AGP9.4.0/Gradle9.6.0/JDK17/Kotlin2.4.20/KSP2.3.11/Compose BOM2026.08.00/Room3.0.2/Coil3.5.0 exact pin, SchemaBaselineMode=GREENFIELD_V1. 실제 출시 이력이 발견될 때만 재승인 후 LEGACY_CHAIN으로 전환한다. P0는 resolve/JVM·app debug/release compile·launch, P3는 Room compile/최초 v1 schema export를 검증한다.",
     "phases": [
       0,
       3,
@@ -321,5 +321,23 @@
     ],
     "owner": "제품 책임자 / 영향 Phase 기술 책임자",
     "approved_at": "2026-09-09"
+  },
+  {
+    "id": "C23",
+    "title": "Phase 0 원자 Assertion 범위·소유 분류",
+    "status": "승인·기준선 반영",
+    "sources": "§123~124/§127/§3023~3032/§3046/§3095/§3126/§3135",
+    "proposal": "117개 자동 후보를 개별 검토했다. P0 강제 항목은 AR-S0123-001, AR-S3023-001·002·003·008·015, AR-S3024-001~004·007·008·011, AR-S3025-003~004, AR-S3027-005, AR-S3030-003, AR-S3031-001·004, AR-S3032-002, AR-S3126-002, AR-S3135-001~004·012·013·019·021~023이다. 나머지 AR-S0124-001~032, AR-S0127-003, 위 범위 밖 AR-S3023/3024/3031/3135, AR-S3046-004, AR-S3095-001은 P0 구현으로 주장하지 않고 콘텐츠·RNG·저장·UI·성능·통합의 실제 Owner Phase에서 IMPLEMENTED/VERIFIED로 전환한다. APPROVED_REQUIREMENT는 원문 요구와 Owner를 승인했다는 뜻이며 P0 구현 완료를 뜻하지 않는다.",
+    "phases": [
+      0,
+      1,
+      2,
+      3,
+      22,
+      24,
+      25
+    ],
+    "owner": "제품 책임자 / Architecture·Build 책임자 / 영향 Phase 기술 책임자",
+    "approved_at": "2026-09-10"
   }
 ]

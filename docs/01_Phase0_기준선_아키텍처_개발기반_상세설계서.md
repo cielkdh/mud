@@ -1,7 +1,7 @@
 # Phase 0. 기준선 · 아키텍처 · 개발기반 상세 설계서
 
 > 버전 v31.2 · 기준원문 v30 · 작성일 2026-09-09
-> 상태: **설계 검토 초안 / 구현 NOT_STARTED / Test NOT_RUN**  
+> 상태: **구현·Gate 검증 완료 / Phase 완료 보류(담당자·리뷰·PR·revision 보존 미지정)**
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
 ## 1. 문서 개요
@@ -26,7 +26,8 @@
 | C01 | 파티6 명/10 명 혼용 | 원문기준 해결 | 조직10 명·출전6 명. 30/10 과거대화는 첨부본 기준에 적용하지 않음. |
 | C02 | 플레이어 길드창설 예시 | 원문기준 해결 | 플레이어 신규창설 금지·기존길드 가입/승계. NPC 길드생성은 유지. |
 | C03 | XP 지수식/후반 공식 | 원문기준 해결 | 후반 100×L^1.70×구간보정, 레벨당자동1/자유1·10 배수추가2 유지. |
-| C14 | 기술버전·SDK 및 실제 코드 미제공 | 승인·빌드 검증 NOT_RUN | exact 기술/SDK와 `GREENFIELD_V1`은 확정했다. P0는 실제 프로젝트 resolve/compile/app smoke를 검증하고, Room compile/schema export는 실제 schema를 소유하는 P3에서 검증한다. |
+| C14 | 기술버전·SDK 및 실제 코드 미제공 | 승인·빌드 검증 PASS | exact 기술/SDK와 `GREENFIELD_V1`은 확정했다. P0는 실제 프로젝트 resolve/compile/app smoke를 검증하고, Room compile/schema export는 실제 schema를 소유하는 P3에서 검증한다. |
+| C23 | Phase 0 원자 Assertion 범위·소유 분류 | 승인·기준선 반영 | 117개 자동 후보의 P0 강제 범위와 후속 Owner Phase 인계를 확정한다. `APPROVED_REQUIREMENT`는 요구·소유 승인일 뿐 P0 구현 완료 주장이 아니다. |
 
 ### C14 승인 기술 기준선
 
@@ -53,9 +54,9 @@ Room 3가 제공하는 KMP 기능은 사용하지 않는다. `:core:simulation`�
 | JVM identity | package root `com.imsi.mud`, Java/Kotlin toolchain·bytecode target `17` | `:core:simulation`은 `org.jetbrains.kotlin.jvm`만 적용 |
 | P0 물리 Gradle project | `:app`, `:core:simulation` | `:core:common`, `:core:model`, `:core:testing`은 package/test source set; 빈 module 생성 금지 |
 | P0 plugin | `:app`: `com.android.application`, `org.jetbrains.kotlin.plugin.compose`; `:core:simulation`: `org.jetbrains.kotlin.jvm` | AGP built-in Kotlin을 사용하므로 `org.jetbrains.kotlin.android` 적용 금지; P0에는 KSP/Room plugin 미적용 |
-| P0 직접 dependency | `:app → :core:simulation`, Compose BOM/Material3/lifecycle-runtime-compose; `:core:simulation`은 Kotlin stdlib/coroutines-core/JUnit test만 | Navigation/Hilt/DataStore/Coil/Room/serialization/benchmark는 실제 사용 Phase까지 추가하지 않는다 |
+| P0 직접 dependency | `:app → :core:simulation`, AndroidX Activity/Compose BOM/Material3/lifecycle-runtime-compose; `:core:simulation`은 Kotlin stdlib/coroutines-core/JUnit test만 | Navigation/Hilt/DataStore/Coil/Room/serialization/benchmark는 실제 사용 Phase까지 추가하지 않는다 |
 | Room 인계 경로 | P3 생성 예정 `core/save/schemas` | P0는 경로와 `GREENFIELD_V1`만 예약하고 schema JSON을 가장해 만들지 않는다 |
-| 필수 명령 | `./gradlew :core:simulation:test`, `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` | Windows는 `gradlew.bat`; 실제 명령·exit code·환경을 `build/reports/phase0/`에 보관 |
+| 필수 명령 | `./gradlew :core:simulation:test`, `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease` | Windows는 `gradlew.bat`; 실제 명령·exit code·환경을 versioned `docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md`에 보관 |
 | 잠금 산출물 | `gradle/wrapper/gradle-wrapper.properties`, `gradle/libs.versions.toml`, dependency lock files | P0에서 실제 사용하는 plugin/dependency만 resolve·lock |
 
 `applicationId`는 내부 개발 기준선으로 고정한다. 외부 스토어에 게시한 뒤에는 같은 앱의 ID를 변경할 수 없으므로, 게시자 도메인이 `com.imsi`가 아니라면 **첫 배포 전에만** C14를 재승인한다.
@@ -139,7 +140,7 @@ Room 3가 제공하는 KMP 기능은 사용하지 않는다. `:core:simulation`�
 | 기능 요구사항 | 1. 원문 §3031 모듈명은 논리 namespace로 유지하고 P0 물리 구성은 `:app`, `:core:simulation` 두 개로 제한한다<br>2. `:app → :core:simulation`만 허용하고 simulation의 Android·Room·Compose·네트워크 import를 금지한다<br>3. `WorldSession`과 `SavePort` 계약은 `:core:simulation`에 두되 실제 `SaveCoordinator`와 `:core:save`는 P3에서 생성한다<br>4. P0 Build Manifest의 identity/toolchain/plugin/dependency/task/evidence 경로를 그대로 적용한다<br>5. `:tools:headless`는 P23/P25에서 독립 실행 요구가 확인된 경우만 생성한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | Gradle `:core:simulation:test`, `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleDebug`; 별도 `BuildBaseline` production 클래스 없음 |
+| 주요 메소드 | Gradle `:core:simulation:test`, `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleDebug`, `:app:assembleRelease`; 별도 `BuildBaseline` production 클래스 없음 |
 | 입력 필드/값 | P0 Build Manifest, version catalog, wrapper, settings/project graph, source imports |
 | 반환값 | Gradle exit code·dependency lock·architecture report; 정상결과: JVM test와 Android debug assemble 성공 |
 | 입력 검증 | `:core:simulation → :app` 또는 simulation의 Android/Room/Compose/네트워크 import, P0에 선언하지 않은 물리 module/plugin/dependency → 아키텍처 검사 실패 |
@@ -158,7 +159,7 @@ Room 3가 제공하는 KMP 기능은 사용하지 않는다. `:core:simulation`�
 4. P0 Build Manifest와 `:app → :core:simulation` allowlist를 정적 검사한다
 5. `WorldSession`/`SavePort` 계약 소유를 `:core:simulation`에 고정하고 실제 저장 구현은 P3 인계 목록으로 기록한다
 6. P0에서 실제 사용하는 버전과 dependency만 resolve·lock한다
-7. JVM test→Android unit/lint/assemble 순으로 실행하고 결과를 `build/reports/phase0/`에 보관한다
+7. JVM test→Android unit/lint/assemble 순으로 실행하고 결과를 versioned `docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md`에 보관한다
 8. 출력계약과원본불변을검증하고 view/report 만반환한다.
 
 입력 Build Manifest·Gradle 파일·source import → Gradle/architecture verification task → exit code·lock·report; live world 변경 없음.
@@ -936,14 +937,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P0-001 |
 | 사전 조건 | 원문 파일, `document_manifest.json`, `decisions.json`, Phase 0 문서의 읽기 전용 복제본이 준비되어 있다. DB/RNG/Android adapter는 사용하지 않는다. |
-| 입력값 | 원문 SHA-256, Phase 0 결정 집합 `{C01,C02,C03,C14}`, active P0 REQUIRED/DATA Assertion 상태 |
-| 수행 절차 | ① 원문 SHA-256 계산 ② manifest 값 비교 ③ Phase 0 문서와 decisions.json의 결정 ID/상태 비교 ④ C04~C06이 P0 Gate에 없는지 검사 ⑤ active P0 기능의 REQUIRED/DATA가 모두 APPROVED_REQUIREMENT 이상인지 검사 ⑥ `build/reports/phase0/P0-UT-001.txt`에 결과 저장 |
-| 예상 결과 | hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건 |
+| 입력값 | 원문 SHA-256, Phase 0 결정 집합 `{C01,C02,C03,C14,C23}`, active P0 REQUIRED/DATA Assertion 상태 |
+| 수행 절차 | ① 원문 SHA-256 계산 ② manifest 값 비교 ③ Phase 0 문서와 decisions.json의 C01·C02·C03·C14·C23 결정 ID/상태 비교 ④ C04~C06이 P0 Gate에 없는지 검사 ⑤ C23 범위·소유 분류와 active P0 REQUIRED/DATA가 모두 APPROVED_REQUIREMENT 이상인지 검사 ⑥ versioned `docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md`에 결과 저장 |
+| 예상 결과 | hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태와 C23 Assertion 범위·소유 분류 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건 |
 | DB/파일 확인 | 원문과 관리 JSON hash는 검사 전후 동일하며 검증보고서 외 파일 변경이 없다. |
 | 로그 확인 | testId=P0-UT-001, sourceHash, decisionId, expectedPhase, actualPhase, exitCode를 기록한다. |
 | 상태 확인 | source/decision mismatch 0건, 구현 착수 대상 atomic approval mismatch 0건 |
 | 성공 기준 | `py -3 docs/검증도구/validate_docs.py`가 결정·Assertion Gate 검사를 포함해 종료코드 0이고 증거 파일이 존재한다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / C23으로 117개 자동 후보를 개별 범위·소유 기준으로 분류. active `FUNC-P0-001/002` REQUIRED/DATA assertion은 `APPROVED_REQUIREMENT` 117개, 미승인 0개이며 C14는 빌드 PASS / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md#p0-ut-001) |
 
 <a id="p0-bt-001"></a>
 ### P0-BT-001 — 원문 기준선과 충돌 판정 / 경계·거절
@@ -1027,13 +1028,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | FUNC-P0-002 |
 | 사전 조건 | wrapper/version catalog/settings와 `:core:simulation` source가 존재하고 JDK 17을 사용한다. DB/RNG fixture는 필요 없다. |
 | 입력값 | P0 Build Manifest와 `gradlew.bat :core:simulation:test` |
-| 수행 절차 | ① Java/Gradle 버전 기록 ② settings project 목록 비교 ③ dependency lock 사용 확인 ④ `:core:simulation:test` 실행 ⑤ `build/reports/phase0/P0-UT-002.txt`에 command/exit code 저장 |
+| 수행 절차 | ① Java/Gradle 버전 기록 ② settings project 목록 비교 ③ dependency lock 사용 확인 ④ `:core:simulation:test` 실행 ⑤ versioned `docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md`에 command/exit code 저장 |
 | 예상 결과 | 물리 project가 `:app`, `:core:simulation`뿐이고 JVM test가 성공한다. |
 | DB/파일 확인 | DB를 열지 않으며 build output과 lock/report만 변경된다. |
 | 로그 확인 | testId=P0-UT-002, javaVersion, gradleVersion, projects, command, exitCode를 기록한다. |
 | 상태 확인 | P0 Build Manifest mismatch 0건, JVM test failure 0건 |
 | 성공 기준 | 선언된 명령 종료코드 0과 재현 가능한 lock/report가 존재한다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / `:core:simulation:test --rerun-tasks`에서 WorldSessionTest 12건 failure 0, error 0 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md) |
 
 <a id="p0-bt-002"></a>
 ### P0-BT-002 — 빌드·모듈·기술버전 고정 / 경계·거절
@@ -1045,13 +1046,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | FUNC-P0-002 |
 | 사전 조건 | 실제 Gradle project graph와 Kotlin source set을 복제한 격리 fixture. allowlist와 공개 API 금지 symbol 목록이 P0 revision으로 고정됨. |
 | 입력값 | 정상 edge `:app→:core:simulation`; 금지 edge `:core:simulation→:app`; simulation의 Android/Room/Compose/네트워크 import; 미선언 P0 module/plugin/dependency |
-| 수행 절차 | ① 정상 graph 검사 ② 각 금지 edge/import/module/plugin/dependency fixture를 하나씩 적용한 격리 복제본 검사 ③ 실패가 정확한 source/target/symbol을 지목하는지 확인 ④ 정상 graph에서 `:core:simulation:test` 실행 ⑤ `build/reports/phase0/P0-BT-002.txt` 저장 |
+| 수행 절차 | ① 정상 graph 검사 ② 각 금지 edge/import/module/plugin/dependency fixture를 하나씩 적용한 격리 복제본 검사 ③ 실패가 정확한 source/target/symbol을 지목하는지 확인 ④ 정상 graph에서 `:core:simulation:test` 실행 ⑤ versioned `docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md`에 결과 저장 |
 | 예상 결과 | 모든 금지 fixture는 실패하고 정상 `:app→:core:simulation` graph와 JVM test는 통과 |
 | DB/파일 확인 | 게임 DB를 열지 않는다. 검사 전후 저장소 fixture hash가 동일하고 build 산출물은 격리된 build directory에만 생성된다. |
 | 로그 확인 | testId=P0-BT-002, ruleId, sourceModule, targetModule 또는 forbiddenSymbol, Gradle task와 exit code를 기록한다. |
 | 상태 확인 | production graph 변경 0건, 금지 fixture false-negative 0건, 정상 graph false-positive 0건 |
 | 성공 기준 | 금지 fixture false-negative 0건, 정상 graph false-positive 0건, JVM test 종료코드 0과 증거 로그가 존재한다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / 실제 Gradle 복제 fixture 8개가 예상 module·edge·Kotlin/Compose plugin·simulation/app dependency·import·type 혼합 오류로 거절하고 root `check` graph에 연결됨 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md) |
 
 <a id="p0-ft-002"></a>
 ### P0-FT-002 — 빌드·모듈·기술버전 고정 / 실패·복구 방어
@@ -1098,14 +1099,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P0-002 |
 | 사전 조건 | P0 Build Manifest가 적용된 `:app`과 `:core:simulation`, Android test target이 존재한다. Room/save/headless module은 없어야 한다. |
-| 입력값 | `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`와 AppRoot launch smoke |
-| 수행 절차 | ① project/plugin/dependency 목록 기록 ② unit/lint/assemble 실행 ③ debug APK의 applicationId/namespace/version 확인 ④ AppRoot를 실행해 기본 Blocked/Empty 상태 확인 ⑤ `build/reports/phase0/P0-IT-002.txt`에 command/exit code/APK metadata 저장 |
-| 예상 결과 | 세 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다. |
+| 입력값 | `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease`와 AppRoot launch smoke |
+| 수행 절차 | ① project/plugin/dependency 목록 기록 ② unit/lint/debug·release assemble 실행 ③ debug·release APK의 applicationId/namespace/version 확인 ④ AppRoot를 실행해 기본 Blocked/Empty 상태 확인 ⑤ versioned `docs/검증증거/YYYY-MM-DD_Phase0_Gate_실행증거.md`에 command/exit code/APK metadata 저장 |
+| 예상 결과 | 네 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다. |
 | DB/파일 확인 | save.db·Room schema JSON·WAL 파일 생성 0건. build output과 report만 생성된다. |
 | 로그 확인 | testId=P0-IT-002, applicationId, namespace, versionCode, versionName, plugins, tasks, exitCode를 기록한다. |
 | 상태 확인 | build/lint/smoke failure 0건, forbidden plugin/module 0건 |
-| 성공 기준 | 명시된 Gradle task 종료코드 0, APK metadata 일치, AppRoot smoke PASS 증거가 존재한다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 성공 기준 | 명시된 Gradle task 종료코드 0, debug·release APK metadata 일치, AppRoot smoke PASS 증거가 존재한다. |
+| 실행 상태/실제 결과/증거 | PASS / API 36 Google APIs x86_64 emulator에서 `:app:installDebug` 후 `com.imsi.mud/.MainActivity` cold launch 1.729초, foreground activity·Feature unavailable/SCR-START-001/blocked body UI tree·FATAL EXCEPTION 0건을 확인했다. `:app:assembleRelease --write-locks`와 debug·release·lint·계측 통합 실행도 종료코드 0으로 성공해 Activity direct dependency와 release APK를 검증했다 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md#android-emulator-실행) |
 
 <a id="p0-ut-003"></a>
 ### P0-UT-003 — 공통 타입·명령·오류·이벤트 계약 / 정상 규칙
@@ -1141,7 +1142,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | testId=P0-BT-003, type, operand, boundary, resultCode를 JUnit report에 기록한다. |
 | 상태 확인 | ArithmeticOverflow 오류·상태 변경 없음 |
 | 성공 기준 | overflow·범위 밖 생성이 typed 오류이고 유효 경계값은 성공하며 상태/RNG 변경이 없다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / `Checked.Value`에서 실제 `GameMinute`·`Money`를 해제한 type 혼합 compile-negative, value boundary·overflow typed rejection, SavePort 실패 전후 in-memory state/RNG hash 불변을 확인 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md) |
 
 <a id="p0-ft-003"></a>
 ### P0-FT-003 — 공통 타입·명령·오류·이벤트 계약 / 실패·복구 방어
@@ -1177,7 +1178,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | testId=P0-CT-003, codecId, payloadHash, expectedBytesHash, actualBytesHash를 기록한다. payload 원문은 일반 로그에 남기지 않는다. |
 | 상태 확인 | codec mismatch 0건, unknown codec false-success 0건 |
 | 성공 기준 | golden roundtrip과 unknown codec 거절이 모두 PASS한다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Command/Event golden roundtrip, NFC canonical payload, unknown codec typed rejection 통과 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md) |
 
 <a id="p0-it-003"></a>
 ### P0-IT-003 — 공통 타입·명령·오류·이벤트 계약 / adapter·영속 경계
@@ -1267,7 +1268,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | testId=P0-CT-004, uiState, screenId, retryCount, semanticsFailureCount를 기록한다. |
 | 상태 확인 | 5-state mismatch 0, accessibility failure 0, unauthorized navigation 0 |
 | 성공 기준 | Compose UI test가 5-state·retry·unknown route·접근성 검사를 모두 통과한다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / API 36 Google APIs x86_64 emulator에서 `:app:connectedDebugAndroidTest`의 AppRootTest 2건이 failure 0, error 0으로 통과. Loading/Ready/Empty/Error/Blocked의 title·body contentDescription과 traversal 순번, Blocked `title → screenId → body`, Error Retry role·48dp·순번, unknown route를 실제 실행 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md#android-emulator-실행) |
 
 <a id="p0-it-004"></a>
 ### P0-IT-004 — 최소 검증 하네스·공통 UI 껍데기 / adapter·영속 경계
@@ -1321,7 +1322,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | testId=P0-CN-001, commandId, submissionSequence, epoch, beforeVersion, afterVersion, outcome을 기록한다. |
 | 상태 확인 | concurrent mutation 0, order mismatch 0, duplicate effect 0, drain 후 child job 0 |
 | 성공 기준 | 100회 모두 동일 결과·state hash를 내고 close 후 consumer가 join되며 timeout 5초를 넘지 않는다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / controllable dispatcher에서 A/B 순서, C stale, D enqueue 전 취소, E enqueue 후 caller 취소의 정확히 1회 commit, F close 거절을 100회 반복했고 in-memory state hash가 동일함을 확인. LRU 축출 뒤 accepted receipt는 durable 조회가 stale expectedVersion 검사보다 먼저 반환되어 재commit 0건을 확인 / [실행 증거](검증증거/2026-09-10_Phase0_Gate_실행증거.md) |
 
 <a id="p0-rec-001"></a>
 ### P0-REC-001 — 검증 산출물 중단 안전성

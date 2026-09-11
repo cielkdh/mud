@@ -50,28 +50,28 @@ P0 Gate 실행 계약은 `P0-UT-001`, `P0-UT-002`, `P0-BT-002`, `P0-BT-003`, `P0
 
 | Test ID / 상세 | 종류 | 대상 기능 | 검증 입력 | 예상 결과 | 상태 |
 |---|---|---|---|---|---|
-| [P0-UT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-001) | UT | FUNC-P0-001 | 원문 SHA-256, Phase 0 결정 집합 `{C01,C02,C03,C14}`, active P0 REQUIRED/DATA Assertion 상태 | hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건 | NOT_RUN |
+| [P0-UT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-001) | UT | FUNC-P0-001 | 원문 SHA-256, Phase 0 결정 집합 `{C01,C02,C03,C14,C23}`, active P0 REQUIRED/DATA Assertion 상태 | hash 일치, C01·C02·C03 승인 적용, C14 빌드검증 상태와 C23 Assertion 범위·소유 분류 일치, 잘못된 P0 결정 0건, 후속 구현 착수 시 미승인 active P0 REQUIRED/DATA 0건 | PASS |
 | [P0-BT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-001) | BT | FUNC-P0-001 | 같은 규칙의 모순이며 교체 문구 없음 | 결정 대기; 해당 기능의 운영 활성화 차단 | NOT_RUN |
 | [P0-FT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-001) | FT | FUNC-P0-001 | 요구사항 번호 하나 누락 | 문서 검증 실패; 릴리즈 범위에서 숨기지 않음 | NOT_RUN |
 | [P0-CT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-001) | CT | FUNC-P0-001 | §28 6 명, §1737 조직10/출전6; 같은요청2 회 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 같은입력2 회 결과동일·live state/RNG 쓰기0 | NOT_RUN |
 | [P0-IT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-001) | IT | FUNC-P0-001 | C01 fixture와 원문/결정/추적 JSON | C01 근거가 보존되고 같은 입력의 검사 결과가 동치이며 Android/DB 경로를 호출하지 않는다. | NOT_RUN |
-| [P0-UT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-002) | UT | FUNC-P0-002 | P0 Build Manifest와 `gradlew.bat :core:simulation:test` | 물리 project가 `:app`, `:core:simulation`뿐이고 JVM test가 성공한다. | NOT_RUN |
-| [P0-BT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-002) | BT | FUNC-P0-002 | 정상 edge `:app→:core:simulation`; 금지 edge `:core:simulation→:app`; simulation의 Android/Room/Compose/네트워크 import; 미선언 P0 module/plugin/dependency | 모든 금지 fixture는 실패하고 정상 `:app→:core:simulation` graph와 JVM test는 통과 | NOT_RUN |
+| [P0-UT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-002) | UT | FUNC-P0-002 | P0 Build Manifest와 `gradlew.bat :core:simulation:test` | 물리 project가 `:app`, `:core:simulation`뿐이고 JVM test가 성공한다. | PASS |
+| [P0-BT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-002) | BT | FUNC-P0-002 | 정상 edge `:app→:core:simulation`; 금지 edge `:core:simulation→:app`; simulation의 Android/Room/Compose/네트워크 import; 미선언 P0 module/plugin/dependency | 모든 금지 fixture는 실패하고 정상 `:app→:core:simulation` graph와 JVM test는 통과 | PASS |
 | [P0-FT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-002) | FT | FUNC-P0-002 | 잠금 버전 의존성 resolve 실패 | 빌드 차단; 자동 최신 버전으로 변경하지 않음 | NOT_RUN |
 | [P0-CT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-002) | CT | FUNC-P0-002 | simulation 소스에 Android import 없음; 같은요청2 회 | 순수 JVM test 태스크 단독 성공; 같은입력2 회 결과동일·live state/RNG 쓰기0 | NOT_RUN |
-| [P0-IT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-002) | IT | FUNC-P0-002 | `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`와 AppRoot launch smoke | 세 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다. | NOT_RUN |
+| [P0-IT-002](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-002) | IT | FUNC-P0-002 | `gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease`와 AppRoot launch smoke | 네 Gradle task와 AppRoot smoke가 성공하고 built-in Kotlin 중복 plugin, 미선언 module, 실제 DB 생성이 없다. | PASS |
 | [P0-UT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-003) | UT | FUNC-P0-003 | Money(100), debit=40 | Money(60), 원본 값은 불변 | NOT_RUN |
-| [P0-BT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-003) | BT | FUNC-P0-003 | `Money(Long.MAX_VALUE).plus(Money(1))`, `BasisPoint(10_001)`, `ProbabilityPpm(1_000_001)` | ArithmeticOverflow 오류·상태 변경 없음 | NOT_RUN |
+| [P0-BT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-003) | BT | FUNC-P0-003 | `Money(Long.MAX_VALUE).plus(Money(1))`, `BasisPoint(10_001)`, `ProbabilityPpm(1_000_001)` | ArithmeticOverflow 오류·상태 변경 없음 | PASS |
 | [P0-FT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-003) | FT | FUNC-P0-003 | 잘못된 sessionEpoch 명령 | StaleSession; 다른 슬롯 변경 없음 | NOT_RUN |
-| [P0-CT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-003) | CT | FUNC-P0-003 | 동일 `CommandEnvelope`/`DomainEvent` 객체와 canonical golden bytes | 동일 입력의 bytes가 완전히 같고 roundtrip field loss 0건이며 unknown codec을 성공 처리하지 않는다. | NOT_RUN |
+| [P0-CT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-003) | CT | FUNC-P0-003 | 동일 `CommandEnvelope`/`DomainEvent` 객체와 canonical golden bytes | 동일 입력의 bytes가 완전히 같고 roundtrip field loss 0건이며 unknown codec을 성공 처리하지 않는다. | PASS |
 | [P0-IT-003](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-003) | IT | FUNC-P0-003 | `:app`의 WorldSession 공개 API 사용과 저장 구현 타입 직접 참조 fixture | 공개 API 사용만 compile되고 저장 구현 직접 참조는 실패하며 in-memory 결과는 정확히 1회 반환된다. | NOT_RUN |
 | [P0-UT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ut-004) | UT | FUNC-P0-004 | fixture=EMPTY_WORLD, seed=42 | 같은 초기 stateHash 와 홈 empty state | NOT_RUN |
 | [P0-BT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-bt-004) | BT | FUNC-P0-004 | 선행 기능 port 가 UnsupportedFeature | 기능 준비 안 됨 표시; 앱 crash 없음 | NOT_RUN |
 | [P0-FT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ft-004) | FT | FUNC-P0-004 | unknown Screen ID와 실패하는 retry callback | Blocked/Error가 유지되고 crash·가짜 성공·navigation 실행이 없다. | NOT_RUN |
-| [P0-CT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-004) | CT | FUNC-P0-004 | 5개 AppShellState, unknown Screen ID, retry callback | 각 상태가 구분되고 미구현 기능은 Blocked이며 crash·가짜 성공·중복 callback 0건 | NOT_RUN |
+| [P0-CT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-ct-004) | CT | FUNC-P0-004 | 5개 AppShellState, unknown Screen ID, retry callback | 각 상태가 구분되고 미구현 기능은 Blocked이며 crash·가짜 성공·중복 callback 0건 | PASS |
 | [P0-IT-004](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-it-004) | IT | FUNC-P0-004 | 앱 최초 실행·process recreation과 5-state fixture | shell이 crash 없이 재생성되고 권위 저장 성공을 주장하지 않으며 DB 파일을 만들지 않는다. | NOT_RUN |
 | [P0-RT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-rt-001) | RT | PHASE-0 | §28 6 명, §1737 조직10/출전6; 선행 Phase 의승인 fixture 전체 | 조직과 출전을 분리하고 R-PARTY-001 에 원문 근거 2 개 보존; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 | NOT_RUN |
-| [P0-CN-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-cn-001) | CN | PHASE-0 | command A/B 동시 enqueue, stale epoch C, enqueue 전 취소 D, enqueue 후 caller 취소 E, close 중 F | A→B 수락 순서와 stateVersion이 일치하고 stale epoch/close 이후 쓰기 0, enqueue 전 취소 효과 0, 수락 후 E는 정확히 1회 완료 | NOT_RUN |
+| [P0-CN-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-cn-001) | CN | PHASE-0 | command A/B 동시 enqueue, stale epoch C, enqueue 전 취소 D, enqueue 후 caller 취소 E, close 중 F | A→B 수락 순서와 stateVersion이 일치하고 stale epoch/close 이후 쓰기 0, enqueue 전 취소 효과 0, 수락 후 E는 정확히 1회 완료 | PASS |
 | [P0-REC-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-rec-001) | REC | PHASE-0 | 보고서 쓰기 전·staging 완료 후·rename 직전 프로세스 중단 | 기존 또는 새 완전한 보고서만 존재하고 부분 파일·깨진 JSON 0건 | NOT_RUN |
 | [P0-PT-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-pt-001) | PT | PHASE-0 | `:core:simulation:test`와 `:app:assembleDebug` 각 3회 | 측정치와 환경이 보고서에 남는다. P0에는 장기 시뮬레이션 성능 합격 임계치를 두지 않으며 이 Test는 Gate 비차단이다. | NOT_RUN |
 | [P0-OP-001](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-op-001) | OP | PHASE-0 | 앱 최초 실행·재실행, 네트워크 차단, AppShellState.Empty/Blocked | 동일 shell 상태, 필수 네트워크 요청 0, 현실시간 catch-up 0, DB 생성 0 | NOT_RUN |

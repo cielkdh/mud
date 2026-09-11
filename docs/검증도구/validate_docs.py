@@ -691,6 +691,21 @@ def main() -> int:
         if tuple(map(compact,actual_values))!=tuple(map(compact,expected_values)):
             sync_failures.append(test['id']+': global plan row mismatch')
     sync_failures += [item+': duplicate global plan row' for item,count in plan_counts.items() if count>1]
+    evidence=(ROOT/'검증증거/2026-09-10_Phase0_Gate_실행증거.md').read_text(encoding='utf-8')
+    tests_by_id={test['id']:test for test in tests}
+    for pattern,test_id,label,unit in (
+        (r'`WorldSessionTest` (\d+)건','P0-UT-002','WorldSessionTest','건'),
+        (r'fixture (\d+)개','P0-BT-002','fixture','개')
+    ):
+        match=re.search(pattern,evidence)
+        if not match:
+            sync_failures.append(test_id+': evidence count missing')
+            continue
+        expected=f'{label} {match.group(1)}{unit}'
+        if expected not in tests_by_id[test_id].get('actual',''):
+            sync_failures.append(test_id+': management evidence count mismatch')
+        if expected not in phase_bodies[0]:
+            sync_failures.append(test_id+': Phase evidence count mismatch')
     record('Test 관리데이터→Phase·전역 계획 동기화',sync_failures,f'{len(tests)}개 Test의 사전조건·입력·절차·기대·DB·로그·상태·성공조건·실행상태 비교')
     record('테스트 상태에 실행증거 요구',[t['id'] for t in tests if t['status']=='PASS' and not t.get('evidence')], f'현재 {Counter(t["status"] for t in tests)}; 문서 검사 결과를 게임 Test에 전파하지 않음')
     sql_checks()

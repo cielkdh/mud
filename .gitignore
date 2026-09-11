@@ -1,0 +1,7 @@
+.gradle/
+.android-sdk/
+.android-avd/
+.android-user/
+**/build/
+local.properties
+*.hprof

@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-10T10:34:11+09:00",
+  "executed_at": "2026-09-11T09:39:47+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -221,7 +221,7 @@
     {
       "name": "로컬 Markdown 링크·명시적 anchor",
       "status": "PASS",
-      "detail": "8167개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
+      "detail": "8175개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
       "failures": []
     },
     {
@@ -239,19 +239,19 @@
     {
       "name": "테스트 상태에 실행증거 요구",
       "status": "PASS",
-      "detail": "현재 Counter({'NOT_RUN': 751}); 문서 검사 결과를 게임 Test에 전파하지 않음",
+      "detail": "현재 Counter({'NOT_RUN': 743, 'PASS': 8}); 문서 검사 결과를 게임 Test에 전파하지 않음",
       "failures": []
     },
     {
       "name": "SQL-content: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.53.1; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.45.3; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
       "name": "SQL-save: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.53.1; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.45.3; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
