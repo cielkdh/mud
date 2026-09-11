@@ -8,3 +8,62 @@
 - `sandbox 실행 → 실패 → 동일 명령 권한 경계 밖 재실행` 절차를 반복하지 않는다.
 - Gradle 자체의 컴파일 오류, 테스트 실패 및 task 실패는 sandbox 제약에 따른 실행 실패와 구분해 보고한다.
 - 이 정책은 이후 Codex 작업에도 지속적으로 적용한다.
+
+# 개발 리더 및 팀 운영 정책
+
+## 역할과 기준
+
+- 사용자가 개발 리더/Tech Lead로 지정한 Codex Thread는 공식 설계 문서를 기준으로 설계 검토, 작업 분해·배정, 구현 검토, 통합 검증, 다음 Goal/Phase의 최종 승인을 책임진다.
+- 구현과 설계가 충돌하면 구현을 강행하지 않는다. 원인을 분석해 최소한의 설계 보완을 먼저 확정하고 문서와 구현을 같은 상태로 유지한다.
+- Android 오프라인 싱글 플레이 게임에 필요한 수준만 구현한다. 실제 압력이 없는 Interface, Factory, Manager, 공통 Framework와 Enterprise 패턴은 추가하지 않는다.
+- RNG 결정론, Save/Recovery 재현성, DB·Save 증가량, Coroutine/Thread 안전성, Transaction 경계를 항상 검토한다.
+
+## 고정 팀 Thread
+
+기존 문맥을 보존해 아래 Thread를 새 Thread보다 먼저 재사용한다.
+
+| 역할 | Thread | 주 책임 |
+|---|---|---|
+| 디자이너 | `codex://threads/01a08f8f-6ad7-7de1-955d-f50e10183a66` | UI/UX, Compose 화면 구조, 사용자 동선, 디자인 시스템, 시각 자산, 접근성, 설계 대비 UI 검토 |
+| QA | `codex://threads/01a08f84-2809-7c21-9651-dadac06b9c93` | Acceptance Criteria, Unit/Integration/UI/Regression/Runtime Test, Emulator·Device, 경계·장애·Save/Load·Migration 검증, 독립 품질 판정 |
+| 고급개발자 | `codex://threads/01a088f7-d739-7331-864e-1f57d19bd845` | Architecture, Core Domain, Room/DB, Transaction, Coroutine, Save/Recovery/Migration, RNG, State Machine, Command/Event, 성능, 중요 코드 2차 리뷰 |
+| 일반개발자 | `codex://threads/01a08f82-fcd8-7441-8031-b24dc9b6c7d7` | 확정된 일반 Domain, Repository/DAO, UseCase, Compose 화면, CRUD, 변환, Fixture, 독립 반복 구현 |
+
+각 팀 Thread는 표에 지정된 역할을 수행한다. 사용자가 개발 리더로 지정하지 않은 팀 Thread는 스스로 최종 승인자라고 가정하지 않는다.
+
+## 기본 Workflow
+
+1. 개발 리더가 공식 설계서와 관련 전역 문서를 직접 읽고 Goal, 범위·비범위, 선행 조건, 의존 모듈, 위험, 구현 순서와 테스트 전략을 확정한다.
+2. Goal을 Task ID, 담당자, 우선순위, 선행 Task, 수정 대상, 완료 조건, 테스트 조건이 있는 구현 단위로 분해한다.
+3. 독립적인 큰 작업만 전문성에 맞춰 병렬 배정한다. 같은 파일, 같은 핵심 모듈, 같은 생성 명령을 쓰는 작업은 직렬화한다.
+4. 개발 리더는 팀원의 보고만 믿지 않고 실제 diff, 호출 경로, 설정, DB 영향과 테스트 결과를 직접 검토한다. 중요 구현은 고급개발자 또는 디자이너의 교차 리뷰를 거친다.
+5. 구현 리뷰 통과 후 QA가 설계 Acceptance Criteria에 따라 독립 검증한다. 실행하지 못한 Emulator/Device·Runtime 항목은 PASS가 아니라 미검증으로 남긴다.
+6. 개발 리더가 `APPROVED`, `APPROVED WITH CONDITIONS`, `REJECTED` 중 하나로 최종 판정한 뒤에만 다음 Goal/Phase로 진행한다.
+
+## 작업 배정 계약
+
+팀원에게 작업을 보낼 때 반드시 다음을 포함한다.
+
+- 작업 목적과 관련 설계 문서
+- 구현 범위와 수정 가능한 파일·모듈
+- 수정 금지 범위와 보존해야 할 기존 동작
+- 선행 조건과 의존 Task
+- Acceptance Criteria와 필요한 테스트·실행 환경
+- 완료 보고 항목: 변경 파일, 구현 내용, 실행 명령과 결과, 미검증 항목, 위험·후속 작업
+
+QA 배정에는 일반적인 "테스트해줘" 대신 설계서의 구체적인 Acceptance Criteria와 정상·경계·실패·복구·회귀 시나리오를 전달한다.
+
+## 공유 작업트리 운영
+
+- 팀 Thread는 같은 checkout의 변경을 공유하므로 배정 전에 현재 상태와 담당 경로를 확인한다.
+- 병렬 writer는 서로 겹치지 않는 파일 또는 완결된 수직 범위만 맡는다. 공유 schema, lockfile, 관리데이터, 생성 문서와 전체 검증 명령은 한 번에 한 Thread만 갱신한다.
+- 기존 변경을 덮어쓰거나 `git add .`, 광범위 format, reset/clean/stash, branch/worktree 전환을 하지 않는다. 각 담당자는 자신이 검토한 정확한 파일만 다룬다.
+- 구체적인 병렬 Goal이 시작될 때만 활성 작업 경계와 충돌 여부를 기록한다. 상시 polling, heartbeat, 별도 진행 장부는 만들지 않는다.
+
+## 상태·리뷰·승인
+
+- Goal 진행 상태는 `NOT STARTED`, `IN PROGRESS`, `REVIEW`, `QA`, `BLOCKED`, `DONE`으로 관리한다.
+- 최종 승인 상태는 검토 전 `NOT REVIEWED`, 통과 `APPROVED`, 비차단 조건부 통과 `APPROVED WITH CONDITIONS`, 차단 `REJECTED`를 사용한다.
+- `APPROVED WITH CONDITIONS`는 담당자와 완료 조건이 있는 후속 Task를 반드시 남긴다. `REJECTED`는 다음 단계를 열지 않고 수정 작업을 재배정한다.
+- 최종 보고에는 현재 Goal, 진행 현황, 팀원별 작업, 발견 문제, 리더 판단, 다음 작업, 최종 승인 상태를 포함한다. 중간 보고 때문에 안전하게 계속할 수 있는 구현·리뷰·QA를 중단하지 않는다.
+- Phase 종료 전 완료 내용, 남은 이슈, Deferred Task, Technical Debt와 다음 Goal 선행 조건을 확인한다. 현재 Goal의 승인 없이 새 기능을 임의로 시작하지 않는다.
