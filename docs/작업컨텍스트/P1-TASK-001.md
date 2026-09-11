@@ -1,0 +1,2449 @@
+# P1-TASK-001 작업 컨텍스트
+
+> 자동 생성된 착수용 요약이다. 충돌 시 아래 원문 링크와 관리데이터가 우선한다.
+
+## Task
+
+- 기능: `FUNC-P1-001` 정적 카탈로그 스키마와 ID 보존
+- 단계/모듈: 계약 / :core:content / :tools:content-builder
+- 선행 Task: P0-TASK-021
+- 상세: catalog-manifest.json, UTF-8/NFC, CSV dialect v1, JSON v1, ContentId=sourceId 단일 저장, closed ContentKind.v1/EntityKind.v1, input 파일·행 상한, ContentSource/CatalogDraft와 severity/code/messageKey/sourceId/sourceFile/row/column/field/expected/actual diagnostics를 고정한다. FUNC-P1-001 REQUIRED/DATA Assertion을 승인하거나 결정 근거로 재분류한다.
+- 완료 조건: CSV/JSON dialect·canonical ID/kind·input 상한·source schema·diagnostic fixture 승인, FUNC-P1-001 미승인 REQUIRED/DATA 0건
+
+## 기능 계약
+
+- 메소드: `CatalogImporter.import(source: ContentSource, version: ContentVersion) -> CatalogDraft`
+- 대상 schema: content_manifest, content_template, content_alias
+- 규칙: catalog-manifest.json에 열거된 UTF-8/NFC source만 읽고 filesystem glob 순서를 사용하지 않으며 CSV dialect v1과 JSON v1을 적용한다 / 원문 ID·sourceDisplayName·등급·태그·수치·단위를 보존하고 displayNameOverride를 분리한다 / 설명만 있는 효과는 UNRESOLVED로 유지하며 Full profile에서 거절한다 / Importer는 CatalogDraft와 diagnostics만 반환하며 content.db·save.db·게임 상태를 쓰지 않는다
+- 정상: WPN-0001 물리19 레벨1 / 원문 ID와 수치가 content_template에 일치
+- 경계: 같은 ID 두 행, 서로 다른 효과 / 중복 오류와 두 원문 행번호 반환
+- 실패: 참조되지 않는 MON ID가 loot에 있음 / 정적 번들 발행 차단
+
+## 결정 의존
+
+- C09: 승인·기준선 반영 — 보호키탈취금지·일반공유후 최후generic key 명시배정; 이름동명이인허용.
+- C10: 승인·기준선 반영 — unit=RATIO/BASIS_POINT/FLAT, typed effect AST; description-only effect를임의숫자로출시하지않음.
+- C13: 승인·기준선 반영 — NFC·대소문자·공백 정규화 후 exact/prefix index를 기본으로 하고 한글 부분검색은 결정적 2-gram shadow token table을 사용한다. FTS5 추가는 P0 가용성과 품질 우위가 실측될 때만 허용한다.
+- C18: 승인·기준선 반영 / 실물 NOT_RUN — 고정 실물 초상 M/W 각5000장, 512x640 opaque sRGB WebP, install-time portraits_v1 asset pack, pack 512MiB/전체 install-time 768MiB 이하. Full 활성 catalog는 미정 효과·깨진 참조·배포권 미확인 0건. 실제 파일/검수는 NOT_RUN.
+
+## 관련 Test
+
+- P1-UT-001: 20개 ContentKind.v1과 WPN-0001의 sourceId/sourceDisplayName/수치/단위/displayNameOverride → ContentId와 content_template.id가 sourceId와 byte-for-byte 같고 별도 source_id 저장 없이 closed ContentKind.v1, 원문 필드와 source locator를 보존하며 effective displayName만 override를 반영 [NOT_RUN]
+- P1-BT-001: 같은 WPN-0001을 가진 서로 다른 두 source row → DuplicateContentId가 두 source locator를 모두 포함 [NOT_RUN]
+- P1-FT-001: 존재하지 않는 MON ID를 참조하는 loot row → VALIDATION_FAILED이며 builder/writer 호출과 발행 artifact가 0 [NOT_RUN]
+- P1-CT-001: LF/CRLF·UTF-8 BOM·quoted empty/unquoted null CSV와 key 순서·duplicate key·unknown field·NaN/Infinity JSON fixture를 두 번 import → CSV dialect v1/JSON v1 허용 입력은 같은 CatalogDraft/hash, 금지 입력은 같은 diagnostic code와 source locator [NOT_RUN]
+- P1-IT-001: content/source/catalog-manifest.json과 CSV dialect v1/JSON v1 대표 source set, 64MiB/100,000행 경계와 초과 fixture → BOM/newline/null 경계를 포함해 manifest rowCount=import count이며 모든 sourceId/원문 필드가 roundtrip하고 파일·행 상한 초과는 전체 parse 전 SOURCE_INVALID [NOT_RUN]
+
+## REQUIRED/DATA Atomic Assertions
+
+- AR-S0051-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0051` §51 장비 콘텐츠 규모 L1700: 분류=무기 기본 템플릿; 목표 수량=420개 이상
+- AR-S0051-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0051` §51 장비 콘텐츠 규모 L1701: 분류=방어구 기본 템플릿; 목표 수량=480개 이상
+- AR-S0051-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0051` §51 장비 콘텐츠 규모 L1702: 분류=장신구 기본 템플릿; 목표 수량=420개 이상
+- AR-S0051-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0051` §51 장비 콘텐츠 규모 L1703: 분류=세트; 목표 수량=60~80개
+- AR-S0051-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0051` §51 장비 콘텐츠 규모 L1704: 분류=장비 접두어; 목표 수량=120~160개
+- AR-S0051-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0051` §51 장비 콘텐츠 규모 L1705: 분류=장비 접미어; 목표 수량=120~160개
+- AR-S0118-001 / REQUIRED / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0118` §118 콘텐츠 데이터 관리 L3585: 대량 콘텐츠는 코드에 직접 하드코딩하지 않는다.
+- AR-S0128-015 / REQUIRED / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0128` §128 실제 콘텐츠 데이터 카탈로그 L4023: 등급 표기는 다음을 사용한다.
+- AR-S0129-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4047: ID=WPN-0001; 무기명=훈련용 장검; 종류=한손검; 등급=일반; 권장 레벨=1; 기본 물리위력=19; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4048: ID=WPN-0002; 무기명=낡은 장검; 종류=한손검; 등급=일반; 권장 레벨=3; 기본 물리위력=21; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4049: ID=WPN-0003; 무기명=민병대 장검; 종류=한손검; 등급=일반; 권장 레벨=5; 기본 물리위력=23; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4050: ID=WPN-0004; 무기명=철제 장검; 종류=한손검; 등급=일반; 권장 레벨=8; 기본 물리위력=26; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4051: ID=WPN-0005; 무기명=용병대 장검; 종류=한손검; 등급=일반; 권장 레벨=10; 기본 물리위력=28; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4052: ID=WPN-0006; 무기명=정제강 장검; 종류=한손검; 등급=고급; 권장 레벨=12; 기본 물리위력=30; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4053: ID=WPN-0007; 무기명=은빛 장검; 종류=한손검; 등급=고급; 권장 레벨=15; 기본 물리위력=33; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4054: ID=WPN-0008; 무기명=흑철 장검; 종류=한손검; 등급=고급; 권장 레벨=18; 기본 물리위력=36; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4055: ID=WPN-0009; 무기명=왕국군 장검; 종류=한손검; 등급=고급; 권장 레벨=22; 기본 물리위력=40; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4056: ID=WPN-0010; 무기명=사냥꾼 장검; 종류=한손검; 등급=고급; 권장 레벨=25; 기본 물리위력=43; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4057: ID=WPN-0011; 무기명=설원의 장검; 종류=한손검; 등급=희귀; 권장 레벨=28; 기본 물리위력=46; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4058: ID=WPN-0012; 무기명=사막의 장검; 종류=한손검; 등급=희귀; 권장 레벨=32; 기본 물리위력=50; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4059: ID=WPN-0013; 무기명=늪지의 장검; 종류=한손검; 등급=희귀; 권장 레벨=36; 기본 물리위력=54; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4060: ID=WPN-0014; 무기명=화염의 장검; 종류=한손검; 등급=희귀; 권장 레벨=40; 기본 물리위력=58; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4061: ID=WPN-0015; 무기명=냉기의 장검; 종류=한손검; 등급=희귀; 권장 레벨=45; 기본 물리위력=63; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4062: ID=WPN-0016; 무기명=폭풍의 장검; 종류=한손검; 등급=특급; 권장 레벨=50; 기본 물리위력=68; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4063: ID=WPN-0017; 무기명=대지의 장검; 종류=한손검; 등급=특급; 권장 레벨=55; 기본 물리위력=73; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4064: ID=WPN-0018; 무기명=독니 장검; 종류=한손검; 등급=특급; 권장 레벨=60; 기본 물리위력=78; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4065: ID=WPN-0019; 무기명=성광의 장검; 종류=한손검; 등급=특급; 권장 레벨=65; 기본 물리위력=83; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4066: ID=WPN-0020; 무기명=그림자의 장검; 종류=한손검; 등급=특급; 권장 레벨=70; 기본 물리위력=88; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4067: ID=WPN-0021; 무기명=심연의 장검; 종류=한손검; 등급=영웅; 권장 레벨=75; 기본 물리위력=93; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4068: ID=WPN-0022; 무기명=용린 장검; 종류=한손검; 등급=영웅; 권장 레벨=80; 기본 물리위력=98; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4069: ID=WPN-0023; 무기명=별빛 장검; 종류=한손검; 등급=영웅; 권장 레벨=85; 기본 물리위력=103; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4070: ID=WPN-0024; 무기명=고대의 장검; 종류=한손검; 등급=영웅; 권장 레벨=90; 기본 물리위력=108; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4071: ID=WPN-0025; 무기명=왕실의 장검; 종류=한손검; 등급=영웅; 권장 레벨=95; 기본 물리위력=113; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4072: ID=WPN-0026; 무기명=영웅의 장검; 종류=한손검; 등급=전설; 권장 레벨=105; 기본 물리위력=123; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4073: ID=WPN-0027; 무기명=전설의 장검; 종류=한손검; 등급=전설; 권장 레벨=115; 기본 물리위력=133; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4074: ID=WPN-0028; 무기명=유물 장검; 종류=한손검; 등급=전설; 권장 레벨=125; 기본 물리위력=143; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4075: ID=WPN-0029; 무기명=성역의 장검; 종류=한손검; 등급=유물; 권장 레벨=140; 기본 물리위력=158; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4076: ID=WPN-0030; 무기명=종말의 장검; 종류=한손검; 등급=신화; 권장 레벨=160; 기본 물리위력=178; 기본 마법위력=0; 태그=베기,균형
+- AR-S0129-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4080: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4082: ID=WPN-0031; 무기명=훈련용 대검; 종류=양손검; 등급=일반; 권장 레벨=1; 기본 물리위력=27; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4083: ID=WPN-0032; 무기명=낡은 대검; 종류=양손검; 등급=일반; 권장 레벨=3; 기본 물리위력=30; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4084: ID=WPN-0033; 무기명=민병대 대검; 종류=양손검; 등급=일반; 권장 레벨=5; 기본 물리위력=33; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4085: ID=WPN-0034; 무기명=철제 대검; 종류=양손검; 등급=일반; 권장 레벨=8; 기본 물리위력=38; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4086: ID=WPN-0035; 무기명=용병대 대검; 종류=양손검; 등급=일반; 권장 레벨=10; 기본 물리위력=40; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4087: ID=WPN-0036; 무기명=정제강 대검; 종류=양손검; 등급=고급; 권장 레벨=12; 기본 물리위력=43; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4088: ID=WPN-0037; 무기명=은빛 대검; 종류=양손검; 등급=고급; 권장 레벨=15; 기본 물리위력=48; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4089: ID=WPN-0038; 무기명=흑철 대검; 종류=양손검; 등급=고급; 권장 레벨=18; 기본 물리위력=52; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4090: ID=WPN-0039; 무기명=왕국군 대검; 종류=양손검; 등급=고급; 권장 레벨=22; 기본 물리위력=58; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4091: ID=WPN-0040; 무기명=사냥꾼 대검; 종류=양손검; 등급=고급; 권장 레벨=25; 기본 물리위력=62; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4092: ID=WPN-0041; 무기명=설원의 대검; 종류=양손검; 등급=희귀; 권장 레벨=28; 기본 물리위력=66; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4093: ID=WPN-0042; 무기명=사막의 대검; 종류=양손검; 등급=희귀; 권장 레벨=32; 기본 물리위력=72; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4094: ID=WPN-0043; 무기명=늪지의 대검; 종류=양손검; 등급=희귀; 권장 레벨=36; 기본 물리위력=78; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4095: ID=WPN-0044; 무기명=화염의 대검; 종류=양손검; 등급=희귀; 권장 레벨=40; 기본 물리위력=84; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4096: ID=WPN-0045; 무기명=냉기의 대검; 종류=양손검; 등급=희귀; 권장 레벨=45; 기본 물리위력=91; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4097: ID=WPN-0046; 무기명=폭풍의 대검; 종류=양손검; 등급=특급; 권장 레벨=50; 기본 물리위력=98; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4098: ID=WPN-0047; 무기명=대지의 대검; 종류=양손검; 등급=특급; 권장 레벨=55; 기본 물리위력=105; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4099: ID=WPN-0048; 무기명=독니 대검; 종류=양손검; 등급=특급; 권장 레벨=60; 기본 물리위력=113; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4100: ID=WPN-0049; 무기명=성광의 대검; 종류=양손검; 등급=특급; 권장 레벨=65; 기본 물리위력=120; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4101: ID=WPN-0050; 무기명=그림자의 대검; 종류=양손검; 등급=특급; 권장 레벨=70; 기본 물리위력=127; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4102: ID=WPN-0051; 무기명=심연의 대검; 종류=양손검; 등급=영웅; 권장 레벨=75; 기본 물리위력=134; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4103: ID=WPN-0052; 무기명=용린 대검; 종류=양손검; 등급=영웅; 권장 레벨=80; 기본 물리위력=142; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4104: ID=WPN-0053; 무기명=별빛 대검; 종류=양손검; 등급=영웅; 권장 레벨=85; 기본 물리위력=149; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4105: ID=WPN-0054; 무기명=고대의 대검; 종류=양손검; 등급=영웅; 권장 레벨=90; 기본 물리위력=156; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4106: ID=WPN-0055; 무기명=왕실의 대검; 종류=양손검; 등급=영웅; 권장 레벨=95; 기본 물리위력=163; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4107: ID=WPN-0056; 무기명=영웅의 대검; 종류=양손검; 등급=전설; 권장 레벨=105; 기본 물리위력=178; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4108: ID=WPN-0057; 무기명=전설의 대검; 종류=양손검; 등급=전설; 권장 레벨=115; 기본 물리위력=192; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4109: ID=WPN-0058; 무기명=유물 대검; 종류=양손검; 등급=전설; 권장 레벨=125; 기본 물리위력=207; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4110: ID=WPN-0059; 무기명=성역의 대검; 종류=양손검; 등급=유물; 권장 레벨=140; 기본 물리위력=228; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4111: ID=WPN-0060; 무기명=종말의 대검; 종류=양손검; 등급=신화; 권장 레벨=160; 기본 물리위력=257; 기본 마법위력=0; 태그=베기,강타
+- AR-S0129-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4115: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4117: ID=WPN-0061; 무기명=훈련용 단검; 종류=단검; 등급=일반; 권장 레벨=1; 기본 물리위력=14; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4118: ID=WPN-0062; 무기명=낡은 단검; 종류=단검; 등급=일반; 권장 레벨=3; 기본 물리위력=15; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4119: ID=WPN-0063; 무기명=민병대 단검; 종류=단검; 등급=일반; 권장 레벨=5; 기본 물리위력=17; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4120: ID=WPN-0064; 무기명=철제 단검; 종류=단검; 등급=일반; 권장 레벨=8; 기본 물리위력=19; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4121: ID=WPN-0065; 무기명=용병대 단검; 종류=단검; 등급=일반; 권장 레벨=10; 기본 물리위력=20; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4122: ID=WPN-0066; 무기명=정제강 단검; 종류=단검; 등급=고급; 권장 레벨=12; 기본 물리위력=22; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4123: ID=WPN-0067; 무기명=은빛 단검; 종류=단검; 등급=고급; 권장 레벨=15; 기본 물리위력=24; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4124: ID=WPN-0068; 무기명=흑철 단검; 종류=단검; 등급=고급; 권장 레벨=18; 기본 물리위력=26; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4125: ID=WPN-0069; 무기명=왕국군 단검; 종류=단검; 등급=고급; 권장 레벨=22; 기본 물리위력=29; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4126: ID=WPN-0070; 무기명=사냥꾼 단검; 종류=단검; 등급=고급; 권장 레벨=25; 기본 물리위력=31; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4127: ID=WPN-0071; 무기명=설원의 단검; 종류=단검; 등급=희귀; 권장 레벨=28; 기본 물리위력=33; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4128: ID=WPN-0072; 무기명=사막의 단검; 종류=단검; 등급=희귀; 권장 레벨=32; 기본 물리위력=36; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4129: ID=WPN-0073; 무기명=늪지의 단검; 종류=단검; 등급=희귀; 권장 레벨=36; 기본 물리위력=39; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4130: ID=WPN-0074; 무기명=화염의 단검; 종류=단검; 등급=희귀; 권장 레벨=40; 기본 물리위력=42; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4131: ID=WPN-0075; 무기명=냉기의 단검; 종류=단검; 등급=희귀; 권장 레벨=45; 기본 물리위력=46; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4132: ID=WPN-0076; 무기명=폭풍의 단검; 종류=단검; 등급=특급; 권장 레벨=50; 기본 물리위력=49; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4133: ID=WPN-0077; 무기명=대지의 단검; 종류=단검; 등급=특급; 권장 레벨=55; 기본 물리위력=53; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4134: ID=WPN-0078; 무기명=독니 단검; 종류=단검; 등급=특급; 권장 레벨=60; 기본 물리위력=56; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4135: ID=WPN-0079; 무기명=성광의 단검; 종류=단검; 등급=특급; 권장 레벨=65; 기본 물리위력=60; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4136: ID=WPN-0080; 무기명=그림자의 단검; 종류=단검; 등급=특급; 권장 레벨=70; 기본 물리위력=64; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4137: ID=WPN-0081; 무기명=심연의 단검; 종류=단검; 등급=영웅; 권장 레벨=75; 기본 물리위력=67; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4138: ID=WPN-0082; 무기명=용린 단검; 종류=단검; 등급=영웅; 권장 레벨=80; 기본 물리위력=71; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4139: ID=WPN-0083; 무기명=별빛 단검; 종류=단검; 등급=영웅; 권장 레벨=85; 기본 물리위력=74; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4140: ID=WPN-0084; 무기명=고대의 단검; 종류=단검; 등급=영웅; 권장 레벨=90; 기본 물리위력=78; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4141: ID=WPN-0085; 무기명=왕실의 단검; 종류=단검; 등급=영웅; 권장 레벨=95; 기본 물리위력=82; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4142: ID=WPN-0086; 무기명=영웅의 단검; 종류=단검; 등급=전설; 권장 레벨=105; 기본 물리위력=89; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4143: ID=WPN-0087; 무기명=전설의 단검; 종류=단검; 등급=전설; 권장 레벨=115; 기본 물리위력=96; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4144: ID=WPN-0088; 무기명=유물 단검; 종류=단검; 등급=전설; 권장 레벨=125; 기본 물리위력=103; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4145: ID=WPN-0089; 무기명=성역의 단검; 종류=단검; 등급=유물; 권장 레벨=140; 기본 물리위력=114; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4146: ID=WPN-0090; 무기명=종말의 단검; 종류=단검; 등급=신화; 권장 레벨=160; 기본 물리위력=129; 기본 마법위력=0; 태그=찌르기,치명타
+- AR-S0129-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4150: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4152: ID=WPN-0091; 무기명=훈련용 장창; 종류=창; 등급=일반; 권장 레벨=1; 기본 물리위력=22; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4153: ID=WPN-0092; 무기명=낡은 장창; 종류=창; 등급=일반; 권장 레벨=3; 기본 물리위력=24; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4154: ID=WPN-0093; 무기명=민병대 장창; 종류=창; 등급=일반; 권장 레벨=5; 기본 물리위력=27; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4155: ID=WPN-0094; 무기명=철제 장창; 종류=창; 등급=일반; 권장 레벨=8; 기본 물리위력=30; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4156: ID=WPN-0095; 무기명=용병대 장창; 종류=창; 등급=일반; 권장 레벨=10; 기본 물리위력=33; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4157: ID=WPN-0096; 무기명=정제강 장창; 종류=창; 등급=고급; 권장 레벨=12; 기본 물리위력=35; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4158: ID=WPN-0097; 무기명=은빛 장창; 종류=창; 등급=고급; 권장 레벨=15; 기본 물리위력=38; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4159: ID=WPN-0098; 무기명=흑철 장창; 종류=창; 등급=고급; 권장 레벨=18; 기본 물리위력=42; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4160: ID=WPN-0099; 무기명=왕국군 장창; 종류=창; 등급=고급; 권장 레벨=22; 기본 물리위력=47; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4161: ID=WPN-0100; 무기명=사냥꾼 장창; 종류=창; 등급=고급; 권장 레벨=25; 기본 물리위력=50; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4162: ID=WPN-0101; 무기명=설원의 장창; 종류=창; 등급=희귀; 권장 레벨=28; 기본 물리위력=54; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4163: ID=WPN-0102; 무기명=사막의 장창; 종류=창; 등급=희귀; 권장 레벨=32; 기본 물리위력=58; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4164: ID=WPN-0103; 무기명=늪지의 장창; 종류=창; 등급=희귀; 권장 레벨=36; 기본 물리위력=63; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4165: ID=WPN-0104; 무기명=화염의 장창; 종류=창; 등급=희귀; 권장 레벨=40; 기본 물리위력=68; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4166: ID=WPN-0105; 무기명=냉기의 장창; 종류=창; 등급=희귀; 권장 레벨=45; 기본 물리위력=74; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4167: ID=WPN-0106; 무기명=폭풍의 장창; 종류=창; 등급=특급; 권장 레벨=50; 기본 물리위력=79; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4168: ID=WPN-0107; 무기명=대지의 장창; 종류=창; 등급=특급; 권장 레벨=55; 기본 물리위력=85; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4169: ID=WPN-0108; 무기명=독니 장창; 종류=창; 등급=특급; 권장 레벨=60; 기본 물리위력=91; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4170: ID=WPN-0109; 무기명=성광의 장창; 종류=창; 등급=특급; 권장 레벨=65; 기본 물리위력=97; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4171: ID=WPN-0110; 무기명=그림자의 장창; 종류=창; 등급=특급; 권장 레벨=70; 기본 물리위력=103; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4172: ID=WPN-0111; 무기명=심연의 장창; 종류=창; 등급=영웅; 권장 레벨=75; 기본 물리위력=108; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4173: ID=WPN-0112; 무기명=용린 장창; 종류=창; 등급=영웅; 권장 레벨=80; 기본 물리위력=114; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4174: ID=WPN-0113; 무기명=별빛 장창; 종류=창; 등급=영웅; 권장 레벨=85; 기본 물리위력=120; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4175: ID=WPN-0114; 무기명=고대의 장창; 종류=창; 등급=영웅; 권장 레벨=90; 기본 물리위력=126; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4176: ID=WPN-0115; 무기명=왕실의 장창; 종류=창; 등급=영웅; 권장 레벨=95; 기본 물리위력=132; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4177: ID=WPN-0116; 무기명=영웅의 장창; 종류=창; 등급=전설; 권장 레벨=105; 기본 물리위력=144; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4178: ID=WPN-0117; 무기명=전설의 장창; 종류=창; 등급=전설; 권장 레벨=115; 기본 물리위력=155; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-121 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4179: ID=WPN-0118; 무기명=유물 장창; 종류=창; 등급=전설; 권장 레벨=125; 기본 물리위력=167; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-122 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4180: ID=WPN-0119; 무기명=성역의 장창; 종류=창; 등급=유물; 권장 레벨=140; 기본 물리위력=184; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-123 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4181: ID=WPN-0120; 무기명=종말의 장창; 종류=창; 등급=신화; 권장 레벨=160; 기본 물리위력=208; 기본 마법위력=0; 태그=찌르기,관통
+- AR-S0129-124 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4185: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-125 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4187: ID=WPN-0121; 무기명=훈련용 전투도끼; 종류=도끼; 등급=일반; 권장 레벨=1; 기본 물리위력=25; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-126 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4188: ID=WPN-0122; 무기명=낡은 전투도끼; 종류=도끼; 등급=일반; 권장 레벨=3; 기본 물리위력=28; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-127 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4189: ID=WPN-0123; 무기명=민병대 전투도끼; 종류=도끼; 등급=일반; 권장 레벨=5; 기본 물리위력=31; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-128 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4190: ID=WPN-0124; 무기명=철제 전투도끼; 종류=도끼; 등급=일반; 권장 레벨=8; 기본 물리위력=35; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-129 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4191: ID=WPN-0125; 무기명=용병대 전투도끼; 종류=도끼; 등급=일반; 권장 레벨=10; 기본 물리위력=37; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-130 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4192: ID=WPN-0126; 무기명=정제강 전투도끼; 종류=도끼; 등급=고급; 권장 레벨=12; 기본 물리위력=40; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-131 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4193: ID=WPN-0127; 무기명=은빛 전투도끼; 종류=도끼; 등급=고급; 권장 레벨=15; 기본 물리위력=44; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-132 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4194: ID=WPN-0128; 무기명=흑철 전투도끼; 종류=도끼; 등급=고급; 권장 레벨=18; 기본 물리위력=48; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-133 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4195: ID=WPN-0129; 무기명=왕국군 전투도끼; 종류=도끼; 등급=고급; 권장 레벨=22; 기본 물리위력=53; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-134 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4196: ID=WPN-0130; 무기명=사냥꾼 전투도끼; 종류=도끼; 등급=고급; 권장 레벨=25; 기본 물리위력=57; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-135 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4197: ID=WPN-0131; 무기명=설원의 전투도끼; 종류=도끼; 등급=희귀; 권장 레벨=28; 기본 물리위력=61; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-136 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4198: ID=WPN-0132; 무기명=사막의 전투도끼; 종류=도끼; 등급=희귀; 권장 레벨=32; 기본 물리위력=67; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-137 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4199: ID=WPN-0133; 무기명=늪지의 전투도끼; 종류=도끼; 등급=희귀; 권장 레벨=36; 기본 물리위력=72; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-138 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4200: ID=WPN-0134; 무기명=화염의 전투도끼; 종류=도끼; 등급=희귀; 권장 레벨=40; 기본 물리위력=77; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-139 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4201: ID=WPN-0135; 무기명=냉기의 전투도끼; 종류=도끼; 등급=희귀; 권장 레벨=45; 기본 물리위력=84; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-140 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4202: ID=WPN-0136; 무기명=폭풍의 전투도끼; 종류=도끼; 등급=특급; 권장 레벨=50; 기본 물리위력=91; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-141 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4203: ID=WPN-0137; 무기명=대지의 전투도끼; 종류=도끼; 등급=특급; 권장 레벨=55; 기본 물리위력=97; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-142 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4204: ID=WPN-0138; 무기명=독니 전투도끼; 종류=도끼; 등급=특급; 권장 레벨=60; 기본 물리위력=104; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-143 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4205: ID=WPN-0139; 무기명=성광의 전투도끼; 종류=도끼; 등급=특급; 권장 레벨=65; 기본 물리위력=111; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-144 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4206: ID=WPN-0140; 무기명=그림자의 전투도끼; 종류=도끼; 등급=특급; 권장 레벨=70; 기본 물리위력=117; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-145 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4207: ID=WPN-0141; 무기명=심연의 전투도끼; 종류=도끼; 등급=영웅; 권장 레벨=75; 기본 물리위력=124; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-146 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4208: ID=WPN-0142; 무기명=용린 전투도끼; 종류=도끼; 등급=영웅; 권장 레벨=80; 기본 물리위력=131; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-147 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4209: ID=WPN-0143; 무기명=별빛 전투도끼; 종류=도끼; 등급=영웅; 권장 레벨=85; 기본 물리위력=137; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-148 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4210: ID=WPN-0144; 무기명=고대의 전투도끼; 종류=도끼; 등급=영웅; 권장 레벨=90; 기본 물리위력=144; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-149 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4211: ID=WPN-0145; 무기명=왕실의 전투도끼; 종류=도끼; 등급=영웅; 권장 레벨=95; 기본 물리위력=151; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-150 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4212: ID=WPN-0146; 무기명=영웅의 전투도끼; 종류=도끼; 등급=전설; 권장 레벨=105; 기본 물리위력=164; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-151 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4213: ID=WPN-0147; 무기명=전설의 전투도끼; 종류=도끼; 등급=전설; 권장 레벨=115; 기본 물리위력=177; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-152 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4214: ID=WPN-0148; 무기명=유물 전투도끼; 종류=도끼; 등급=전설; 권장 레벨=125; 기본 물리위력=191; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-153 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4215: ID=WPN-0149; 무기명=성역의 전투도끼; 종류=도끼; 등급=유물; 권장 레벨=140; 기본 물리위력=211; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-154 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4216: ID=WPN-0150; 무기명=종말의 전투도끼; 종류=도끼; 등급=신화; 권장 레벨=160; 기본 물리위력=237; 기본 마법위력=0; 태그=베기,방어파괴
+- AR-S0129-155 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4220: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-156 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4222: ID=WPN-0151; 무기명=훈련용 전쟁망치; 종류=둔기; 등급=일반; 권장 레벨=1; 기본 물리위력=26; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-157 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4223: ID=WPN-0152; 무기명=낡은 전쟁망치; 종류=둔기; 등급=일반; 권장 레벨=3; 기본 물리위력=29; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-158 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4224: ID=WPN-0153; 무기명=민병대 전쟁망치; 종류=둔기; 등급=일반; 권장 레벨=5; 기본 물리위력=32; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-159 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4225: ID=WPN-0154; 무기명=철제 전쟁망치; 종류=둔기; 등급=일반; 권장 레벨=8; 기본 물리위력=36; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-160 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4226: ID=WPN-0155; 무기명=용병대 전쟁망치; 종류=둔기; 등급=일반; 권장 레벨=10; 기본 물리위력=39; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-161 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4227: ID=WPN-0156; 무기명=정제강 전쟁망치; 종류=둔기; 등급=고급; 권장 레벨=12; 기본 물리위력=42; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-162 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4228: ID=WPN-0157; 무기명=은빛 전쟁망치; 종류=둔기; 등급=고급; 권장 레벨=15; 기본 물리위력=46; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-163 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4229: ID=WPN-0158; 무기명=흑철 전쟁망치; 종류=둔기; 등급=고급; 권장 레벨=18; 기본 물리위력=50; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-164 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4230: ID=WPN-0159; 무기명=왕국군 전쟁망치; 종류=둔기; 등급=고급; 권장 레벨=22; 기본 물리위력=56; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-165 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4231: ID=WPN-0160; 무기명=사냥꾼 전쟁망치; 종류=둔기; 등급=고급; 권장 레벨=25; 기본 물리위력=60; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-166 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4232: ID=WPN-0161; 무기명=설원의 전쟁망치; 종류=둔기; 등급=희귀; 권장 레벨=28; 기본 물리위력=64; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-167 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4233: ID=WPN-0162; 무기명=사막의 전쟁망치; 종류=둔기; 등급=희귀; 권장 레벨=32; 기본 물리위력=69; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-168 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4234: ID=WPN-0163; 무기명=늪지의 전쟁망치; 종류=둔기; 등급=희귀; 권장 레벨=36; 기본 물리위력=75; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-169 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4235: ID=WPN-0164; 무기명=화염의 전쟁망치; 종류=둔기; 등급=희귀; 권장 레벨=40; 기본 물리위력=81; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-170 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4236: ID=WPN-0165; 무기명=냉기의 전쟁망치; 종류=둔기; 등급=희귀; 권장 레벨=45; 기본 물리위력=88; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-171 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4237: ID=WPN-0166; 무기명=폭풍의 전쟁망치; 종류=둔기; 등급=특급; 권장 레벨=50; 기본 물리위력=94; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-172 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4238: ID=WPN-0167; 무기명=대지의 전쟁망치; 종류=둔기; 등급=특급; 권장 레벨=55; 기본 물리위력=101; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-173 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4239: ID=WPN-0168; 무기명=독니 전쟁망치; 종류=둔기; 등급=특급; 권장 레벨=60; 기본 물리위력=108; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-174 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4240: ID=WPN-0169; 무기명=성광의 전쟁망치; 종류=둔기; 등급=특급; 권장 레벨=65; 기본 물리위력=115; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-175 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4241: ID=WPN-0170; 무기명=그림자의 전쟁망치; 종류=둔기; 등급=특급; 권장 레벨=70; 기본 물리위력=122; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-176 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4242: ID=WPN-0171; 무기명=심연의 전쟁망치; 종류=둔기; 등급=영웅; 권장 레벨=75; 기본 물리위력=129; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-177 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4243: ID=WPN-0172; 무기명=용린 전쟁망치; 종류=둔기; 등급=영웅; 권장 레벨=80; 기본 물리위력=136; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-178 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4244: ID=WPN-0173; 무기명=별빛 전쟁망치; 종류=둔기; 등급=영웅; 권장 레벨=85; 기본 물리위력=143; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-179 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4245: ID=WPN-0174; 무기명=고대의 전쟁망치; 종류=둔기; 등급=영웅; 권장 레벨=90; 기본 물리위력=150; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-180 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4246: ID=WPN-0175; 무기명=왕실의 전쟁망치; 종류=둔기; 등급=영웅; 권장 레벨=95; 기본 물리위력=157; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-181 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4247: ID=WPN-0176; 무기명=영웅의 전쟁망치; 종류=둔기; 등급=전설; 권장 레벨=105; 기본 물리위력=171; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-182 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4248: ID=WPN-0177; 무기명=전설의 전쟁망치; 종류=둔기; 등급=전설; 권장 레벨=115; 기본 물리위력=185; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-183 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4249: ID=WPN-0178; 무기명=유물 전쟁망치; 종류=둔기; 등급=전설; 권장 레벨=125; 기본 물리위력=199; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-184 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4250: ID=WPN-0179; 무기명=성역의 전쟁망치; 종류=둔기; 등급=유물; 권장 레벨=140; 기본 물리위력=219; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-185 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4251: ID=WPN-0180; 무기명=종말의 전쟁망치; 종류=둔기; 등급=신화; 권장 레벨=160; 기본 물리위력=247; 기본 마법위력=0; 태그=타격,기절
+- AR-S0129-186 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4255: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-187 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4257: ID=WPN-0181; 무기명=훈련용 장궁; 종류=활; 등급=일반; 권장 레벨=1; 기본 물리위력=18; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-188 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4258: ID=WPN-0182; 무기명=낡은 장궁; 종류=활; 등급=일반; 권장 레벨=3; 기본 물리위력=20; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-189 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4259: ID=WPN-0183; 무기명=민병대 장궁; 종류=활; 등급=일반; 권장 레벨=5; 기본 물리위력=22; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-190 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4260: ID=WPN-0184; 무기명=철제 장궁; 종류=활; 등급=일반; 권장 레벨=8; 기본 물리위력=25; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-191 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4261: ID=WPN-0185; 무기명=용병대 장궁; 종류=활; 등급=일반; 권장 레벨=10; 기본 물리위력=26; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-192 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4262: ID=WPN-0186; 무기명=정제강 장궁; 종류=활; 등급=고급; 권장 레벨=12; 기본 물리위력=28; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-193 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4263: ID=WPN-0187; 무기명=은빛 장궁; 종류=활; 등급=고급; 권장 레벨=15; 기본 물리위력=31; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-194 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4264: ID=WPN-0188; 무기명=흑철 장궁; 종류=활; 등급=고급; 권장 레벨=18; 기본 물리위력=34; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-195 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4265: ID=WPN-0189; 무기명=왕국군 장궁; 종류=활; 등급=고급; 권장 레벨=22; 기본 물리위력=38; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-196 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4266: ID=WPN-0190; 무기명=사냥꾼 장궁; 종류=활; 등급=고급; 권장 레벨=25; 기본 물리위력=41; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-197 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4267: ID=WPN-0191; 무기명=설원의 장궁; 종류=활; 등급=희귀; 권장 레벨=28; 기본 물리위력=43; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-198 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4268: ID=WPN-0192; 무기명=사막의 장궁; 종류=활; 등급=희귀; 권장 레벨=32; 기본 물리위력=47; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-199 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4269: ID=WPN-0193; 무기명=늪지의 장궁; 종류=활; 등급=희귀; 권장 레벨=36; 기본 물리위력=51; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-200 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4270: ID=WPN-0194; 무기명=화염의 장궁; 종류=활; 등급=희귀; 권장 레벨=40; 기본 물리위력=55; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-201 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4271: ID=WPN-0195; 무기명=냉기의 장궁; 종류=활; 등급=희귀; 권장 레벨=45; 기본 물리위력=60; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-202 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4272: ID=WPN-0196; 무기명=폭풍의 장궁; 종류=활; 등급=특급; 권장 레벨=50; 기본 물리위력=64; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-203 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4273: ID=WPN-0197; 무기명=대지의 장궁; 종류=활; 등급=특급; 권장 레벨=55; 기본 물리위력=69; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-204 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4274: ID=WPN-0198; 무기명=독니 장궁; 종류=활; 등급=특급; 권장 레벨=60; 기본 물리위력=74; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-205 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4275: ID=WPN-0199; 무기명=성광의 장궁; 종류=활; 등급=특급; 권장 레벨=65; 기본 물리위력=78; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-206 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4276: ID=WPN-0200; 무기명=그림자의 장궁; 종류=활; 등급=특급; 권장 레벨=70; 기본 물리위력=83; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-207 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4277: ID=WPN-0201; 무기명=심연의 장궁; 종류=활; 등급=영웅; 권장 레벨=75; 기본 물리위력=88; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-208 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4278: ID=WPN-0202; 무기명=용린 장궁; 종류=활; 등급=영웅; 권장 레벨=80; 기본 물리위력=93; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-209 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4279: ID=WPN-0203; 무기명=별빛 장궁; 종류=활; 등급=영웅; 권장 레벨=85; 기본 물리위력=97; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-210 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4280: ID=WPN-0204; 무기명=고대의 장궁; 종류=활; 등급=영웅; 권장 레벨=90; 기본 물리위력=102; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-211 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4281: ID=WPN-0205; 무기명=왕실의 장궁; 종류=활; 등급=영웅; 권장 레벨=95; 기본 물리위력=107; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-212 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4282: ID=WPN-0206; 무기명=영웅의 장궁; 종류=활; 등급=전설; 권장 레벨=105; 기본 물리위력=116; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-213 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4283: ID=WPN-0207; 무기명=전설의 장궁; 종류=활; 등급=전설; 권장 레벨=115; 기본 물리위력=126; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-214 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4284: ID=WPN-0208; 무기명=유물 장궁; 종류=활; 등급=전설; 권장 레벨=125; 기본 물리위력=135; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-215 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4285: ID=WPN-0209; 무기명=성역의 장궁; 종류=활; 등급=유물; 권장 레벨=140; 기본 물리위력=149; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-216 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4286: ID=WPN-0210; 무기명=종말의 장궁; 종류=활; 등급=신화; 권장 레벨=160; 기본 물리위력=168; 기본 마법위력=0; 태그=원거리,정밀
+- AR-S0129-217 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4290: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-218 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4292: ID=WPN-0211; 무기명=훈련용 중석궁; 종류=석궁; 등급=일반; 권장 레벨=1; 기본 물리위력=23; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-219 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4293: ID=WPN-0212; 무기명=낡은 중석궁; 종류=석궁; 등급=일반; 권장 레벨=3; 기본 물리위력=26; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-220 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4294: ID=WPN-0213; 무기명=민병대 중석궁; 종류=석궁; 등급=일반; 권장 레벨=5; 기본 물리위력=28; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-221 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4295: ID=WPN-0214; 무기명=철제 중석궁; 종류=석궁; 등급=일반; 권장 레벨=8; 기본 물리위력=32; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-222 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4296: ID=WPN-0215; 무기명=용병대 중석궁; 종류=석궁; 등급=일반; 권장 레벨=10; 기본 물리위력=34; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-223 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4297: ID=WPN-0216; 무기명=정제강 중석궁; 종류=석궁; 등급=고급; 권장 레벨=12; 기본 물리위력=37; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-224 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4298: ID=WPN-0217; 무기명=은빛 중석궁; 종류=석궁; 등급=고급; 권장 레벨=15; 기본 물리위력=40; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-225 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4299: ID=WPN-0218; 무기명=흑철 중석궁; 종류=석궁; 등급=고급; 권장 레벨=18; 기본 물리위력=44; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-226 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4300: ID=WPN-0219; 무기명=왕국군 중석궁; 종류=석궁; 등급=고급; 권장 레벨=22; 기본 물리위력=49; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-227 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4301: ID=WPN-0220; 무기명=사냥꾼 중석궁; 종류=석궁; 등급=고급; 권장 레벨=25; 기본 물리위력=53; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-228 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4302: ID=WPN-0221; 무기명=설원의 중석궁; 종류=석궁; 등급=희귀; 권장 레벨=28; 기본 물리위력=56; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-229 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4303: ID=WPN-0222; 무기명=사막의 중석궁; 종류=석궁; 등급=희귀; 권장 레벨=32; 기본 물리위력=61; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-230 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4304: ID=WPN-0223; 무기명=늪지의 중석궁; 종류=석궁; 등급=희귀; 권장 레벨=36; 기본 물리위력=66; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-231 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4305: ID=WPN-0224; 무기명=화염의 중석궁; 종류=석궁; 등급=희귀; 권장 레벨=40; 기본 물리위력=71; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-232 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4306: ID=WPN-0225; 무기명=냉기의 중석궁; 종류=석궁; 등급=희귀; 권장 레벨=45; 기본 물리위력=77; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-233 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4307: ID=WPN-0226; 무기명=폭풍의 중석궁; 종류=석궁; 등급=특급; 권장 레벨=50; 기본 물리위력=83; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-234 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4308: ID=WPN-0227; 무기명=대지의 중석궁; 종류=석궁; 등급=특급; 권장 레벨=55; 기본 물리위력=89; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-235 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4309: ID=WPN-0228; 무기명=독니 중석궁; 종류=석궁; 등급=특급; 권장 레벨=60; 기본 물리위력=95; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-236 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4310: ID=WPN-0229; 무기명=성광의 중석궁; 종류=석궁; 등급=특급; 권장 레벨=65; 기본 물리위력=101; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-237 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4311: ID=WPN-0230; 무기명=그림자의 중석궁; 종류=석궁; 등급=특급; 권장 레벨=70; 기본 물리위력=108; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-238 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4312: ID=WPN-0231; 무기명=심연의 중석궁; 종류=석궁; 등급=영웅; 권장 레벨=75; 기본 물리위력=114; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-239 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4313: ID=WPN-0232; 무기명=용린 중석궁; 종류=석궁; 등급=영웅; 권장 레벨=80; 기본 물리위력=120; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-240 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4314: ID=WPN-0233; 무기명=별빛 중석궁; 종류=석궁; 등급=영웅; 권장 레벨=85; 기본 물리위력=126; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-241 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4315: ID=WPN-0234; 무기명=고대의 중석궁; 종류=석궁; 등급=영웅; 권장 레벨=90; 기본 물리위력=132; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-242 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4316: ID=WPN-0235; 무기명=왕실의 중석궁; 종류=석궁; 등급=영웅; 권장 레벨=95; 기본 물리위력=138; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-243 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4317: ID=WPN-0236; 무기명=영웅의 중석궁; 종류=석궁; 등급=전설; 권장 레벨=105; 기본 물리위력=150; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-244 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4318: ID=WPN-0237; 무기명=전설의 중석궁; 종류=석궁; 등급=전설; 권장 레벨=115; 기본 물리위력=163; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-245 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4319: ID=WPN-0238; 무기명=유물 중석궁; 종류=석궁; 등급=전설; 권장 레벨=125; 기본 물리위력=175; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-246 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4320: ID=WPN-0239; 무기명=성역의 중석궁; 종류=석궁; 등급=유물; 권장 레벨=140; 기본 물리위력=193; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-247 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4321: ID=WPN-0240; 무기명=종말의 중석궁; 종류=석궁; 등급=신화; 권장 레벨=160; 기본 물리위력=218; 기본 마법위력=0; 태그=원거리,관통
+- AR-S0129-248 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4325: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-249 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4327: ID=WPN-0241; 무기명=훈련용 전투지팡이; 종류=지팡이; 등급=일반; 권장 레벨=1; 기본 물리위력=11; 기본 마법위력=23; 태그=마법,집중
+- AR-S0129-250 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4328: ID=WPN-0242; 무기명=낡은 전투지팡이; 종류=지팡이; 등급=일반; 권장 레벨=3; 기본 물리위력=12; 기본 마법위력=26; 태그=마법,집중
+- AR-S0129-251 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4329: ID=WPN-0243; 무기명=민병대 전투지팡이; 종류=지팡이; 등급=일반; 권장 레벨=5; 기본 물리위력=13; 기본 마법위력=28; 태그=마법,집중
+- AR-S0129-252 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4330: ID=WPN-0244; 무기명=철제 전투지팡이; 종류=지팡이; 등급=일반; 권장 레벨=8; 기본 물리위력=14; 기본 마법위력=32; 태그=마법,집중
+- AR-S0129-253 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4331: ID=WPN-0245; 무기명=용병대 전투지팡이; 종류=지팡이; 등급=일반; 권장 레벨=10; 기본 물리위력=16; 기본 마법위력=34; 태그=마법,집중
+- AR-S0129-254 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4332: ID=WPN-0246; 무기명=정제강 전투지팡이; 종류=지팡이; 등급=고급; 권장 레벨=12; 기본 물리위력=17; 기본 마법위력=37; 태그=마법,집중
+- AR-S0129-255 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4333: ID=WPN-0247; 무기명=은빛 전투지팡이; 종류=지팡이; 등급=고급; 권장 레벨=15; 기본 물리위력=18; 기본 마법위력=40; 태그=마법,집중
+- AR-S0129-256 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4334: ID=WPN-0248; 무기명=흑철 전투지팡이; 종류=지팡이; 등급=고급; 권장 레벨=18; 기본 물리위력=20; 기본 마법위력=44; 태그=마법,집중
+- AR-S0129-257 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4335: ID=WPN-0249; 무기명=왕국군 전투지팡이; 종류=지팡이; 등급=고급; 권장 레벨=22; 기본 물리위력=22; 기본 마법위력=49; 태그=마법,집중
+- AR-S0129-258 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4336: ID=WPN-0250; 무기명=사냥꾼 전투지팡이; 종류=지팡이; 등급=고급; 권장 레벨=25; 기본 물리위력=24; 기본 마법위력=53; 태그=마법,집중
+- AR-S0129-259 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4337: ID=WPN-0251; 무기명=설원의 전투지팡이; 종류=지팡이; 등급=희귀; 권장 레벨=28; 기본 물리위력=26; 기본 마법위력=56; 태그=마법,집중
+- AR-S0129-260 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4338: ID=WPN-0252; 무기명=사막의 전투지팡이; 종류=지팡이; 등급=희귀; 권장 레벨=32; 기본 물리위력=28; 기본 마법위력=61; 태그=마법,집중
+- AR-S0129-261 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4339: ID=WPN-0253; 무기명=늪지의 전투지팡이; 종류=지팡이; 등급=희귀; 권장 레벨=36; 기본 물리위력=30; 기본 마법위력=66; 태그=마법,집중
+- AR-S0129-262 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4340: ID=WPN-0254; 무기명=화염의 전투지팡이; 종류=지팡이; 등급=희귀; 권장 레벨=40; 기본 물리위력=32; 기본 마법위력=71; 태그=마법,집중
+- AR-S0129-263 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4341: ID=WPN-0255; 무기명=냉기의 전투지팡이; 종류=지팡이; 등급=희귀; 권장 레벨=45; 기본 물리위력=35; 기본 마법위력=77; 태그=마법,집중
+- AR-S0129-264 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4342: ID=WPN-0256; 무기명=폭풍의 전투지팡이; 종류=지팡이; 등급=특급; 권장 레벨=50; 기본 물리위력=38; 기본 마법위력=83; 태그=마법,집중
+- AR-S0129-265 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4343: ID=WPN-0257; 무기명=대지의 전투지팡이; 종류=지팡이; 등급=특급; 권장 레벨=55; 기본 물리위력=41; 기본 마법위력=89; 태그=마법,집중
+- AR-S0129-266 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4344: ID=WPN-0258; 무기명=독니 전투지팡이; 종류=지팡이; 등급=특급; 권장 레벨=60; 기본 물리위력=43; 기본 마법위력=95; 태그=마법,집중
+- AR-S0129-267 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4345: ID=WPN-0259; 무기명=성광의 전투지팡이; 종류=지팡이; 등급=특급; 권장 레벨=65; 기본 물리위력=46; 기본 마법위력=101; 태그=마법,집중
+- AR-S0129-268 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4346: ID=WPN-0260; 무기명=그림자의 전투지팡이; 종류=지팡이; 등급=특급; 권장 레벨=70; 기본 물리위력=49; 기본 마법위력=108; 태그=마법,집중
+- AR-S0129-269 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4347: ID=WPN-0261; 무기명=심연의 전투지팡이; 종류=지팡이; 등급=영웅; 권장 레벨=75; 기본 물리위력=52; 기본 마법위력=114; 태그=마법,집중
+- AR-S0129-270 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4348: ID=WPN-0262; 무기명=용린 전투지팡이; 종류=지팡이; 등급=영웅; 권장 레벨=80; 기본 물리위력=54; 기본 마법위력=120; 태그=마법,집중
+- AR-S0129-271 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4349: ID=WPN-0263; 무기명=별빛 전투지팡이; 종류=지팡이; 등급=영웅; 권장 레벨=85; 기본 물리위력=57; 기본 마법위력=126; 태그=마법,집중
+- AR-S0129-272 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4350: ID=WPN-0264; 무기명=고대의 전투지팡이; 종류=지팡이; 등급=영웅; 권장 레벨=90; 기본 물리위력=60; 기본 마법위력=132; 태그=마법,집중
+- AR-S0129-273 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4351: ID=WPN-0265; 무기명=왕실의 전투지팡이; 종류=지팡이; 등급=영웅; 권장 레벨=95; 기본 물리위력=63; 기본 마법위력=138; 태그=마법,집중
+- AR-S0129-274 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4352: ID=WPN-0266; 무기명=영웅의 전투지팡이; 종류=지팡이; 등급=전설; 권장 레벨=105; 기본 물리위력=68; 기본 마법위력=150; 태그=마법,집중
+- AR-S0129-275 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4353: ID=WPN-0267; 무기명=전설의 전투지팡이; 종류=지팡이; 등급=전설; 권장 레벨=115; 기본 물리위력=74; 기본 마법위력=163; 태그=마법,집중
+- AR-S0129-276 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4354: ID=WPN-0268; 무기명=유물 전투지팡이; 종류=지팡이; 등급=전설; 권장 레벨=125; 기본 물리위력=79; 기본 마법위력=175; 태그=마법,집중
+- AR-S0129-277 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4355: ID=WPN-0269; 무기명=성역의 전투지팡이; 종류=지팡이; 등급=유물; 권장 레벨=140; 기본 물리위력=88; 기본 마법위력=193; 태그=마법,집중
+- AR-S0129-278 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4356: ID=WPN-0270; 무기명=종말의 전투지팡이; 종류=지팡이; 등급=신화; 권장 레벨=160; 기본 물리위력=99; 기본 마법위력=218; 태그=마법,집중
+- AR-S0129-279 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4360: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-280 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4362: ID=WPN-0271; 무기명=훈련용 마법봉; 종류=마법봉; 등급=일반; 권장 레벨=1; 기본 물리위력=7; 기본 마법위력=27; 태그=마법,속사
+- AR-S0129-281 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4363: ID=WPN-0272; 무기명=낡은 마법봉; 종류=마법봉; 등급=일반; 권장 레벨=3; 기본 물리위력=8; 기본 마법위력=30; 태그=마법,속사
+- AR-S0129-282 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4364: ID=WPN-0273; 무기명=민병대 마법봉; 종류=마법봉; 등급=일반; 권장 레벨=5; 기본 물리위력=9; 기본 마법위력=33; 태그=마법,속사
+- AR-S0129-283 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4365: ID=WPN-0274; 무기명=철제 마법봉; 종류=마법봉; 등급=일반; 권장 레벨=8; 기본 물리위력=10; 기본 마법위력=38; 태그=마법,속사
+- AR-S0129-284 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4366: ID=WPN-0275; 무기명=용병대 마법봉; 종류=마법봉; 등급=일반; 권장 레벨=10; 기본 물리위력=11; 기본 마법위력=40; 태그=마법,속사
+- AR-S0129-285 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4367: ID=WPN-0276; 무기명=정제강 마법봉; 종류=마법봉; 등급=고급; 권장 레벨=12; 기본 물리위력=12; 기본 마법위력=43; 태그=마법,속사
+- AR-S0129-286 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4368: ID=WPN-0277; 무기명=은빛 마법봉; 종류=마법봉; 등급=고급; 권장 레벨=15; 기본 물리위력=13; 기본 마법위력=48; 태그=마법,속사
+- AR-S0129-287 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4369: ID=WPN-0278; 무기명=흑철 마법봉; 종류=마법봉; 등급=고급; 권장 레벨=18; 기본 물리위력=14; 기본 마법위력=52; 태그=마법,속사
+- AR-S0129-288 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4370: ID=WPN-0279; 무기명=왕국군 마법봉; 종류=마법봉; 등급=고급; 권장 레벨=22; 기본 물리위력=16; 기본 마법위력=58; 태그=마법,속사
+- AR-S0129-289 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4371: ID=WPN-0280; 무기명=사냥꾼 마법봉; 종류=마법봉; 등급=고급; 권장 레벨=25; 기본 물리위력=17; 기본 마법위력=62; 태그=마법,속사
+- AR-S0129-290 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4372: ID=WPN-0281; 무기명=설원의 마법봉; 종류=마법봉; 등급=희귀; 권장 레벨=28; 기본 물리위력=18; 기본 마법위력=66; 태그=마법,속사
+- AR-S0129-291 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4373: ID=WPN-0282; 무기명=사막의 마법봉; 종류=마법봉; 등급=희귀; 권장 레벨=32; 기본 물리위력=19; 기본 마법위력=72; 태그=마법,속사
+- AR-S0129-292 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4374: ID=WPN-0283; 무기명=늪지의 마법봉; 종류=마법봉; 등급=희귀; 권장 레벨=36; 기본 물리위력=21; 기본 마법위력=78; 태그=마법,속사
+- AR-S0129-293 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4375: ID=WPN-0284; 무기명=화염의 마법봉; 종류=마법봉; 등급=희귀; 권장 레벨=40; 기본 물리위력=23; 기본 마법위력=84; 태그=마법,속사
+- AR-S0129-294 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4376: ID=WPN-0285; 무기명=냉기의 마법봉; 종류=마법봉; 등급=희귀; 권장 레벨=45; 기본 물리위력=24; 기본 마법위력=91; 태그=마법,속사
+- AR-S0129-295 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4377: ID=WPN-0286; 무기명=폭풍의 마법봉; 종류=마법봉; 등급=특급; 권장 레벨=50; 기본 물리위력=26; 기본 마법위력=98; 태그=마법,속사
+- AR-S0129-296 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4378: ID=WPN-0287; 무기명=대지의 마법봉; 종류=마법봉; 등급=특급; 권장 레벨=55; 기본 물리위력=28; 기본 마법위력=105; 태그=마법,속사
+- AR-S0129-297 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4379: ID=WPN-0288; 무기명=독니 마법봉; 종류=마법봉; 등급=특급; 권장 레벨=60; 기본 물리위력=30; 기본 마법위력=113; 태그=마법,속사
+- AR-S0129-298 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4380: ID=WPN-0289; 무기명=성광의 마법봉; 종류=마법봉; 등급=특급; 권장 레벨=65; 기본 물리위력=32; 기본 마법위력=120; 태그=마법,속사
+- AR-S0129-299 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4381: ID=WPN-0290; 무기명=그림자의 마법봉; 종류=마법봉; 등급=특급; 권장 레벨=70; 기본 물리위력=34; 기본 마법위력=127; 태그=마법,속사
+- AR-S0129-300 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4382: ID=WPN-0291; 무기명=심연의 마법봉; 종류=마법봉; 등급=영웅; 권장 레벨=75; 기본 물리위력=36; 기본 마법위력=134; 태그=마법,속사
+- AR-S0129-301 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4383: ID=WPN-0292; 무기명=용린 마법봉; 종류=마법봉; 등급=영웅; 권장 레벨=80; 기본 물리위력=38; 기본 마법위력=142; 태그=마법,속사
+- AR-S0129-302 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4384: ID=WPN-0293; 무기명=별빛 마법봉; 종류=마법봉; 등급=영웅; 권장 레벨=85; 기본 물리위력=40; 기본 마법위력=149; 태그=마법,속사
+- AR-S0129-303 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4385: ID=WPN-0294; 무기명=고대의 마법봉; 종류=마법봉; 등급=영웅; 권장 레벨=90; 기본 물리위력=42; 기본 마법위력=156; 태그=마법,속사
+- AR-S0129-304 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4386: ID=WPN-0295; 무기명=왕실의 마법봉; 종류=마법봉; 등급=영웅; 권장 레벨=95; 기본 물리위력=44; 기본 마법위력=163; 태그=마법,속사
+- AR-S0129-305 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4387: ID=WPN-0296; 무기명=영웅의 마법봉; 종류=마법봉; 등급=전설; 권장 레벨=105; 기본 물리위력=48; 기본 마법위력=178; 태그=마법,속사
+- AR-S0129-306 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4388: ID=WPN-0297; 무기명=전설의 마법봉; 종류=마법봉; 등급=전설; 권장 레벨=115; 기본 물리위력=52; 기본 마법위력=192; 태그=마법,속사
+- AR-S0129-307 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4389: ID=WPN-0298; 무기명=유물 마법봉; 종류=마법봉; 등급=전설; 권장 레벨=125; 기본 물리위력=56; 기본 마법위력=207; 태그=마법,속사
+- AR-S0129-308 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4390: ID=WPN-0299; 무기명=성역의 마법봉; 종류=마법봉; 등급=유물; 권장 레벨=140; 기본 물리위력=61; 기본 마법위력=228; 태그=마법,속사
+- AR-S0129-309 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4391: ID=WPN-0300; 무기명=종말의 마법봉; 종류=마법봉; 등급=신화; 권장 레벨=160; 기본 물리위력=69; 기본 마법위력=257; 태그=마법,속사
+- AR-S0129-310 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4395: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-311 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4397: ID=WPN-0301; 무기명=훈련용 마도서; 종류=마도서; 등급=일반; 권장 레벨=1; 기본 물리위력=5; 기본 마법위력=32; 태그=마법,주문증폭
+- AR-S0129-312 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4398: ID=WPN-0302; 무기명=낡은 마도서; 종류=마도서; 등급=일반; 권장 레벨=3; 기본 물리위력=6; 기본 마법위력=35; 태그=마법,주문증폭
+- AR-S0129-313 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4399: ID=WPN-0303; 무기명=민병대 마도서; 종류=마도서; 등급=일반; 권장 레벨=5; 기본 물리위력=6; 기본 마법위력=38; 태그=마법,주문증폭
+- AR-S0129-314 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4400: ID=WPN-0304; 무기명=철제 마도서; 종류=마도서; 등급=일반; 권장 레벨=8; 기본 물리위력=7; 기본 마법위력=43; 태그=마법,주문증폭
+- AR-S0129-315 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4401: ID=WPN-0305; 무기명=용병대 마도서; 종류=마도서; 등급=일반; 권장 레벨=10; 기본 물리위력=8; 기본 마법위력=47; 태그=마법,주문증폭
+- AR-S0129-316 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4402: ID=WPN-0306; 무기명=정제강 마도서; 종류=마도서; 등급=고급; 권장 레벨=12; 기본 물리위력=8; 기본 마법위력=50; 태그=마법,주문증폭
+- AR-S0129-317 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4403: ID=WPN-0307; 무기명=은빛 마도서; 종류=마도서; 등급=고급; 권장 레벨=15; 기본 물리위력=9; 기본 마법위력=55; 태그=마법,주문증폭
+- AR-S0129-318 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4404: ID=WPN-0308; 무기명=흑철 마도서; 종류=마도서; 등급=고급; 권장 레벨=18; 기본 물리위력=10; 기본 마법위력=60; 태그=마법,주문증폭
+- AR-S0129-319 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4405: ID=WPN-0309; 무기명=왕국군 마도서; 종류=마도서; 등급=고급; 권장 레벨=22; 기본 물리위력=11; 기본 마법위력=67; 태그=마법,주문증폭
+- AR-S0129-320 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4406: ID=WPN-0310; 무기명=사냥꾼 마도서; 종류=마도서; 등급=고급; 권장 레벨=25; 기본 물리위력=12; 기본 마법위력=72; 태그=마법,주문증폭
+- AR-S0129-321 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4407: ID=WPN-0311; 무기명=설원의 마도서; 종류=마도서; 등급=희귀; 권장 레벨=28; 기본 물리위력=13; 기본 마법위력=77; 태그=마법,주문증폭
+- AR-S0129-322 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4408: ID=WPN-0312; 무기명=사막의 마도서; 종류=마도서; 등급=희귀; 권장 레벨=32; 기본 물리위력=14; 기본 마법위력=83; 태그=마법,주문증폭
+- AR-S0129-323 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4409: ID=WPN-0313; 무기명=늪지의 마도서; 종류=마도서; 등급=희귀; 권장 레벨=36; 기본 물리위력=15; 기본 마법위력=90; 태그=마법,주문증폭
+- AR-S0129-324 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4410: ID=WPN-0314; 무기명=화염의 마도서; 종류=마도서; 등급=희귀; 권장 레벨=40; 기본 물리위력=16; 기본 마법위력=97; 태그=마법,주문증폭
+- AR-S0129-325 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4411: ID=WPN-0315; 무기명=냉기의 마도서; 종류=마도서; 등급=희귀; 권장 레벨=45; 기본 물리위력=18; 기본 마법위력=105; 태그=마법,주문증폭
+- AR-S0129-326 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4412: ID=WPN-0316; 무기명=폭풍의 마도서; 종류=마도서; 등급=특급; 권장 레벨=50; 기본 물리위력=19; 기본 마법위력=113; 태그=마법,주문증폭
+- AR-S0129-327 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4413: ID=WPN-0317; 무기명=대지의 마도서; 종류=마도서; 등급=특급; 권장 레벨=55; 기본 물리위력=20; 기본 마법위력=122; 태그=마법,주문증폭
+- AR-S0129-328 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4414: ID=WPN-0318; 무기명=독니 마도서; 종류=마도서; 등급=특급; 권장 레벨=60; 기본 물리위력=22; 기본 마법위력=130; 태그=마법,주문증폭
+- AR-S0129-329 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4415: ID=WPN-0319; 무기명=성광의 마도서; 종류=마도서; 등급=특급; 권장 레벨=65; 기본 물리위력=23; 기본 마법위력=138; 태그=마법,주문증폭
+- AR-S0129-330 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4416: ID=WPN-0320; 무기명=그림자의 마도서; 종류=마도서; 등급=특급; 권장 레벨=70; 기본 물리위력=24; 기본 마법위력=147; 태그=마법,주문증폭
+- AR-S0129-331 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4417: ID=WPN-0321; 무기명=심연의 마도서; 종류=마도서; 등급=영웅; 권장 레벨=75; 기본 물리위력=26; 기본 마법위력=155; 태그=마법,주문증폭
+- AR-S0129-332 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4418: ID=WPN-0322; 무기명=용린 마도서; 종류=마도서; 등급=영웅; 권장 레벨=80; 기본 물리위력=27; 기본 마법위력=163; 태그=마법,주문증폭
+- AR-S0129-333 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4419: ID=WPN-0323; 무기명=별빛 마도서; 종류=마도서; 등급=영웅; 권장 레벨=85; 기본 물리위력=29; 기본 마법위력=172; 태그=마법,주문증폭
+- AR-S0129-334 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4420: ID=WPN-0324; 무기명=고대의 마도서; 종류=마도서; 등급=영웅; 권장 레벨=90; 기본 물리위력=30; 기본 마법위력=180; 태그=마법,주문증폭
+- AR-S0129-335 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4421: ID=WPN-0325; 무기명=왕실의 마도서; 종류=마도서; 등급=영웅; 권장 레벨=95; 기본 물리위력=31; 기본 마법위력=188; 태그=마법,주문증폭
+- AR-S0129-336 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4422: ID=WPN-0326; 무기명=영웅의 마도서; 종류=마도서; 등급=전설; 권장 레벨=105; 기본 물리위력=34; 기본 마법위력=205; 태그=마법,주문증폭
+- AR-S0129-337 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4423: ID=WPN-0327; 무기명=전설의 마도서; 종류=마도서; 등급=전설; 권장 레벨=115; 기본 물리위력=37; 기본 마법위력=222; 태그=마법,주문증폭
+- AR-S0129-338 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4424: ID=WPN-0328; 무기명=유물 마도서; 종류=마도서; 등급=전설; 권장 레벨=125; 기본 물리위력=40; 기본 마법위력=238; 태그=마법,주문증폭
+- AR-S0129-339 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4425: ID=WPN-0329; 무기명=성역의 마도서; 종류=마도서; 등급=유물; 권장 레벨=140; 기본 물리위력=44; 기본 마법위력=263; 태그=마법,주문증폭
+- AR-S0129-340 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4426: ID=WPN-0330; 무기명=종말의 마도서; 종류=마도서; 등급=신화; 권장 레벨=160; 기본 물리위력=49; 기본 마법위력=297; 태그=마법,주문증폭
+- AR-S0129-341 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4430: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-342 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4432: ID=WPN-0331; 무기명=훈련용 전투건틀릿; 종류=건틀릿; 등급=일반; 권장 레벨=1; 기본 물리위력=17; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-343 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4433: ID=WPN-0332; 무기명=낡은 전투건틀릿; 종류=건틀릿; 등급=일반; 권장 레벨=3; 기본 물리위력=19; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-344 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4434: ID=WPN-0333; 무기명=민병대 전투건틀릿; 종류=건틀릿; 등급=일반; 권장 레벨=5; 기본 물리위력=20; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-345 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4435: ID=WPN-0334; 무기명=철제 전투건틀릿; 종류=건틀릿; 등급=일반; 권장 레벨=8; 기본 물리위력=23; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-346 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4436: ID=WPN-0335; 무기명=용병대 전투건틀릿; 종류=건틀릿; 등급=일반; 권장 레벨=10; 기본 물리위력=25; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-347 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4437: ID=WPN-0336; 무기명=정제강 전투건틀릿; 종류=건틀릿; 등급=고급; 권장 레벨=12; 기본 물리위력=27; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-348 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4438: ID=WPN-0337; 무기명=은빛 전투건틀릿; 종류=건틀릿; 등급=고급; 권장 레벨=15; 기본 물리위력=29; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-349 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4439: ID=WPN-0338; 무기명=흑철 전투건틀릿; 종류=건틀릿; 등급=고급; 권장 레벨=18; 기본 물리위력=32; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-350 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4440: ID=WPN-0339; 무기명=왕국군 전투건틀릿; 종류=건틀릿; 등급=고급; 권장 레벨=22; 기본 물리위력=36; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-351 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4441: ID=WPN-0340; 무기명=사냥꾼 전투건틀릿; 종류=건틀릿; 등급=고급; 권장 레벨=25; 기본 물리위력=38; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-352 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4442: ID=WPN-0341; 무기명=설원의 전투건틀릿; 종류=건틀릿; 등급=희귀; 권장 레벨=28; 기본 물리위력=41; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-353 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4443: ID=WPN-0342; 무기명=사막의 전투건틀릿; 종류=건틀릿; 등급=희귀; 권장 레벨=32; 기본 물리위력=44; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-354 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4444: ID=WPN-0343; 무기명=늪지의 전투건틀릿; 종류=건틀릿; 등급=희귀; 권장 레벨=36; 기본 물리위력=48; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-355 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4445: ID=WPN-0344; 무기명=화염의 전투건틀릿; 종류=건틀릿; 등급=희귀; 권장 레벨=40; 기본 물리위력=52; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-356 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4446: ID=WPN-0345; 무기명=냉기의 전투건틀릿; 종류=건틀릿; 등급=희귀; 권장 레벨=45; 기본 물리위력=56; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-357 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4447: ID=WPN-0346; 무기명=폭풍의 전투건틀릿; 종류=건틀릿; 등급=특급; 권장 레벨=50; 기본 물리위력=60; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-358 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4448: ID=WPN-0347; 무기명=대지의 전투건틀릿; 종류=건틀릿; 등급=특급; 권장 레벨=55; 기본 물리위력=65; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-359 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4449: ID=WPN-0348; 무기명=독니 전투건틀릿; 종류=건틀릿; 등급=특급; 권장 레벨=60; 기본 물리위력=69; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-360 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4450: ID=WPN-0349; 무기명=성광의 전투건틀릿; 종류=건틀릿; 등급=특급; 권장 레벨=65; 기본 물리위력=74; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-361 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4451: ID=WPN-0350; 무기명=그림자의 전투건틀릿; 종류=건틀릿; 등급=특급; 권장 레벨=70; 기본 물리위력=78; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-362 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4452: ID=WPN-0351; 무기명=심연의 전투건틀릿; 종류=건틀릿; 등급=영웅; 권장 레벨=75; 기본 물리위력=83; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-363 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4453: ID=WPN-0352; 무기명=용린 전투건틀릿; 종류=건틀릿; 등급=영웅; 권장 레벨=80; 기본 물리위력=87; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-364 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4454: ID=WPN-0353; 무기명=별빛 전투건틀릿; 종류=건틀릿; 등급=영웅; 권장 레벨=85; 기본 물리위력=92; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-365 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4455: ID=WPN-0354; 무기명=고대의 전투건틀릿; 종류=건틀릿; 등급=영웅; 권장 레벨=90; 기본 물리위력=96; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-366 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4456: ID=WPN-0355; 무기명=왕실의 전투건틀릿; 종류=건틀릿; 등급=영웅; 권장 레벨=95; 기본 물리위력=100; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-367 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4457: ID=WPN-0356; 무기명=영웅의 전투건틀릿; 종류=건틀릿; 등급=전설; 권장 레벨=105; 기본 물리위력=109; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-368 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4458: ID=WPN-0357; 무기명=전설의 전투건틀릿; 종류=건틀릿; 등급=전설; 권장 레벨=115; 기본 물리위력=118; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-369 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4459: ID=WPN-0358; 무기명=유물 전투건틀릿; 종류=건틀릿; 등급=전설; 권장 레벨=125; 기본 물리위력=127; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-370 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4460: ID=WPN-0359; 무기명=성역의 전투건틀릿; 종류=건틀릿; 등급=유물; 권장 레벨=140; 기본 물리위력=140; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-371 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4461: ID=WPN-0360; 무기명=종말의 전투건틀릿; 종류=건틀릿; 등급=신화; 권장 레벨=160; 기본 물리위력=158; 기본 마법위력=0; 태그=격투,연타
+- AR-S0129-372 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4465: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-373 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4467: ID=WPN-0361; 무기명=훈련용 전투낫; 종류=낫; 등급=일반; 권장 레벨=1; 기본 물리위력=24; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-374 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4468: ID=WPN-0362; 무기명=낡은 전투낫; 종류=낫; 등급=일반; 권장 레벨=3; 기본 물리위력=27; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-375 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4469: ID=WPN-0363; 무기명=민병대 전투낫; 종류=낫; 등급=일반; 권장 레벨=5; 기본 물리위력=29; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-376 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4470: ID=WPN-0364; 무기명=철제 전투낫; 종류=낫; 등급=일반; 권장 레벨=8; 기본 물리위력=33; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-377 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4471: ID=WPN-0365; 무기명=용병대 전투낫; 종류=낫; 등급=일반; 권장 레벨=10; 기본 물리위력=36; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-378 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4472: ID=WPN-0366; 무기명=정제강 전투낫; 종류=낫; 등급=고급; 권장 레벨=12; 기본 물리위력=38; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-379 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4473: ID=WPN-0367; 무기명=은빛 전투낫; 종류=낫; 등급=고급; 권장 레벨=15; 기본 물리위력=42; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-380 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4474: ID=WPN-0368; 무기명=흑철 전투낫; 종류=낫; 등급=고급; 권장 레벨=18; 기본 물리위력=46; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-381 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4475: ID=WPN-0369; 무기명=왕국군 전투낫; 종류=낫; 등급=고급; 권장 레벨=22; 기본 물리위력=51; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-382 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4476: ID=WPN-0370; 무기명=사냥꾼 전투낫; 종류=낫; 등급=고급; 권장 레벨=25; 기본 물리위력=55; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-383 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4477: ID=WPN-0371; 무기명=설원의 전투낫; 종류=낫; 등급=희귀; 권장 레벨=28; 기본 물리위력=59; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-384 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4478: ID=WPN-0372; 무기명=사막의 전투낫; 종류=낫; 등급=희귀; 권장 레벨=32; 기본 물리위력=64; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-385 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4479: ID=WPN-0373; 무기명=늪지의 전투낫; 종류=낫; 등급=희귀; 권장 레벨=36; 기본 물리위력=69; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-386 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4480: ID=WPN-0374; 무기명=화염의 전투낫; 종류=낫; 등급=희귀; 권장 레벨=40; 기본 물리위력=74; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-387 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4481: ID=WPN-0375; 무기명=냉기의 전투낫; 종류=낫; 등급=희귀; 권장 레벨=45; 기본 물리위력=80; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-388 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4482: ID=WPN-0376; 무기명=폭풍의 전투낫; 종류=낫; 등급=특급; 권장 레벨=50; 기본 물리위력=87; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-389 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4483: ID=WPN-0377; 무기명=대지의 전투낫; 종류=낫; 등급=특급; 권장 레벨=55; 기본 물리위력=93; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-390 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4484: ID=WPN-0378; 무기명=독니 전투낫; 종류=낫; 등급=특급; 권장 레벨=60; 기본 물리위력=100; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-391 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4485: ID=WPN-0379; 무기명=성광의 전투낫; 종류=낫; 등급=특급; 권장 레벨=65; 기본 물리위력=106; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-392 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4486: ID=WPN-0380; 무기명=그림자의 전투낫; 종류=낫; 등급=특급; 권장 레벨=70; 기본 물리위력=112; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-393 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4487: ID=WPN-0381; 무기명=심연의 전투낫; 종류=낫; 등급=영웅; 권장 레벨=75; 기본 물리위력=119; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-394 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4488: ID=WPN-0382; 무기명=용린 전투낫; 종류=낫; 등급=영웅; 권장 레벨=80; 기본 물리위력=125; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-395 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4489: ID=WPN-0383; 무기명=별빛 전투낫; 종류=낫; 등급=영웅; 권장 레벨=85; 기본 물리위력=132; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-396 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4490: ID=WPN-0384; 무기명=고대의 전투낫; 종류=낫; 등급=영웅; 권장 레벨=90; 기본 물리위력=138; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-397 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4491: ID=WPN-0385; 무기명=왕실의 전투낫; 종류=낫; 등급=영웅; 권장 레벨=95; 기본 물리위력=144; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-398 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4492: ID=WPN-0386; 무기명=영웅의 전투낫; 종류=낫; 등급=전설; 권장 레벨=105; 기본 물리위력=157; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-399 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4493: ID=WPN-0387; 무기명=전설의 전투낫; 종류=낫; 등급=전설; 권장 레벨=115; 기본 물리위력=170; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-400 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4494: ID=WPN-0388; 무기명=유물 전투낫; 종류=낫; 등급=전설; 권장 레벨=125; 기본 물리위력=183; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-401 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4495: ID=WPN-0389; 무기명=성역의 전투낫; 종류=낫; 등급=유물; 권장 레벨=140; 기본 물리위력=202; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-402 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4496: ID=WPN-0390; 무기명=종말의 전투낫; 종류=낫; 등급=신화; 권장 레벨=160; 기본 물리위력=227; 기본 마법위력=0; 태그=베기,출혈
+- AR-S0129-403 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4500: ID=ID; 무기명=무기명; 종류=종류; 등급=등급; 권장 레벨=권장 레벨; 기본 물리위력=기본 물리위력; 기본 마법위력=기본 마법위력; 태그=태그
+- AR-S0129-404 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4502: ID=WPN-0391; 무기명=훈련용 가시채찍; 종류=채찍; 등급=일반; 권장 레벨=1; 기본 물리위력=16; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-405 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4503: ID=WPN-0392; 무기명=낡은 가시채찍; 종류=채찍; 등급=일반; 권장 레벨=3; 기본 물리위력=18; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-406 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4504: ID=WPN-0393; 무기명=민병대 가시채찍; 종류=채찍; 등급=일반; 권장 레벨=5; 기본 물리위력=19; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-407 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4505: ID=WPN-0394; 무기명=철제 가시채찍; 종류=채찍; 등급=일반; 권장 레벨=8; 기본 물리위력=22; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-408 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4506: ID=WPN-0395; 무기명=용병대 가시채찍; 종류=채찍; 등급=일반; 권장 레벨=10; 기본 물리위력=23; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-409 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4507: ID=WPN-0396; 무기명=정제강 가시채찍; 종류=채찍; 등급=고급; 권장 레벨=12; 기본 물리위력=25; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-410 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4508: ID=WPN-0397; 무기명=은빛 가시채찍; 종류=채찍; 등급=고급; 권장 레벨=15; 기본 물리위력=28; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-411 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4509: ID=WPN-0398; 무기명=흑철 가시채찍; 종류=채찍; 등급=고급; 권장 레벨=18; 기본 물리위력=30; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-412 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4510: ID=WPN-0399; 무기명=왕국군 가시채찍; 종류=채찍; 등급=고급; 권장 레벨=22; 기본 물리위력=33; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-413 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4511: ID=WPN-0400; 무기명=사냥꾼 가시채찍; 종류=채찍; 등급=고급; 권장 레벨=25; 기본 물리위력=36; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-414 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4512: ID=WPN-0401; 무기명=설원의 가시채찍; 종류=채찍; 등급=희귀; 권장 레벨=28; 기본 물리위력=38; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-415 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4513: ID=WPN-0402; 무기명=사막의 가시채찍; 종류=채찍; 등급=희귀; 권장 레벨=32; 기본 물리위력=42; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-416 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4514: ID=WPN-0403; 무기명=늪지의 가시채찍; 종류=채찍; 등급=희귀; 권장 레벨=36; 기본 물리위력=45; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-417 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4515: ID=WPN-0404; 무기명=화염의 가시채찍; 종류=채찍; 등급=희귀; 권장 레벨=40; 기본 물리위력=48; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-418 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4516: ID=WPN-0405; 무기명=냉기의 가시채찍; 종류=채찍; 등급=희귀; 권장 레벨=45; 기본 물리위력=52; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-419 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4517: ID=WPN-0406; 무기명=폭풍의 가시채찍; 종류=채찍; 등급=특급; 권장 레벨=50; 기본 물리위력=57; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-420 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4518: ID=WPN-0407; 무기명=대지의 가시채찍; 종류=채찍; 등급=특급; 권장 레벨=55; 기본 물리위력=61; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-421 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4519: ID=WPN-0408; 무기명=독니 가시채찍; 종류=채찍; 등급=특급; 권장 레벨=60; 기본 물리위력=65; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-422 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4520: ID=WPN-0409; 무기명=성광의 가시채찍; 종류=채찍; 등급=특급; 권장 레벨=65; 기본 물리위력=69; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-423 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4521: ID=WPN-0410; 무기명=그림자의 가시채찍; 종류=채찍; 등급=특급; 권장 레벨=70; 기본 물리위력=73; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-424 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4522: ID=WPN-0411; 무기명=심연의 가시채찍; 종류=채찍; 등급=영웅; 권장 레벨=75; 기본 물리위력=78; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-425 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4523: ID=WPN-0412; 무기명=용린 가시채찍; 종류=채찍; 등급=영웅; 권장 레벨=80; 기본 물리위력=82; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-426 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4524: ID=WPN-0413; 무기명=별빛 가시채찍; 종류=채찍; 등급=영웅; 권장 레벨=85; 기본 물리위력=86; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-427 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4525: ID=WPN-0414; 무기명=고대의 가시채찍; 종류=채찍; 등급=영웅; 권장 레벨=90; 기본 물리위력=90; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-428 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4526: ID=WPN-0415; 무기명=왕실의 가시채찍; 종류=채찍; 등급=영웅; 권장 레벨=95; 기본 물리위력=94; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-429 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4527: ID=WPN-0416; 무기명=영웅의 가시채찍; 종류=채찍; 등급=전설; 권장 레벨=105; 기본 물리위력=102; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-430 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4528: ID=WPN-0417; 무기명=전설의 가시채찍; 종류=채찍; 등급=전설; 권장 레벨=115; 기본 물리위력=111; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-431 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4529: ID=WPN-0418; 무기명=유물 가시채찍; 종류=채찍; 등급=전설; 권장 레벨=125; 기본 물리위력=119; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-432 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4530: ID=WPN-0419; 무기명=성역의 가시채찍; 종류=채찍; 등급=유물; 권장 레벨=140; 기본 물리위력=132; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0129-433 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0129` §129 무기 실제 데이터 420종 L4531: ID=WPN-0420; 무기명=종말의 가시채찍; 종류=채찍; 등급=신화; 권장 레벨=160; 기본 물리위력=148; 기본 마법위력=0; 태그=제어,출혈
+- AR-S0130-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4540: ID=ARM-0001; 장비명=누더기 투구; 슬롯=머리; 등급=일반; 권장 레벨=1; 기본 방어=7; 기본 마법방어=5; 중량=경량
+- AR-S0130-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4541: ID=ARM-0002; 장비명=가죽 투구; 슬롯=머리; 등급=일반; 권장 레벨=2; 기본 방어=8; 기본 마법방어=6; 중량=경량
+- AR-S0130-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4542: ID=ARM-0003; 장비명=경화가죽 투구; 슬롯=머리; 등급=일반; 권장 레벨=3; 기본 방어=8; 기본 마법방어=6; 중량=중량
+- AR-S0130-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4543: ID=ARM-0004; 장비명=사슬 투구; 슬롯=머리; 등급=일반; 권장 레벨=4; 기본 방어=8; 기본 마법방어=6; 중량=중량
+- AR-S0130-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4544: ID=ARM-0005; 장비명=철판 투구; 슬롯=머리; 등급=일반; 권장 레벨=5; 기본 방어=9; 기본 마법방어=6; 중량=중량
+- AR-S0130-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4545: ID=ARM-0006; 장비명=용병대의 투구; 슬롯=머리; 등급=일반; 권장 레벨=7; 기본 방어=9; 기본 마법방어=7; 중량=경량
+- AR-S0130-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4546: ID=ARM-0007; 장비명=정찰대의 투구; 슬롯=머리; 등급=고급; 권장 레벨=8; 기본 방어=10; 기본 마법방어=7; 중량=경량
+- AR-S0130-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4547: ID=ARM-0008; 장비명=왕국군의 투구; 슬롯=머리; 등급=고급; 권장 레벨=10; 기본 방어=10; 기본 마법방어=8; 중량=경량
+- AR-S0130-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4548: ID=ARM-0009; 장비명=기사단의 투구; 슬롯=머리; 등급=고급; 권장 레벨=12; 기본 방어=11; 기본 마법방어=8; 중량=중량
+- AR-S0130-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4549: ID=ARM-0010; 장비명=수호병의 투구; 슬롯=머리; 등급=고급; 권장 레벨=14; 기본 방어=12; 기본 마법방어=8; 중량=중량
+- AR-S0130-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4550: ID=ARM-0011; 장비명=설원의 투구; 슬롯=머리; 등급=고급; 권장 레벨=15; 기본 방어=12; 기본 마법방어=9; 중량=중량
+- AR-S0130-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4551: ID=ARM-0012; 장비명=사막의 투구; 슬롯=머리; 등급=고급; 권장 레벨=17; 기본 방어=13; 기본 마법방어=9; 중량=경량
+- AR-S0130-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4552: ID=ARM-0013; 장비명=늪지의 투구; 슬롯=머리; 등급=고급; 권장 레벨=20; 기본 방어=14; 기본 마법방어=10; 중량=경량
+- AR-S0130-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4553: ID=ARM-0014; 장비명=해안의 투구; 슬롯=머리; 등급=고급; 권장 레벨=22; 기본 방어=15; 기본 마법방어=10; 중량=경량
+- AR-S0130-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4554: ID=ARM-0015; 장비명=산악의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=24; 기본 방어=15; 기본 마법방어=11; 중량=중량
+- AR-S0130-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4555: ID=ARM-0016; 장비명=광산의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=26; 기본 방어=16; 기본 마법방어=12; 중량=중량
+- AR-S0130-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4556: ID=ARM-0017; 장비명=폐허의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=28; 기본 방어=17; 기본 마법방어=12; 중량=중량
+- AR-S0130-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4557: ID=ARM-0018; 장비명=황혼의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=31; 기본 방어=18; 기본 마법방어=13; 중량=경량
+- AR-S0130-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4558: ID=ARM-0019; 장비명=새벽의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=33; 기본 방어=19; 기본 마법방어=13; 중량=경량
+- AR-S0130-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4559: ID=ARM-0020; 장비명=밤그늘의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=35; 기본 방어=19; 기본 마법방어=14; 중량=경량
+- AR-S0130-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4560: ID=ARM-0021; 장비명=화염의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=38; 기본 방어=20; 기본 마법방어=14; 중량=중량
+- AR-S0130-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4561: ID=ARM-0022; 장비명=냉기의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=40; 기본 방어=21; 기본 마법방어=15; 중량=중량
+- AR-S0130-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4562: ID=ARM-0023; 장비명=폭풍의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=43; 기본 방어=22; 기본 마법방어=16; 중량=중량
+- AR-S0130-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4563: ID=ARM-0024; 장비명=번개의 투구; 슬롯=머리; 등급=희귀; 권장 레벨=46; 기본 방어=23; 기본 마법방어=16; 중량=경량
+- AR-S0130-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4564: ID=ARM-0025; 장비명=대지의 투구; 슬롯=머리; 등급=특급; 권장 레벨=48; 기본 방어=24; 기본 마법방어=17; 중량=경량
+- AR-S0130-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4565: ID=ARM-0026; 장비명=독안개의 투구; 슬롯=머리; 등급=특급; 권장 레벨=51; 기본 방어=25; 기본 마법방어=18; 중량=경량
+- AR-S0130-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4566: ID=ARM-0027; 장비명=성광의 투구; 슬롯=머리; 등급=특급; 권장 레벨=54; 기본 방어=26; 기본 마법방어=18; 중량=중량
+- AR-S0130-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4567: ID=ARM-0028; 장비명=암영의 투구; 슬롯=머리; 등급=특급; 권장 레벨=56; 기본 방어=27; 기본 마법방어=19; 중량=중량
+- AR-S0130-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4568: ID=ARM-0029; 장비명=마력의 투구; 슬롯=머리; 등급=특급; 권장 레벨=59; 기본 방어=28; 기본 마법방어=20; 중량=중량
+- AR-S0130-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4569: ID=ARM-0030; 장비명=정령의 투구; 슬롯=머리; 등급=특급; 권장 레벨=62; 기본 방어=29; 기본 마법방어=20; 중량=경량
+- AR-S0130-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4570: ID=ARM-0031; 장비명=흑철의 투구; 슬롯=머리; 등급=특급; 권장 레벨=65; 기본 방어=30; 기본 마법방어=21; 중량=경량
+- AR-S0130-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4571: ID=ARM-0032; 장비명=은강의 투구; 슬롯=머리; 등급=특급; 권장 레벨=68; 기본 방어=31; 기본 마법방어=22; 중량=경량
+- AR-S0130-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4572: ID=ARM-0033; 장비명=미스릴 투구; 슬롯=머리; 등급=특급; 권장 레벨=71; 기본 방어=32; 기본 마법방어=23; 중량=중량
+- AR-S0130-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4573: ID=ARM-0034; 장비명=아다만트 투구; 슬롯=머리; 등급=특급; 권장 레벨=74; 기본 방어=33; 기본 마법방어=24; 중량=중량
+- AR-S0130-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4574: ID=ARM-0035; 장비명=용린의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=77; 기본 방어=34; 기본 마법방어=24; 중량=중량
+- AR-S0130-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4575: ID=ARM-0036; 장비명=거인뼈의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=80; 기본 방어=35; 기본 마법방어=25; 중량=경량
+- AR-S0130-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4576: ID=ARM-0037; 장비명=악마가죽의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=83; 기본 방어=36; 기본 마법방어=26; 중량=경량
+- AR-S0130-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4577: ID=ARM-0038; 장비명=고대수의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=86; 기본 방어=37; 기본 마법방어=26; 중량=경량
+- AR-S0130-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4578: ID=ARM-0039; 장비명=별철의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=89; 기본 방어=38; 기본 마법방어=27; 중량=중량
+- AR-S0130-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4579: ID=ARM-0040; 장비명=월은의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=92; 기본 방어=39; 기본 마법방어=28; 중량=중량
+- AR-S0130-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4580: ID=ARM-0041; 장비명=고대의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=95; 기본 방어=40; 기본 마법방어=29; 중량=중량
+- AR-S0130-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4581: ID=ARM-0042; 장비명=왕실의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=98; 기본 방어=41; 기본 마법방어=30; 중량=경량
+- AR-S0130-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4582: ID=ARM-0043; 장비명=성역의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=101; 기본 방어=42; 기본 마법방어=30; 중량=경량
+- AR-S0130-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4583: ID=ARM-0044; 장비명=심연의 투구; 슬롯=머리; 등급=영웅; 권장 레벨=105; 기본 방어=44; 기본 마법방어=31; 중량=경량
+- AR-S0130-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4584: ID=ARM-0045; 장비명=천공의 투구; 슬롯=머리; 등급=전설; 권장 레벨=108; 기본 방어=45; 기본 마법방어=32; 중량=중량
+- AR-S0130-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4585: ID=ARM-0046; 장비명=지하왕국의 투구; 슬롯=머리; 등급=전설; 권장 레벨=111; 기본 방어=46; 기본 마법방어=33; 중량=중량
+- AR-S0130-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4586: ID=ARM-0047; 장비명=유목왕의 투구; 슬롯=머리; 등급=전설; 권장 레벨=115; 기본 방어=47; 기본 마법방어=34; 중량=중량
+- AR-S0130-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4587: ID=ARM-0048; 장비명=사제단의 투구; 슬롯=머리; 등급=전설; 권장 레벨=118; 기본 방어=48; 기본 마법방어=34; 중량=경량
+- AR-S0130-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4588: ID=ARM-0049; 장비명=마도원의 투구; 슬롯=머리; 등급=전설; 권장 레벨=121; 기본 방어=49; 기본 마법방어=35; 중량=경량
+- AR-S0130-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4589: ID=ARM-0050; 장비명=암살단의 투구; 슬롯=머리; 등급=전설; 권장 레벨=125; 기본 방어=51; 기본 마법방어=36; 중량=경량
+- AR-S0130-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4590: ID=ARM-0051; 장비명=영웅의 투구; 슬롯=머리; 등급=전설; 권장 레벨=128; 기본 방어=52; 기본 마법방어=37; 중량=중량
+- AR-S0130-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4591: ID=ARM-0052; 장비명=정복자의 투구; 슬롯=머리; 등급=전설; 권장 레벨=132; 기본 방어=53; 기본 마법방어=38; 중량=중량
+- AR-S0130-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4592: ID=ARM-0053; 장비명=수호성의 투구; 슬롯=머리; 등급=유물; 권장 레벨=135; 기본 방어=54; 기본 마법방어=39; 중량=중량
+- AR-S0130-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4593: ID=ARM-0054; 장비명=파멸의 투구; 슬롯=머리; 등급=유물; 권장 레벨=139; 기본 방어=56; 기본 마법방어=40; 중량=경량
+- AR-S0130-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4594: ID=ARM-0055; 장비명=불멸의 투구; 슬롯=머리; 등급=유물; 권장 레벨=142; 기본 방어=57; 기본 마법방어=40; 중량=경량
+- AR-S0130-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4595: ID=ARM-0056; 장비명=전설의 투구; 슬롯=머리; 등급=유물; 권장 레벨=146; 기본 방어=58; 기본 마법방어=42; 중량=경량
+- AR-S0130-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4596: ID=ARM-0057; 장비명=유물의 투구; 슬롯=머리; 등급=신화; 권장 레벨=149; 기본 방어=59; 기본 마법방어=42; 중량=중량
+- AR-S0130-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4597: ID=ARM-0058; 장비명=신화의 투구; 슬롯=머리; 등급=신화; 권장 레벨=153; 기본 방어=61; 기본 마법방어=43; 중량=중량
+- AR-S0130-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4598: ID=ARM-0059; 장비명=세계수의 투구; 슬롯=머리; 등급=신화; 권장 레벨=156; 기본 방어=62; 기본 마법방어=44; 중량=중량
+- AR-S0130-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4599: ID=ARM-0060; 장비명=종말의 투구; 슬롯=머리; 등급=신화; 권장 레벨=160; 기본 방어=63; 기본 마법방어=45; 중량=경량
+- AR-S0130-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4603: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4605: ID=ARM-0061; 장비명=누더기 갑옷; 슬롯=가슴; 등급=일반; 권장 레벨=1; 기본 방어=19; 기본 마법방어=12; 중량=경량
+- AR-S0130-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4606: ID=ARM-0062; 장비명=가죽 갑옷; 슬롯=가슴; 등급=일반; 권장 레벨=2; 기본 방어=20; 기본 마법방어=12; 중량=경량
+- AR-S0130-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4607: ID=ARM-0063; 장비명=경화가죽 갑옷; 슬롯=가슴; 등급=일반; 권장 레벨=3; 기본 방어=21; 기본 마법방어=13; 중량=중량
+- AR-S0130-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4608: ID=ARM-0064; 장비명=사슬 갑옷; 슬롯=가슴; 등급=일반; 권장 레벨=4; 기본 방어=22; 기본 마법방어=13; 중량=중량
+- AR-S0130-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4609: ID=ARM-0065; 장비명=철판 갑옷; 슬롯=가슴; 등급=일반; 권장 레벨=5; 기본 방어=22; 기본 마법방어=14; 중량=중량
+- AR-S0130-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4610: ID=ARM-0066; 장비명=용병대의 갑옷; 슬롯=가슴; 등급=일반; 권장 레벨=7; 기본 방어=24; 기본 마법방어=15; 중량=경량
+- AR-S0130-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4611: ID=ARM-0067; 장비명=정찰대의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=8; 기본 방어=25; 기본 마법방어=15; 중량=경량
+- AR-S0130-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4612: ID=ARM-0068; 장비명=왕국군의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=10; 기본 방어=27; 기본 마법방어=16; 중량=경량
+- AR-S0130-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4613: ID=ARM-0069; 장비명=기사단의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=12; 기본 방어=29; 기본 마법방어=18; 중량=중량
+- AR-S0130-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4614: ID=ARM-0070; 장비명=수호병의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=14; 기본 방어=31; 기본 마법방어=19; 중량=중량
+- AR-S0130-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4615: ID=ARM-0071; 장비명=설원의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=15; 기본 방어=32; 기본 마법방어=19; 중량=중량
+- AR-S0130-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4616: ID=ARM-0072; 장비명=사막의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=17; 기본 방어=33; 기본 마법방어=20; 중량=경량
+- AR-S0130-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4617: ID=ARM-0073; 장비명=늪지의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=20; 기본 방어=36; 기본 마법방어=22; 중량=경량
+- AR-S0130-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4618: ID=ARM-0074; 장비명=해안의 갑옷; 슬롯=가슴; 등급=고급; 권장 레벨=22; 기본 방어=38; 기본 마법방어=23; 중량=경량
+- AR-S0130-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4619: ID=ARM-0075; 장비명=산악의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=24; 기본 방어=40; 기본 마법방어=24; 중량=중량
+- AR-S0130-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4620: ID=ARM-0076; 장비명=광산의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=26; 기본 방어=41; 기본 마법방어=25; 중량=중량
+- AR-S0130-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4621: ID=ARM-0077; 장비명=폐허의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=28; 기본 방어=43; 기본 마법방어=26; 중량=중량
+- AR-S0130-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4622: ID=ARM-0078; 장비명=황혼의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=31; 기본 방어=46; 기본 마법방어=28; 중량=경량
+- AR-S0130-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4623: ID=ARM-0079; 장비명=새벽의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=33; 기본 방어=48; 기본 마법방어=29; 중량=경량
+- AR-S0130-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4624: ID=ARM-0080; 장비명=밤그늘의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=35; 기본 방어=50; 기본 마법방어=30; 중량=경량
+- AR-S0130-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4625: ID=ARM-0081; 장비명=화염의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=38; 기본 방어=52; 기본 마법방어=32; 중량=중량
+- AR-S0130-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4626: ID=ARM-0082; 장비명=냉기의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=40; 기본 방어=54; 기본 마법방어=33; 중량=중량
+- AR-S0130-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4627: ID=ARM-0083; 장비명=폭풍의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=43; 기본 방어=57; 기본 마법방어=35; 중량=중량
+- AR-S0130-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4628: ID=ARM-0084; 장비명=번개의 갑옷; 슬롯=가슴; 등급=희귀; 권장 레벨=46; 기본 방어=59; 기본 마법방어=36; 중량=경량
+- AR-S0130-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4629: ID=ARM-0085; 장비명=대지의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=48; 기본 방어=61; 기본 마법방어=37; 중량=경량
+- AR-S0130-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4630: ID=ARM-0086; 장비명=독안개의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=51; 기본 방어=64; 기본 마법방어=39; 중량=경량
+- AR-S0130-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4631: ID=ARM-0087; 장비명=성광의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=54; 기본 방어=67; 기본 마법방어=41; 중량=중량
+- AR-S0130-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4632: ID=ARM-0088; 장비명=암영의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=56; 기본 방어=68; 기본 마법방어=42; 중량=중량
+- AR-S0130-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4633: ID=ARM-0089; 장비명=마력의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=59; 기본 방어=71; 기본 마법방어=43; 중량=중량
+- AR-S0130-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4634: ID=ARM-0090; 장비명=정령의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=62; 기본 방어=74; 기본 마법방어=45; 중량=경량
+- AR-S0130-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4635: ID=ARM-0091; 장비명=흑철의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=65; 기본 방어=76; 기본 마법방어=47; 중량=경량
+- AR-S0130-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4636: ID=ARM-0092; 장비명=은강의 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=68; 기본 방어=79; 기본 마법방어=48; 중량=경량
+- AR-S0130-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4637: ID=ARM-0093; 장비명=미스릴 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=71; 기본 방어=82; 기본 마법방어=50; 중량=중량
+- AR-S0130-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4638: ID=ARM-0094; 장비명=아다만트 갑옷; 슬롯=가슴; 등급=특급; 권장 레벨=74; 기본 방어=85; 기본 마법방어=52; 중량=중량
+- AR-S0130-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4639: ID=ARM-0095; 장비명=용린의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=77; 기본 방어=87; 기본 마법방어=53; 중량=중량
+- AR-S0130-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4640: ID=ARM-0096; 장비명=거인뼈의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=80; 기본 방어=90; 기본 마법방어=55; 중량=경량
+- AR-S0130-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4641: ID=ARM-0097; 장비명=악마가죽의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=83; 기본 방어=93; 기본 마법방어=57; 중량=경량
+- AR-S0130-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4642: ID=ARM-0098; 장비명=고대수의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=86; 기본 방어=95; 기본 마법방어=58; 중량=경량
+- AR-S0130-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4643: ID=ARM-0099; 장비명=별철의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=89; 기본 방어=98; 기본 마법방어=60; 중량=중량
+- AR-S0130-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4644: ID=ARM-0100; 장비명=월은의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=92; 기본 방어=101; 기본 마법방어=62; 중량=중량
+- AR-S0130-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4645: ID=ARM-0101; 장비명=고대의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=95; 기본 방어=104; 기본 마법방어=63; 중량=중량
+- AR-S0130-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4646: ID=ARM-0102; 장비명=왕실의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=98; 기본 방어=106; 기본 마법방어=65; 중량=경량
+- AR-S0130-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4647: ID=ARM-0103; 장비명=성역의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=101; 기본 방어=109; 기본 마법방어=67; 중량=경량
+- AR-S0130-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4648: ID=ARM-0104; 장비명=심연의 갑옷; 슬롯=가슴; 등급=영웅; 권장 레벨=105; 기본 방어=112; 기본 마법방어=69; 중량=경량
+- AR-S0130-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4649: ID=ARM-0105; 장비명=천공의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=108; 기본 방어=115; 기본 마법방어=70; 중량=중량
+- AR-S0130-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4650: ID=ARM-0106; 장비명=지하왕국의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=111; 기본 방어=118; 기본 마법방어=72; 중량=중량
+- AR-S0130-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4651: ID=ARM-0107; 장비명=유목왕의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=115; 기본 방어=122; 기본 마법방어=74; 중량=중량
+- AR-S0130-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4652: ID=ARM-0108; 장비명=사제단의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=118; 기본 방어=124; 기본 마법방어=76; 중량=경량
+- AR-S0130-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4653: ID=ARM-0109; 장비명=마도원의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=121; 기본 방어=127; 기본 마법방어=78; 중량=경량
+- AR-S0130-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4654: ID=ARM-0110; 장비명=암살단의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=125; 기본 방어=130; 기본 마법방어=80; 중량=경량
+- AR-S0130-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4655: ID=ARM-0111; 장비명=영웅의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=128; 기본 방어=133; 기본 마법방어=81; 중량=중량
+- AR-S0130-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4656: ID=ARM-0112; 장비명=정복자의 갑옷; 슬롯=가슴; 등급=전설; 권장 레벨=132; 기본 방어=137; 기본 마법방어=84; 중량=중량
+- AR-S0130-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4657: ID=ARM-0113; 장비명=수호성의 갑옷; 슬롯=가슴; 등급=유물; 권장 레벨=135; 기본 방어=140; 기본 마법방어=85; 중량=중량
+- AR-S0130-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4658: ID=ARM-0114; 장비명=파멸의 갑옷; 슬롯=가슴; 등급=유물; 권장 레벨=139; 기본 방어=143; 기본 마법방어=87; 중량=경량
+- AR-S0130-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4659: ID=ARM-0115; 장비명=불멸의 갑옷; 슬롯=가슴; 등급=유물; 권장 레벨=142; 기본 방어=146; 기본 마법방어=89; 중량=경량
+- AR-S0130-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4660: ID=ARM-0116; 장비명=전설의 갑옷; 슬롯=가슴; 등급=유물; 권장 레벨=146; 기본 방어=149; 기본 마법방어=91; 중량=경량
+- AR-S0130-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4661: ID=ARM-0117; 장비명=유물의 갑옷; 슬롯=가슴; 등급=신화; 권장 레벨=149; 기본 방어=152; 기본 마법방어=93; 중량=중량
+- AR-S0130-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4662: ID=ARM-0118; 장비명=신화의 갑옷; 슬롯=가슴; 등급=신화; 권장 레벨=153; 기본 방어=156; 기본 마법방어=95; 중량=중량
+- AR-S0130-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4663: ID=ARM-0119; 장비명=세계수의 갑옷; 슬롯=가슴; 등급=신화; 권장 레벨=156; 기본 방어=158; 기본 마법방어=97; 중량=중량
+- AR-S0130-121 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4664: ID=ARM-0120; 장비명=종말의 갑옷; 슬롯=가슴; 등급=신화; 권장 레벨=160; 기본 방어=162; 기본 마법방어=99; 중량=경량
+- AR-S0130-122 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4668: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-123 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4670: ID=ARM-0121; 장비명=누더기 견갑; 슬롯=어깨; 등급=일반; 권장 레벨=1; 기본 방어=8; 기본 마법방어=5; 중량=경량
+- AR-S0130-124 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4671: ID=ARM-0122; 장비명=가죽 견갑; 슬롯=어깨; 등급=일반; 권장 레벨=2; 기본 방어=9; 기본 마법방어=6; 중량=경량
+- AR-S0130-125 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4672: ID=ARM-0123; 장비명=경화가죽 견갑; 슬롯=어깨; 등급=일반; 권장 레벨=3; 기본 방어=9; 기본 마법방어=6; 중량=중량
+- AR-S0130-126 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4673: ID=ARM-0124; 장비명=사슬 견갑; 슬롯=어깨; 등급=일반; 권장 레벨=4; 기본 방어=10; 기본 마법방어=6; 중량=중량
+- AR-S0130-127 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4674: ID=ARM-0125; 장비명=철판 견갑; 슬롯=어깨; 등급=일반; 권장 레벨=5; 기본 방어=10; 기본 마법방어=6; 중량=중량
+- AR-S0130-128 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4675: ID=ARM-0126; 장비명=용병대의 견갑; 슬롯=어깨; 등급=일반; 권장 레벨=7; 기본 방어=11; 기본 마법방어=7; 중량=경량
+- AR-S0130-129 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4676: ID=ARM-0127; 장비명=정찰대의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=8; 기본 방어=11; 기본 마법방어=7; 중량=경량
+- AR-S0130-130 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4677: ID=ARM-0128; 장비명=왕국군의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=10; 기본 방어=12; 기본 마법방어=8; 중량=경량
+- AR-S0130-131 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4678: ID=ARM-0129; 장비명=기사단의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=12; 기본 방어=13; 기본 마법방어=8; 중량=중량
+- AR-S0130-132 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4679: ID=ARM-0130; 장비명=수호병의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=14; 기본 방어=14; 기본 마법방어=8; 중량=중량
+- AR-S0130-133 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4680: ID=ARM-0131; 장비명=설원의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=15; 기본 방어=14; 기본 마법방어=9; 중량=중량
+- AR-S0130-134 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4681: ID=ARM-0132; 장비명=사막의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=17; 기본 방어=15; 기본 마법방어=9; 중량=경량
+- AR-S0130-135 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4682: ID=ARM-0133; 장비명=늪지의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=20; 기본 방어=16; 기본 마법방어=10; 중량=경량
+- AR-S0130-136 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4683: ID=ARM-0134; 장비명=해안의 견갑; 슬롯=어깨; 등급=고급; 권장 레벨=22; 기본 방어=17; 기본 마법방어=10; 중량=경량
+- AR-S0130-137 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4684: ID=ARM-0135; 장비명=산악의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=24; 기본 방어=18; 기본 마법방어=11; 중량=중량
+- AR-S0130-138 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4685: ID=ARM-0136; 장비명=광산의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=26; 기본 방어=18; 기본 마법방어=12; 중량=중량
+- AR-S0130-139 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4686: ID=ARM-0137; 장비명=폐허의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=28; 기본 방어=19; 기본 마법방어=12; 중량=중량
+- AR-S0130-140 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4687: ID=ARM-0138; 장비명=황혼의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=31; 기본 방어=20; 기본 마법방어=13; 중량=경량
+- AR-S0130-141 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4688: ID=ARM-0139; 장비명=새벽의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=33; 기본 방어=21; 기본 마법방어=13; 중량=경량
+- AR-S0130-142 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4689: ID=ARM-0140; 장비명=밤그늘의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=35; 기본 방어=22; 기본 마법방어=14; 중량=경량
+- AR-S0130-143 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4690: ID=ARM-0141; 장비명=화염의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=38; 기본 방어=23; 기본 마법방어=14; 중량=중량
+- AR-S0130-144 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4691: ID=ARM-0142; 장비명=냉기의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=40; 기본 방어=24; 기본 마법방어=15; 중량=중량
+- AR-S0130-145 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4692: ID=ARM-0143; 장비명=폭풍의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=43; 기본 방어=25; 기본 마법방어=16; 중량=중량
+- AR-S0130-146 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4693: ID=ARM-0144; 장비명=번개의 견갑; 슬롯=어깨; 등급=희귀; 권장 레벨=46; 기본 방어=26; 기본 마법방어=16; 중량=경량
+- AR-S0130-147 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4694: ID=ARM-0145; 장비명=대지의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=48; 기본 방어=27; 기본 마법방어=17; 중량=경량
+- AR-S0130-148 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4695: ID=ARM-0146; 장비명=독안개의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=51; 기본 방어=28; 기본 마법방어=18; 중량=경량
+- AR-S0130-149 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4696: ID=ARM-0147; 장비명=성광의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=54; 기본 방어=30; 기본 마법방어=18; 중량=중량
+- AR-S0130-150 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4697: ID=ARM-0148; 장비명=암영의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=56; 기본 방어=30; 기본 마법방어=19; 중량=중량
+- AR-S0130-151 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4698: ID=ARM-0149; 장비명=마력의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=59; 기본 방어=32; 기본 마법방어=20; 중량=중량
+- AR-S0130-152 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4699: ID=ARM-0150; 장비명=정령의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=62; 기본 방어=33; 기본 마법방어=20; 중량=경량
+- AR-S0130-153 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4700: ID=ARM-0151; 장비명=흑철의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=65; 기본 방어=34; 기본 마법방어=21; 중량=경량
+- AR-S0130-154 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4701: ID=ARM-0152; 장비명=은강의 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=68; 기본 방어=35; 기본 마법방어=22; 중량=경량
+- AR-S0130-155 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4702: ID=ARM-0153; 장비명=미스릴 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=71; 기본 방어=36; 기본 마법방어=23; 중량=중량
+- AR-S0130-156 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4703: ID=ARM-0154; 장비명=아다만트 견갑; 슬롯=어깨; 등급=특급; 권장 레벨=74; 기본 방어=38; 기본 마법방어=24; 중량=중량
+- AR-S0130-157 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4704: ID=ARM-0155; 장비명=용린의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=77; 기본 방어=39; 기본 마법방어=24; 중량=중량
+- AR-S0130-158 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4705: ID=ARM-0156; 장비명=거인뼈의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=80; 기본 방어=40; 기본 마법방어=25; 중량=경량
+- AR-S0130-159 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4706: ID=ARM-0157; 장비명=악마가죽의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=83; 기본 방어=41; 기본 마법방어=26; 중량=경량
+- AR-S0130-160 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4707: ID=ARM-0158; 장비명=고대수의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=86; 기본 방어=42; 기본 마법방어=26; 중량=경량
+- AR-S0130-161 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4708: ID=ARM-0159; 장비명=별철의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=89; 기본 방어=44; 기본 마법방어=27; 중량=중량
+- AR-S0130-162 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4709: ID=ARM-0160; 장비명=월은의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=92; 기본 방어=45; 기본 마법방어=28; 중량=중량
+- AR-S0130-163 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4710: ID=ARM-0161; 장비명=고대의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=95; 기본 방어=46; 기본 마법방어=29; 중량=중량
+- AR-S0130-164 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4711: ID=ARM-0162; 장비명=왕실의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=98; 기본 방어=47; 기본 마법방어=30; 중량=경량
+- AR-S0130-165 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4712: ID=ARM-0163; 장비명=성역의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=101; 기본 방어=48; 기본 마법방어=30; 중량=경량
+- AR-S0130-166 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4713: ID=ARM-0164; 장비명=심연의 견갑; 슬롯=어깨; 등급=영웅; 권장 레벨=105; 기본 방어=50; 기본 마법방어=31; 중량=경량
+- AR-S0130-167 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4714: ID=ARM-0165; 장비명=천공의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=108; 기본 방어=51; 기본 마법방어=32; 중량=중량
+- AR-S0130-168 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4715: ID=ARM-0166; 장비명=지하왕국의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=111; 기본 방어=52; 기본 마법방어=33; 중량=중량
+- AR-S0130-169 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4716: ID=ARM-0167; 장비명=유목왕의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=115; 기본 방어=54; 기본 마법방어=34; 중량=중량
+- AR-S0130-170 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4717: ID=ARM-0168; 장비명=사제단의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=118; 기본 방어=55; 기본 마법방어=34; 중량=경량
+- AR-S0130-171 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4718: ID=ARM-0169; 장비명=마도원의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=121; 기본 방어=56; 기본 마법방어=35; 중량=경량
+- AR-S0130-172 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4719: ID=ARM-0170; 장비명=암살단의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=125; 기본 방어=58; 기본 마법방어=36; 중량=경량
+- AR-S0130-173 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4720: ID=ARM-0171; 장비명=영웅의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=128; 기본 방어=59; 기본 마법방어=37; 중량=중량
+- AR-S0130-174 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4721: ID=ARM-0172; 장비명=정복자의 견갑; 슬롯=어깨; 등급=전설; 권장 레벨=132; 기본 방어=61; 기본 마법방어=38; 중량=중량
+- AR-S0130-175 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4722: ID=ARM-0173; 장비명=수호성의 견갑; 슬롯=어깨; 등급=유물; 권장 레벨=135; 기본 방어=62; 기본 마법방어=39; 중량=중량
+- AR-S0130-176 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4723: ID=ARM-0174; 장비명=파멸의 견갑; 슬롯=어깨; 등급=유물; 권장 레벨=139; 기본 방어=64; 기본 마법방어=40; 중량=경량
+- AR-S0130-177 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4724: ID=ARM-0175; 장비명=불멸의 견갑; 슬롯=어깨; 등급=유물; 권장 레벨=142; 기본 방어=65; 기본 마법방어=40; 중량=경량
+- AR-S0130-178 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4725: ID=ARM-0176; 장비명=전설의 견갑; 슬롯=어깨; 등급=유물; 권장 레벨=146; 기본 방어=66; 기본 마법방어=42; 중량=경량
+- AR-S0130-179 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4726: ID=ARM-0177; 장비명=유물의 견갑; 슬롯=어깨; 등급=신화; 권장 레벨=149; 기본 방어=68; 기본 마법방어=42; 중량=중량
+- AR-S0130-180 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4727: ID=ARM-0178; 장비명=신화의 견갑; 슬롯=어깨; 등급=신화; 권장 레벨=153; 기본 방어=69; 기본 마법방어=43; 중량=중량
+- AR-S0130-181 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4728: ID=ARM-0179; 장비명=세계수의 견갑; 슬롯=어깨; 등급=신화; 권장 레벨=156; 기본 방어=70; 기본 마법방어=44; 중량=중량
+- AR-S0130-182 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4729: ID=ARM-0180; 장비명=종말의 견갑; 슬롯=어깨; 등급=신화; 권장 레벨=160; 기본 방어=72; 기본 마법방어=45; 중량=경량
+- AR-S0130-183 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4733: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-184 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4735: ID=ARM-0181; 장비명=누더기 장갑; 슬롯=손; 등급=일반; 권장 레벨=1; 기본 방어=6; 기본 마법방어=4; 중량=경량
+- AR-S0130-185 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4736: ID=ARM-0182; 장비명=가죽 장갑; 슬롯=손; 등급=일반; 권장 레벨=2; 기본 방어=7; 기본 마법방어=4; 중량=경량
+- AR-S0130-186 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4737: ID=ARM-0183; 장비명=경화가죽 장갑; 슬롯=손; 등급=일반; 권장 레벨=3; 기본 방어=7; 기본 마법방어=5; 중량=중량
+- AR-S0130-187 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4738: ID=ARM-0184; 장비명=사슬 장갑; 슬롯=손; 등급=일반; 권장 레벨=4; 기본 방어=7; 기본 마법방어=5; 중량=중량
+- AR-S0130-188 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4739: ID=ARM-0185; 장비명=철판 장갑; 슬롯=손; 등급=일반; 권장 레벨=5; 기본 방어=8; 기본 마법방어=5; 중량=중량
+- AR-S0130-189 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4740: ID=ARM-0186; 장비명=용병대의 장갑; 슬롯=손; 등급=일반; 권장 레벨=7; 기본 방어=8; 기본 마법방어=5; 중량=경량
+- AR-S0130-190 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4741: ID=ARM-0187; 장비명=정찰대의 장갑; 슬롯=손; 등급=고급; 권장 레벨=8; 기본 방어=8; 기본 마법방어=6; 중량=경량
+- AR-S0130-191 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4742: ID=ARM-0188; 장비명=왕국군의 장갑; 슬롯=손; 등급=고급; 권장 레벨=10; 기본 방어=9; 기본 마법방어=6; 중량=경량
+- AR-S0130-192 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4743: ID=ARM-0189; 장비명=기사단의 장갑; 슬롯=손; 등급=고급; 권장 레벨=12; 기본 방어=10; 기본 마법방어=6; 중량=중량
+- AR-S0130-193 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4744: ID=ARM-0190; 장비명=수호병의 장갑; 슬롯=손; 등급=고급; 권장 레벨=14; 기본 방어=10; 기본 마법방어=7; 중량=중량
+- AR-S0130-194 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4745: ID=ARM-0191; 장비명=설원의 장갑; 슬롯=손; 등급=고급; 권장 레벨=15; 기본 방어=10; 기본 마법방어=7; 중량=중량
+- AR-S0130-195 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4746: ID=ARM-0192; 장비명=사막의 장갑; 슬롯=손; 등급=고급; 권장 레벨=17; 기본 방어=11; 기본 마법방어=7; 중량=경량
+- AR-S0130-196 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4747: ID=ARM-0193; 장비명=늪지의 장갑; 슬롯=손; 등급=고급; 권장 레벨=20; 기본 방어=12; 기본 마법방어=8; 중량=경량
+- AR-S0130-197 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4748: ID=ARM-0194; 장비명=해안의 장갑; 슬롯=손; 등급=고급; 권장 레벨=22; 기본 방어=13; 기본 마법방어=8; 중량=경량
+- AR-S0130-198 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4749: ID=ARM-0195; 장비명=산악의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=24; 기본 방어=13; 기본 마법방어=9; 중량=중량
+- AR-S0130-199 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4750: ID=ARM-0196; 장비명=광산의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=26; 기본 방어=14; 기본 마법방어=9; 중량=중량
+- AR-S0130-200 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4751: ID=ARM-0197; 장비명=폐허의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=28; 기본 방어=14; 기본 마법방어=10; 중량=중량
+- AR-S0130-201 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4752: ID=ARM-0198; 장비명=황혼의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=31; 기본 방어=15; 기본 마법방어=10; 중량=경량
+- AR-S0130-202 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4753: ID=ARM-0199; 장비명=새벽의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=33; 기본 방어=16; 기본 마법방어=11; 중량=경량
+- AR-S0130-203 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4754: ID=ARM-0200; 장비명=밤그늘의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=35; 기본 방어=16; 기본 마법방어=11; 중량=경량
+- AR-S0130-204 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4755: ID=ARM-0201; 장비명=화염의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=38; 기본 방어=17; 기본 마법방어=12; 중량=중량
+- AR-S0130-205 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4756: ID=ARM-0202; 장비명=냉기의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=40; 기본 방어=18; 기본 마법방어=12; 중량=중량
+- AR-S0130-206 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4757: ID=ARM-0203; 장비명=폭풍의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=43; 기본 방어=19; 기본 마법방어=13; 중량=중량
+- AR-S0130-207 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4758: ID=ARM-0204; 장비명=번개의 장갑; 슬롯=손; 등급=희귀; 권장 레벨=46; 기본 방어=20; 기본 마법방어=13; 중량=경량
+- AR-S0130-208 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4759: ID=ARM-0205; 장비명=대지의 장갑; 슬롯=손; 등급=특급; 권장 레벨=48; 기본 방어=20; 기본 마법방어=14; 중량=경량
+- AR-S0130-209 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4760: ID=ARM-0206; 장비명=독안개의 장갑; 슬롯=손; 등급=특급; 권장 레벨=51; 기본 방어=21; 기본 마법방어=14; 중량=경량
+- AR-S0130-210 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4761: ID=ARM-0207; 장비명=성광의 장갑; 슬롯=손; 등급=특급; 권장 레벨=54; 기본 방어=22; 기본 마법방어=15; 중량=중량
+- AR-S0130-211 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4762: ID=ARM-0208; 장비명=암영의 장갑; 슬롯=손; 등급=특급; 권장 레벨=56; 기본 방어=23; 기본 마법방어=15; 중량=중량
+- AR-S0130-212 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4763: ID=ARM-0209; 장비명=마력의 장갑; 슬롯=손; 등급=특급; 권장 레벨=59; 기본 방어=24; 기본 마법방어=16; 중량=중량
+- AR-S0130-213 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4764: ID=ARM-0210; 장비명=정령의 장갑; 슬롯=손; 등급=특급; 권장 레벨=62; 기본 방어=25; 기본 마법방어=16; 중량=경량
+- AR-S0130-214 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4765: ID=ARM-0211; 장비명=흑철의 장갑; 슬롯=손; 등급=특급; 권장 레벨=65; 기본 방어=26; 기본 마법방어=17; 중량=경량
+- AR-S0130-215 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4766: ID=ARM-0212; 장비명=은강의 장갑; 슬롯=손; 등급=특급; 권장 레벨=68; 기본 방어=26; 기본 마법방어=18; 중량=경량
+- AR-S0130-216 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4767: ID=ARM-0213; 장비명=미스릴 장갑; 슬롯=손; 등급=특급; 권장 레벨=71; 기본 방어=27; 기본 마법방어=18; 중량=중량
+- AR-S0130-217 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4768: ID=ARM-0214; 장비명=아다만트 장갑; 슬롯=손; 등급=특급; 권장 레벨=74; 기본 방어=28; 기본 마법방어=19; 중량=중량
+- AR-S0130-218 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4769: ID=ARM-0215; 장비명=용린의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=77; 기본 방어=29; 기본 마법방어=19; 중량=중량
+- AR-S0130-219 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4770: ID=ARM-0216; 장비명=거인뼈의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=80; 기본 방어=30; 기본 마법방어=20; 중량=경량
+- AR-S0130-220 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4771: ID=ARM-0217; 장비명=악마가죽의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=83; 기본 방어=31; 기본 마법방어=21; 중량=경량
+- AR-S0130-221 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4772: ID=ARM-0218; 장비명=고대수의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=86; 기본 방어=32; 기본 마법방어=21; 중량=경량
+- AR-S0130-222 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4773: ID=ARM-0219; 장비명=별철의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=89; 기본 방어=33; 기본 마법방어=22; 중량=중량
+- AR-S0130-223 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4774: ID=ARM-0220; 장비명=월은의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=92; 기본 방어=34; 기본 마법방어=22; 중량=중량
+- AR-S0130-224 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4775: ID=ARM-0221; 장비명=고대의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=95; 기본 방어=34; 기본 마법방어=23; 중량=중량
+- AR-S0130-225 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4776: ID=ARM-0222; 장비명=왕실의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=98; 기본 방어=35; 기본 마법방어=24; 중량=경량
+- AR-S0130-226 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4777: ID=ARM-0223; 장비명=성역의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=101; 기본 방어=36; 기본 마법방어=24; 중량=경량
+- AR-S0130-227 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4778: ID=ARM-0224; 장비명=심연의 장갑; 슬롯=손; 등급=영웅; 권장 레벨=105; 기본 방어=38; 기본 마법방어=25; 중량=경량
+- AR-S0130-228 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4779: ID=ARM-0225; 장비명=천공의 장갑; 슬롯=손; 등급=전설; 권장 레벨=108; 기본 방어=38; 기본 마법방어=26; 중량=중량
+- AR-S0130-229 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4780: ID=ARM-0226; 장비명=지하왕국의 장갑; 슬롯=손; 등급=전설; 권장 레벨=111; 기본 방어=39; 기본 마법방어=26; 중량=중량
+- AR-S0130-230 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4781: ID=ARM-0227; 장비명=유목왕의 장갑; 슬롯=손; 등급=전설; 권장 레벨=115; 기본 방어=40; 기본 마법방어=27; 중량=중량
+- AR-S0130-231 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4782: ID=ARM-0228; 장비명=사제단의 장갑; 슬롯=손; 등급=전설; 권장 레벨=118; 기본 방어=41; 기본 마법방어=28; 중량=경량
+- AR-S0130-232 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4783: ID=ARM-0229; 장비명=마도원의 장갑; 슬롯=손; 등급=전설; 권장 레벨=121; 기본 방어=42; 기본 마법방어=28; 중량=경량
+- AR-S0130-233 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4784: ID=ARM-0230; 장비명=암살단의 장갑; 슬롯=손; 등급=전설; 권장 레벨=125; 기본 방어=44; 기본 마법방어=29; 중량=경량
+- AR-S0130-234 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4785: ID=ARM-0231; 장비명=영웅의 장갑; 슬롯=손; 등급=전설; 권장 레벨=128; 기본 방어=44; 기본 마법방어=30; 중량=중량
+- AR-S0130-235 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4786: ID=ARM-0232; 장비명=정복자의 장갑; 슬롯=손; 등급=전설; 권장 레벨=132; 기본 방어=46; 기본 마법방어=30; 중량=중량
+- AR-S0130-236 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4787: ID=ARM-0233; 장비명=수호성의 장갑; 슬롯=손; 등급=유물; 권장 레벨=135; 기본 방어=46; 기본 마법방어=31; 중량=중량
+- AR-S0130-237 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4788: ID=ARM-0234; 장비명=파멸의 장갑; 슬롯=손; 등급=유물; 권장 레벨=139; 기본 방어=48; 기본 마법방어=32; 중량=경량
+- AR-S0130-238 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4789: ID=ARM-0235; 장비명=불멸의 장갑; 슬롯=손; 등급=유물; 권장 레벨=142; 기본 방어=49; 기본 마법방어=32; 중량=경량
+- AR-S0130-239 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4790: ID=ARM-0236; 장비명=전설의 장갑; 슬롯=손; 등급=유물; 권장 레벨=146; 기본 방어=50; 기본 마법방어=33; 중량=경량
+- AR-S0130-240 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4791: ID=ARM-0237; 장비명=유물의 장갑; 슬롯=손; 등급=신화; 권장 레벨=149; 기본 방어=51; 기본 마법방어=34; 중량=중량
+- AR-S0130-241 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4792: ID=ARM-0238; 장비명=신화의 장갑; 슬롯=손; 등급=신화; 권장 레벨=153; 기본 방어=52; 기본 마법방어=35; 중량=중량
+- AR-S0130-242 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4793: ID=ARM-0239; 장비명=세계수의 장갑; 슬롯=손; 등급=신화; 권장 레벨=156; 기본 방어=53; 기본 마법방어=35; 중량=중량
+- AR-S0130-243 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4794: ID=ARM-0240; 장비명=종말의 장갑; 슬롯=손; 등급=신화; 권장 레벨=160; 기본 방어=54; 기본 마법방어=36; 중량=경량
+- AR-S0130-244 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4798: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-245 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4800: ID=ARM-0241; 장비명=누더기 허리띠; 슬롯=허리; 등급=일반; 권장 레벨=1; 기본 방어=5; 기본 마법방어=4; 중량=경량
+- AR-S0130-246 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4801: ID=ARM-0242; 장비명=가죽 허리띠; 슬롯=허리; 등급=일반; 권장 레벨=2; 기본 방어=6; 기본 마법방어=4; 중량=경량
+- AR-S0130-247 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4802: ID=ARM-0243; 장비명=경화가죽 허리띠; 슬롯=허리; 등급=일반; 권장 레벨=3; 기본 방어=6; 기본 마법방어=5; 중량=중량
+- AR-S0130-248 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4803: ID=ARM-0244; 장비명=사슬 허리띠; 슬롯=허리; 등급=일반; 권장 레벨=4; 기본 방어=6; 기본 마법방어=5; 중량=중량
+- AR-S0130-249 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4804: ID=ARM-0245; 장비명=철판 허리띠; 슬롯=허리; 등급=일반; 권장 레벨=5; 기본 방어=6; 기본 마법방어=5; 중량=중량
+- AR-S0130-250 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4805: ID=ARM-0246; 장비명=용병대의 허리띠; 슬롯=허리; 등급=일반; 권장 레벨=7; 기본 방어=7; 기본 마법방어=5; 중량=경량
+- AR-S0130-251 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4806: ID=ARM-0247; 장비명=정찰대의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=8; 기본 방어=7; 기본 마법방어=6; 중량=경량
+- AR-S0130-252 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4807: ID=ARM-0248; 장비명=왕국군의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=10; 기본 방어=8; 기본 마법방어=6; 중량=경량
+- AR-S0130-253 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4808: ID=ARM-0249; 장비명=기사단의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=12; 기본 방어=8; 기본 마법방어=6; 중량=중량
+- AR-S0130-254 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4809: ID=ARM-0250; 장비명=수호병의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=14; 기본 방어=8; 기본 마법방어=7; 중량=중량
+- AR-S0130-255 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4810: ID=ARM-0251; 장비명=설원의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=15; 기본 방어=9; 기본 마법방어=7; 중량=중량
+- AR-S0130-256 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4811: ID=ARM-0252; 장비명=사막의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=17; 기본 방어=9; 기본 마법방어=7; 중량=경량
+- AR-S0130-257 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4812: ID=ARM-0253; 장비명=늪지의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=20; 기본 방어=10; 기본 마법방어=8; 중량=경량
+- AR-S0130-258 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4813: ID=ARM-0254; 장비명=해안의 허리띠; 슬롯=허리; 등급=고급; 권장 레벨=22; 기본 방어=10; 기본 마법방어=8; 중량=경량
+- AR-S0130-259 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4814: ID=ARM-0255; 장비명=산악의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=24; 기본 방어=11; 기본 마법방어=9; 중량=중량
+- AR-S0130-260 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4815: ID=ARM-0256; 장비명=광산의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=26; 기본 방어=12; 기본 마법방어=9; 중량=중량
+- AR-S0130-261 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4816: ID=ARM-0257; 장비명=폐허의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=28; 기본 방어=12; 기본 마법방어=10; 중량=중량
+- AR-S0130-262 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4817: ID=ARM-0258; 장비명=황혼의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=31; 기본 방어=13; 기본 마법방어=10; 중량=경량
+- AR-S0130-263 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4818: ID=ARM-0259; 장비명=새벽의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=33; 기본 방어=13; 기본 마법방어=11; 중량=경량
+- AR-S0130-264 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4819: ID=ARM-0260; 장비명=밤그늘의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=35; 기본 방어=14; 기본 마법방어=11; 중량=경량
+- AR-S0130-265 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4820: ID=ARM-0261; 장비명=화염의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=38; 기본 방어=14; 기본 마법방어=12; 중량=중량
+- AR-S0130-266 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4821: ID=ARM-0262; 장비명=냉기의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=40; 기본 방어=15; 기본 마법방어=12; 중량=중량
+- AR-S0130-267 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4822: ID=ARM-0263; 장비명=폭풍의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=43; 기본 방어=16; 기본 마법방어=13; 중량=중량
+- AR-S0130-268 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4823: ID=ARM-0264; 장비명=번개의 허리띠; 슬롯=허리; 등급=희귀; 권장 레벨=46; 기본 방어=16; 기본 마법방어=13; 중량=경량
+- AR-S0130-269 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4824: ID=ARM-0265; 장비명=대지의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=48; 기본 방어=17; 기본 마법방어=14; 중량=경량
+- AR-S0130-270 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4825: ID=ARM-0266; 장비명=독안개의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=51; 기본 방어=18; 기본 마법방어=14; 중량=경량
+- AR-S0130-271 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4826: ID=ARM-0267; 장비명=성광의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=54; 기본 방어=18; 기본 마법방어=15; 중량=중량
+- AR-S0130-272 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4827: ID=ARM-0268; 장비명=암영의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=56; 기본 방어=19; 기본 마법방어=15; 중량=중량
+- AR-S0130-273 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4828: ID=ARM-0269; 장비명=마력의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=59; 기본 방어=20; 기본 마법방어=16; 중량=중량
+- AR-S0130-274 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4829: ID=ARM-0270; 장비명=정령의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=62; 기본 방어=20; 기본 마법방어=16; 중량=경량
+- AR-S0130-275 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4830: ID=ARM-0271; 장비명=흑철의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=65; 기본 방어=21; 기본 마법방어=17; 중량=경량
+- AR-S0130-276 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4831: ID=ARM-0272; 장비명=은강의 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=68; 기본 방어=22; 기본 마법방어=18; 중량=경량
+- AR-S0130-277 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4832: ID=ARM-0273; 장비명=미스릴 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=71; 기본 방어=23; 기본 마법방어=18; 중량=중량
+- AR-S0130-278 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4833: ID=ARM-0274; 장비명=아다만트 허리띠; 슬롯=허리; 등급=특급; 권장 레벨=74; 기본 방어=24; 기본 마법방어=19; 중량=중량
+- AR-S0130-279 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4834: ID=ARM-0275; 장비명=용린의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=77; 기본 방어=24; 기본 마법방어=19; 중량=중량
+- AR-S0130-280 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4835: ID=ARM-0276; 장비명=거인뼈의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=80; 기본 방어=25; 기본 마법방어=20; 중량=경량
+- AR-S0130-281 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4836: ID=ARM-0277; 장비명=악마가죽의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=83; 기본 방어=26; 기본 마법방어=21; 중량=경량
+- AR-S0130-282 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4837: ID=ARM-0278; 장비명=고대수의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=86; 기본 방어=26; 기본 마법방어=21; 중량=경량
+- AR-S0130-283 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4838: ID=ARM-0279; 장비명=별철의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=89; 기본 방어=27; 기본 마법방어=22; 중량=중량
+- AR-S0130-284 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4839: ID=ARM-0280; 장비명=월은의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=92; 기본 방어=28; 기본 마법방어=22; 중량=중량
+- AR-S0130-285 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4840: ID=ARM-0281; 장비명=고대의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=95; 기본 방어=29; 기본 마법방어=23; 중량=중량
+- AR-S0130-286 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4841: ID=ARM-0282; 장비명=왕실의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=98; 기본 방어=30; 기본 마법방어=24; 중량=경량
+- AR-S0130-287 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4842: ID=ARM-0283; 장비명=성역의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=101; 기본 방어=30; 기본 마법방어=24; 중량=경량
+- AR-S0130-288 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4843: ID=ARM-0284; 장비명=심연의 허리띠; 슬롯=허리; 등급=영웅; 권장 레벨=105; 기본 방어=31; 기본 마법방어=25; 중량=경량
+- AR-S0130-289 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4844: ID=ARM-0285; 장비명=천공의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=108; 기본 방어=32; 기본 마법방어=26; 중량=중량
+- AR-S0130-290 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4845: ID=ARM-0286; 장비명=지하왕국의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=111; 기본 방어=33; 기본 마법방어=26; 중량=중량
+- AR-S0130-291 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4846: ID=ARM-0287; 장비명=유목왕의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=115; 기본 방어=34; 기본 마법방어=27; 중량=중량
+- AR-S0130-292 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4847: ID=ARM-0288; 장비명=사제단의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=118; 기본 방어=34; 기본 마법방어=28; 중량=경량
+- AR-S0130-293 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4848: ID=ARM-0289; 장비명=마도원의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=121; 기본 방어=35; 기본 마법방어=28; 중량=경량
+- AR-S0130-294 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4849: ID=ARM-0290; 장비명=암살단의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=125; 기본 방어=36; 기본 마법방어=29; 중량=경량
+- AR-S0130-295 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4850: ID=ARM-0291; 장비명=영웅의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=128; 기본 방어=37; 기본 마법방어=30; 중량=중량
+- AR-S0130-296 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4851: ID=ARM-0292; 장비명=정복자의 허리띠; 슬롯=허리; 등급=전설; 권장 레벨=132; 기본 방어=38; 기본 마법방어=30; 중량=중량
+- AR-S0130-297 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4852: ID=ARM-0293; 장비명=수호성의 허리띠; 슬롯=허리; 등급=유물; 권장 레벨=135; 기본 방어=39; 기본 마법방어=31; 중량=중량
+- AR-S0130-298 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4853: ID=ARM-0294; 장비명=파멸의 허리띠; 슬롯=허리; 등급=유물; 권장 레벨=139; 기본 방어=40; 기본 마법방어=32; 중량=경량
+- AR-S0130-299 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4854: ID=ARM-0295; 장비명=불멸의 허리띠; 슬롯=허리; 등급=유물; 권장 레벨=142; 기본 방어=40; 기본 마법방어=32; 중량=경량
+- AR-S0130-300 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4855: ID=ARM-0296; 장비명=전설의 허리띠; 슬롯=허리; 등급=유물; 권장 레벨=146; 기본 방어=42; 기본 마법방어=33; 중량=경량
+- AR-S0130-301 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4856: ID=ARM-0297; 장비명=유물의 허리띠; 슬롯=허리; 등급=신화; 권장 레벨=149; 기본 방어=42; 기본 마법방어=34; 중량=중량
+- AR-S0130-302 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4857: ID=ARM-0298; 장비명=신화의 허리띠; 슬롯=허리; 등급=신화; 권장 레벨=153; 기본 방어=43; 기본 마법방어=35; 중량=중량
+- AR-S0130-303 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4858: ID=ARM-0299; 장비명=세계수의 허리띠; 슬롯=허리; 등급=신화; 권장 레벨=156; 기본 방어=44; 기본 마법방어=35; 중량=중량
+- AR-S0130-304 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4859: ID=ARM-0300; 장비명=종말의 허리띠; 슬롯=허리; 등급=신화; 권장 레벨=160; 기본 방어=45; 기본 마법방어=36; 중량=경량
+- AR-S0130-305 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4863: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-306 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4865: ID=ARM-0301; 장비명=누더기 각반; 슬롯=다리; 등급=일반; 권장 레벨=1; 기본 방어=13; 기본 마법방어=7; 중량=경량
+- AR-S0130-307 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4866: ID=ARM-0302; 장비명=가죽 각반; 슬롯=다리; 등급=일반; 권장 레벨=2; 기본 방어=13; 기본 마법방어=8; 중량=경량
+- AR-S0130-308 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4867: ID=ARM-0303; 장비명=경화가죽 각반; 슬롯=다리; 등급=일반; 권장 레벨=3; 기본 방어=14; 기본 마법방어=8; 중량=중량
+- AR-S0130-309 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4868: ID=ARM-0304; 장비명=사슬 각반; 슬롯=다리; 등급=일반; 권장 레벨=4; 기본 방어=14; 기본 마법방어=8; 중량=중량
+- AR-S0130-310 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4869: ID=ARM-0305; 장비명=철판 각반; 슬롯=다리; 등급=일반; 권장 레벨=5; 기본 방어=15; 기본 마법방어=9; 중량=중량
+- AR-S0130-311 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4870: ID=ARM-0306; 장비명=용병대의 각반; 슬롯=다리; 등급=일반; 권장 레벨=7; 기본 방어=16; 기본 마법방어=9; 중량=경량
+- AR-S0130-312 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4871: ID=ARM-0307; 장비명=정찰대의 각반; 슬롯=다리; 등급=고급; 권장 레벨=8; 기본 방어=17; 기본 마법방어=10; 중량=경량
+- AR-S0130-313 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4872: ID=ARM-0308; 장비명=왕국군의 각반; 슬롯=다리; 등급=고급; 권장 레벨=10; 기본 방어=18; 기본 마법방어=10; 중량=경량
+- AR-S0130-314 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4873: ID=ARM-0309; 장비명=기사단의 각반; 슬롯=다리; 등급=고급; 권장 레벨=12; 기본 방어=19; 기본 마법방어=11; 중량=중량
+- AR-S0130-315 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4874: ID=ARM-0310; 장비명=수호병의 각반; 슬롯=다리; 등급=고급; 권장 레벨=14; 기본 방어=20; 기본 마법방어=12; 중량=중량
+- AR-S0130-316 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4875: ID=ARM-0311; 장비명=설원의 각반; 슬롯=다리; 등급=고급; 권장 레벨=15; 기본 방어=21; 기본 마법방어=12; 중량=중량
+- AR-S0130-317 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4876: ID=ARM-0312; 장비명=사막의 각반; 슬롯=다리; 등급=고급; 권장 레벨=17; 기본 방어=22; 기본 마법방어=13; 중량=경량
+- AR-S0130-318 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4877: ID=ARM-0313; 장비명=늪지의 각반; 슬롯=다리; 등급=고급; 권장 레벨=20; 기본 방어=24; 기본 마법방어=14; 중량=경량
+- AR-S0130-319 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4878: ID=ARM-0314; 장비명=해안의 각반; 슬롯=다리; 등급=고급; 권장 레벨=22; 기본 방어=25; 기본 마법방어=15; 중량=경량
+- AR-S0130-320 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4879: ID=ARM-0315; 장비명=산악의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=24; 기본 방어=26; 기본 마법방어=15; 중량=중량
+- AR-S0130-321 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4880: ID=ARM-0316; 장비명=광산의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=26; 기본 방어=28; 기본 마법방어=16; 중량=중량
+- AR-S0130-322 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4881: ID=ARM-0317; 장비명=폐허의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=28; 기본 방어=29; 기본 마법방어=17; 중량=중량
+- AR-S0130-323 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4882: ID=ARM-0318; 장비명=황혼의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=31; 기본 방어=31; 기본 마법방어=18; 중량=경량
+- AR-S0130-324 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4883: ID=ARM-0319; 장비명=새벽의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=33; 기본 방어=32; 기본 마법방어=19; 중량=경량
+- AR-S0130-325 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4884: ID=ARM-0320; 장비명=밤그늘의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=35; 기본 방어=33; 기본 마법방어=19; 중량=경량
+- AR-S0130-326 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4885: ID=ARM-0321; 장비명=화염의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=38; 기본 방어=35; 기본 마법방어=20; 중량=중량
+- AR-S0130-327 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4886: ID=ARM-0322; 장비명=냉기의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=40; 기본 방어=36; 기본 마법방어=21; 중량=중량
+- AR-S0130-328 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4887: ID=ARM-0323; 장비명=폭풍의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=43; 기본 방어=38; 기본 마법방어=22; 중량=중량
+- AR-S0130-329 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4888: ID=ARM-0324; 장비명=번개의 각반; 슬롯=다리; 등급=희귀; 권장 레벨=46; 기본 방어=40; 기본 마법방어=23; 중량=경량
+- AR-S0130-330 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4889: ID=ARM-0325; 장비명=대지의 각반; 슬롯=다리; 등급=특급; 권장 레벨=48; 기본 방어=41; 기본 마법방어=24; 중량=경량
+- AR-S0130-331 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4890: ID=ARM-0326; 장비명=독안개의 각반; 슬롯=다리; 등급=특급; 권장 레벨=51; 기본 방어=43; 기본 마법방어=25; 중량=경량
+- AR-S0130-332 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4891: ID=ARM-0327; 장비명=성광의 각반; 슬롯=다리; 등급=특급; 권장 레벨=54; 기본 방어=44; 기본 마법방어=26; 중량=중량
+- AR-S0130-333 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4892: ID=ARM-0328; 장비명=암영의 각반; 슬롯=다리; 등급=특급; 권장 레벨=56; 기본 방어=46; 기본 마법방어=27; 중량=중량
+- AR-S0130-334 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4893: ID=ARM-0329; 장비명=마력의 각반; 슬롯=다리; 등급=특급; 권장 레벨=59; 기본 방어=47; 기본 마법방어=28; 중량=중량
+- AR-S0130-335 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4894: ID=ARM-0330; 장비명=정령의 각반; 슬롯=다리; 등급=특급; 권장 레벨=62; 기본 방어=49; 기본 마법방어=29; 중량=경량
+- AR-S0130-336 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4895: ID=ARM-0331; 장비명=흑철의 각반; 슬롯=다리; 등급=특급; 권장 레벨=65; 기본 방어=51; 기본 마법방어=30; 중량=경량
+- AR-S0130-337 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4896: ID=ARM-0332; 장비명=은강의 각반; 슬롯=다리; 등급=특급; 권장 레벨=68; 기본 방어=53; 기본 마법방어=31; 중량=경량
+- AR-S0130-338 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4897: ID=ARM-0333; 장비명=미스릴 각반; 슬롯=다리; 등급=특급; 권장 레벨=71; 기본 방어=55; 기본 마법방어=32; 중량=중량
+- AR-S0130-339 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4898: ID=ARM-0334; 장비명=아다만트 각반; 슬롯=다리; 등급=특급; 권장 레벨=74; 기본 방어=56; 기본 마법방어=33; 중량=중량
+- AR-S0130-340 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4899: ID=ARM-0335; 장비명=용린의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=77; 기본 방어=58; 기본 마법방어=34; 중량=중량
+- AR-S0130-341 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4900: ID=ARM-0336; 장비명=거인뼈의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=80; 기본 방어=60; 기본 마법방어=35; 중량=경량
+- AR-S0130-342 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4901: ID=ARM-0337; 장비명=악마가죽의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=83; 기본 방어=62; 기본 마법방어=36; 중량=경량
+- AR-S0130-343 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4902: ID=ARM-0338; 장비명=고대수의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=86; 기본 방어=64; 기본 마법방어=37; 중량=경량
+- AR-S0130-344 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4903: ID=ARM-0339; 장비명=별철의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=89; 기본 방어=65; 기본 마법방어=38; 중량=중량
+- AR-S0130-345 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4904: ID=ARM-0340; 장비명=월은의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=92; 기본 방어=67; 기본 마법방어=39; 중량=중량
+- AR-S0130-346 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4905: ID=ARM-0341; 장비명=고대의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=95; 기본 방어=69; 기본 마법방어=40; 중량=중량
+- AR-S0130-347 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4906: ID=ARM-0342; 장비명=왕실의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=98; 기본 방어=71; 기본 마법방어=41; 중량=경량
+- AR-S0130-348 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4907: ID=ARM-0343; 장비명=성역의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=101; 기본 방어=73; 기본 마법방어=42; 중량=경량
+- AR-S0130-349 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4908: ID=ARM-0344; 장비명=심연의 각반; 슬롯=다리; 등급=영웅; 권장 레벨=105; 기본 방어=75; 기본 마법방어=44; 중량=경량
+- AR-S0130-350 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4909: ID=ARM-0345; 장비명=천공의 각반; 슬롯=다리; 등급=전설; 권장 레벨=108; 기본 방어=77; 기본 마법방어=45; 중량=중량
+- AR-S0130-351 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4910: ID=ARM-0346; 장비명=지하왕국의 각반; 슬롯=다리; 등급=전설; 권장 레벨=111; 기본 방어=79; 기본 마법방어=46; 중량=중량
+- AR-S0130-352 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4911: ID=ARM-0347; 장비명=유목왕의 각반; 슬롯=다리; 등급=전설; 권장 레벨=115; 기본 방어=81; 기본 마법방어=47; 중량=중량
+- AR-S0130-353 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4912: ID=ARM-0348; 장비명=사제단의 각반; 슬롯=다리; 등급=전설; 권장 레벨=118; 기본 방어=83; 기본 마법방어=48; 중량=경량
+- AR-S0130-354 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4913: ID=ARM-0349; 장비명=마도원의 각반; 슬롯=다리; 등급=전설; 권장 레벨=121; 기본 방어=85; 기본 마법방어=49; 중량=경량
+- AR-S0130-355 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4914: ID=ARM-0350; 장비명=암살단의 각반; 슬롯=다리; 등급=전설; 권장 레벨=125; 기본 방어=87; 기본 마법방어=51; 중량=경량
+- AR-S0130-356 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4915: ID=ARM-0351; 장비명=영웅의 각반; 슬롯=다리; 등급=전설; 권장 레벨=128; 기본 방어=89; 기본 마법방어=52; 중량=중량
+- AR-S0130-357 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4916: ID=ARM-0352; 장비명=정복자의 각반; 슬롯=다리; 등급=전설; 권장 레벨=132; 기본 방어=91; 기본 마법방어=53; 중량=중량
+- AR-S0130-358 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4917: ID=ARM-0353; 장비명=수호성의 각반; 슬롯=다리; 등급=유물; 권장 레벨=135; 기본 방어=93; 기본 마법방어=54; 중량=중량
+- AR-S0130-359 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4918: ID=ARM-0354; 장비명=파멸의 각반; 슬롯=다리; 등급=유물; 권장 레벨=139; 기본 방어=95; 기본 마법방어=56; 중량=경량
+- AR-S0130-360 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4919: ID=ARM-0355; 장비명=불멸의 각반; 슬롯=다리; 등급=유물; 권장 레벨=142; 기본 방어=97; 기본 마법방어=57; 중량=경량
+- AR-S0130-361 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4920: ID=ARM-0356; 장비명=전설의 각반; 슬롯=다리; 등급=유물; 권장 레벨=146; 기본 방어=100; 기본 마법방어=58; 중량=경량
+- AR-S0130-362 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4921: ID=ARM-0357; 장비명=유물의 각반; 슬롯=다리; 등급=신화; 권장 레벨=149; 기본 방어=101; 기본 마법방어=59; 중량=중량
+- AR-S0130-363 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4922: ID=ARM-0358; 장비명=신화의 각반; 슬롯=다리; 등급=신화; 권장 레벨=153; 기본 방어=104; 기본 마법방어=61; 중량=중량
+- AR-S0130-364 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4923: ID=ARM-0359; 장비명=세계수의 각반; 슬롯=다리; 등급=신화; 권장 레벨=156; 기본 방어=106; 기본 마법방어=62; 중량=중량
+- AR-S0130-365 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4924: ID=ARM-0360; 장비명=종말의 각반; 슬롯=다리; 등급=신화; 권장 레벨=160; 기본 방어=108; 기본 마법방어=63; 중량=경량
+- AR-S0130-366 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4928: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-367 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4930: ID=ARM-0361; 장비명=누더기 장화; 슬롯=발; 등급=일반; 권장 레벨=1; 기본 방어=7; 기본 마법방어=4; 중량=경량
+- AR-S0130-368 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4931: ID=ARM-0362; 장비명=가죽 장화; 슬롯=발; 등급=일반; 권장 레벨=2; 기본 방어=8; 기본 마법방어=4; 중량=경량
+- AR-S0130-369 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4932: ID=ARM-0363; 장비명=경화가죽 장화; 슬롯=발; 등급=일반; 권장 레벨=3; 기본 방어=8; 기본 마법방어=5; 중량=중량
+- AR-S0130-370 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4933: ID=ARM-0364; 장비명=사슬 장화; 슬롯=발; 등급=일반; 권장 레벨=4; 기본 방어=8; 기본 마법방어=5; 중량=중량
+- AR-S0130-371 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4934: ID=ARM-0365; 장비명=철판 장화; 슬롯=발; 등급=일반; 권장 레벨=5; 기본 방어=9; 기본 마법방어=5; 중량=중량
+- AR-S0130-372 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4935: ID=ARM-0366; 장비명=용병대의 장화; 슬롯=발; 등급=일반; 권장 레벨=7; 기본 방어=9; 기본 마법방어=5; 중량=경량
+- AR-S0130-373 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4936: ID=ARM-0367; 장비명=정찰대의 장화; 슬롯=발; 등급=고급; 권장 레벨=8; 기본 방어=10; 기본 마법방어=6; 중량=경량
+- AR-S0130-374 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4937: ID=ARM-0368; 장비명=왕국군의 장화; 슬롯=발; 등급=고급; 권장 레벨=10; 기본 방어=10; 기본 마법방어=6; 중량=경량
+- AR-S0130-375 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4938: ID=ARM-0369; 장비명=기사단의 장화; 슬롯=발; 등급=고급; 권장 레벨=12; 기본 방어=11; 기본 마법방어=6; 중량=중량
+- AR-S0130-376 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4939: ID=ARM-0370; 장비명=수호병의 장화; 슬롯=발; 등급=고급; 권장 레벨=14; 기본 방어=12; 기본 마법방어=7; 중량=중량
+- AR-S0130-377 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4940: ID=ARM-0371; 장비명=설원의 장화; 슬롯=발; 등급=고급; 권장 레벨=15; 기본 방어=12; 기본 마법방어=7; 중량=중량
+- AR-S0130-378 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4941: ID=ARM-0372; 장비명=사막의 장화; 슬롯=발; 등급=고급; 권장 레벨=17; 기본 방어=13; 기본 마법방어=7; 중량=경량
+- AR-S0130-379 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4942: ID=ARM-0373; 장비명=늪지의 장화; 슬롯=발; 등급=고급; 권장 레벨=20; 기본 방어=14; 기본 마법방어=8; 중량=경량
+- AR-S0130-380 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4943: ID=ARM-0374; 장비명=해안의 장화; 슬롯=발; 등급=고급; 권장 레벨=22; 기본 방어=15; 기본 마법방어=8; 중량=경량
+- AR-S0130-381 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4944: ID=ARM-0375; 장비명=산악의 장화; 슬롯=발; 등급=희귀; 권장 레벨=24; 기본 방어=15; 기본 마법방어=9; 중량=중량
+- AR-S0130-382 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4945: ID=ARM-0376; 장비명=광산의 장화; 슬롯=발; 등급=희귀; 권장 레벨=26; 기본 방어=16; 기본 마법방어=9; 중량=중량
+- AR-S0130-383 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4946: ID=ARM-0377; 장비명=폐허의 장화; 슬롯=발; 등급=희귀; 권장 레벨=28; 기본 방어=17; 기본 마법방어=10; 중량=중량
+- AR-S0130-384 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4947: ID=ARM-0378; 장비명=황혼의 장화; 슬롯=발; 등급=희귀; 권장 레벨=31; 기본 방어=18; 기본 마법방어=10; 중량=경량
+- AR-S0130-385 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4948: ID=ARM-0379; 장비명=새벽의 장화; 슬롯=발; 등급=희귀; 권장 레벨=33; 기본 방어=19; 기본 마법방어=11; 중량=경량
+- AR-S0130-386 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4949: ID=ARM-0380; 장비명=밤그늘의 장화; 슬롯=발; 등급=희귀; 권장 레벨=35; 기본 방어=19; 기본 마법방어=11; 중량=경량
+- AR-S0130-387 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4950: ID=ARM-0381; 장비명=화염의 장화; 슬롯=발; 등급=희귀; 권장 레벨=38; 기본 방어=20; 기본 마법방어=12; 중량=중량
+- AR-S0130-388 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4951: ID=ARM-0382; 장비명=냉기의 장화; 슬롯=발; 등급=희귀; 권장 레벨=40; 기본 방어=21; 기본 마법방어=12; 중량=중량
+- AR-S0130-389 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4952: ID=ARM-0383; 장비명=폭풍의 장화; 슬롯=발; 등급=희귀; 권장 레벨=43; 기본 방어=22; 기본 마법방어=13; 중량=중량
+- AR-S0130-390 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4953: ID=ARM-0384; 장비명=번개의 장화; 슬롯=발; 등급=희귀; 권장 레벨=46; 기본 방어=23; 기본 마법방어=13; 중량=경량
+- AR-S0130-391 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4954: ID=ARM-0385; 장비명=대지의 장화; 슬롯=발; 등급=특급; 권장 레벨=48; 기본 방어=24; 기본 마법방어=14; 중량=경량
+- AR-S0130-392 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4955: ID=ARM-0386; 장비명=독안개의 장화; 슬롯=발; 등급=특급; 권장 레벨=51; 기본 방어=25; 기본 마법방어=14; 중량=경량
+- AR-S0130-393 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4956: ID=ARM-0387; 장비명=성광의 장화; 슬롯=발; 등급=특급; 권장 레벨=54; 기본 방어=26; 기본 마법방어=15; 중량=중량
+- AR-S0130-394 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4957: ID=ARM-0388; 장비명=암영의 장화; 슬롯=발; 등급=특급; 권장 레벨=56; 기본 방어=27; 기본 마법방어=15; 중량=중량
+- AR-S0130-395 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4958: ID=ARM-0389; 장비명=마력의 장화; 슬롯=발; 등급=특급; 권장 레벨=59; 기본 방어=28; 기본 마법방어=16; 중량=중량
+- AR-S0130-396 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4959: ID=ARM-0390; 장비명=정령의 장화; 슬롯=발; 등급=특급; 권장 레벨=62; 기본 방어=29; 기본 마법방어=16; 중량=경량
+- AR-S0130-397 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4960: ID=ARM-0391; 장비명=흑철의 장화; 슬롯=발; 등급=특급; 권장 레벨=65; 기본 방어=30; 기본 마법방어=17; 중량=경량
+- AR-S0130-398 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4961: ID=ARM-0392; 장비명=은강의 장화; 슬롯=발; 등급=특급; 권장 레벨=68; 기본 방어=31; 기본 마법방어=18; 중량=경량
+- AR-S0130-399 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4962: ID=ARM-0393; 장비명=미스릴 장화; 슬롯=발; 등급=특급; 권장 레벨=71; 기본 방어=32; 기본 마법방어=18; 중량=중량
+- AR-S0130-400 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4963: ID=ARM-0394; 장비명=아다만트 장화; 슬롯=발; 등급=특급; 권장 레벨=74; 기본 방어=33; 기본 마법방어=19; 중량=중량
+- AR-S0130-401 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4964: ID=ARM-0395; 장비명=용린의 장화; 슬롯=발; 등급=영웅; 권장 레벨=77; 기본 방어=34; 기본 마법방어=19; 중량=중량
+- AR-S0130-402 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4965: ID=ARM-0396; 장비명=거인뼈의 장화; 슬롯=발; 등급=영웅; 권장 레벨=80; 기본 방어=35; 기본 마법방어=20; 중량=경량
+- AR-S0130-403 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4966: ID=ARM-0397; 장비명=악마가죽의 장화; 슬롯=발; 등급=영웅; 권장 레벨=83; 기본 방어=36; 기본 마법방어=21; 중량=경량
+- AR-S0130-404 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4967: ID=ARM-0398; 장비명=고대수의 장화; 슬롯=발; 등급=영웅; 권장 레벨=86; 기본 방어=37; 기본 마법방어=21; 중량=경량
+- AR-S0130-405 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4968: ID=ARM-0399; 장비명=별철의 장화; 슬롯=발; 등급=영웅; 권장 레벨=89; 기본 방어=38; 기본 마법방어=22; 중량=중량
+- AR-S0130-406 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4969: ID=ARM-0400; 장비명=월은의 장화; 슬롯=발; 등급=영웅; 권장 레벨=92; 기본 방어=39; 기본 마법방어=22; 중량=중량
+- AR-S0130-407 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4970: ID=ARM-0401; 장비명=고대의 장화; 슬롯=발; 등급=영웅; 권장 레벨=95; 기본 방어=40; 기본 마법방어=23; 중량=중량
+- AR-S0130-408 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4971: ID=ARM-0402; 장비명=왕실의 장화; 슬롯=발; 등급=영웅; 권장 레벨=98; 기본 방어=41; 기본 마법방어=24; 중량=경량
+- AR-S0130-409 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4972: ID=ARM-0403; 장비명=성역의 장화; 슬롯=발; 등급=영웅; 권장 레벨=101; 기본 방어=42; 기본 마법방어=24; 중량=경량
+- AR-S0130-410 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4973: ID=ARM-0404; 장비명=심연의 장화; 슬롯=발; 등급=영웅; 권장 레벨=105; 기본 방어=44; 기본 마법방어=25; 중량=경량
+- AR-S0130-411 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4974: ID=ARM-0405; 장비명=천공의 장화; 슬롯=발; 등급=전설; 권장 레벨=108; 기본 방어=45; 기본 마법방어=26; 중량=중량
+- AR-S0130-412 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4975: ID=ARM-0406; 장비명=지하왕국의 장화; 슬롯=발; 등급=전설; 권장 레벨=111; 기본 방어=46; 기본 마법방어=26; 중량=중량
+- AR-S0130-413 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4976: ID=ARM-0407; 장비명=유목왕의 장화; 슬롯=발; 등급=전설; 권장 레벨=115; 기본 방어=47; 기본 마법방어=27; 중량=중량
+- AR-S0130-414 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4977: ID=ARM-0408; 장비명=사제단의 장화; 슬롯=발; 등급=전설; 권장 레벨=118; 기본 방어=48; 기본 마법방어=28; 중량=경량
+- AR-S0130-415 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4978: ID=ARM-0409; 장비명=마도원의 장화; 슬롯=발; 등급=전설; 권장 레벨=121; 기본 방어=49; 기본 마법방어=28; 중량=경량
+- AR-S0130-416 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4979: ID=ARM-0410; 장비명=암살단의 장화; 슬롯=발; 등급=전설; 권장 레벨=125; 기본 방어=51; 기본 마법방어=29; 중량=경량
+- AR-S0130-417 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4980: ID=ARM-0411; 장비명=영웅의 장화; 슬롯=발; 등급=전설; 권장 레벨=128; 기본 방어=52; 기본 마법방어=30; 중량=중량
+- AR-S0130-418 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4981: ID=ARM-0412; 장비명=정복자의 장화; 슬롯=발; 등급=전설; 권장 레벨=132; 기본 방어=53; 기본 마법방어=30; 중량=중량
+- AR-S0130-419 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4982: ID=ARM-0413; 장비명=수호성의 장화; 슬롯=발; 등급=유물; 권장 레벨=135; 기본 방어=54; 기본 마법방어=31; 중량=중량
+- AR-S0130-420 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4983: ID=ARM-0414; 장비명=파멸의 장화; 슬롯=발; 등급=유물; 권장 레벨=139; 기본 방어=56; 기본 마법방어=32; 중량=경량
+- AR-S0130-421 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4984: ID=ARM-0415; 장비명=불멸의 장화; 슬롯=발; 등급=유물; 권장 레벨=142; 기본 방어=57; 기본 마법방어=32; 중량=경량
+- AR-S0130-422 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4985: ID=ARM-0416; 장비명=전설의 장화; 슬롯=발; 등급=유물; 권장 레벨=146; 기본 방어=58; 기본 마법방어=33; 중량=경량
+- AR-S0130-423 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4986: ID=ARM-0417; 장비명=유물의 장화; 슬롯=발; 등급=신화; 권장 레벨=149; 기본 방어=59; 기본 마법방어=34; 중량=중량
+- AR-S0130-424 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4987: ID=ARM-0418; 장비명=신화의 장화; 슬롯=발; 등급=신화; 권장 레벨=153; 기본 방어=61; 기본 마법방어=35; 중량=중량
+- AR-S0130-425 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4988: ID=ARM-0419; 장비명=세계수의 장화; 슬롯=발; 등급=신화; 권장 레벨=156; 기본 방어=62; 기본 마법방어=35; 중량=중량
+- AR-S0130-426 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4989: ID=ARM-0420; 장비명=종말의 장화; 슬롯=발; 등급=신화; 권장 레벨=160; 기본 방어=63; 기본 마법방어=36; 중량=경량
+- AR-S0130-427 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4993: ID=ID; 장비명=장비명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 방어=기본 방어; 기본 마법방어=기본 마법방어; 중량=중량
+- AR-S0130-428 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4995: ID=ARM-0421; 장비명=누더기 방패; 슬롯=보조; 등급=일반; 권장 레벨=1; 기본 방어=17; 기본 마법방어=8; 중량=경량
+- AR-S0130-429 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4996: ID=ARM-0422; 장비명=가죽 방패; 슬롯=보조; 등급=일반; 권장 레벨=2; 기본 방어=18; 기본 마법방어=9; 중량=중량
+- AR-S0130-430 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4997: ID=ARM-0423; 장비명=경화가죽 방패; 슬롯=보조; 등급=일반; 권장 레벨=3; 기본 방어=18; 기본 마법방어=9; 중량=중량
+- AR-S0130-431 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4998: ID=ARM-0424; 장비명=사슬 방패; 슬롯=보조; 등급=일반; 권장 레벨=4; 기본 방어=19; 기본 마법방어=10; 중량=경량
+- AR-S0130-432 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L4999: ID=ARM-0425; 장비명=철판 방패; 슬롯=보조; 등급=일반; 권장 레벨=5; 기본 방어=20; 기본 마법방어=10; 중량=중량
+- AR-S0130-433 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5000: ID=ARM-0426; 장비명=용병대의 방패; 슬롯=보조; 등급=일반; 권장 레벨=7; 기본 방어=22; 기본 마법방어=11; 중량=중량
+- AR-S0130-434 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5001: ID=ARM-0427; 장비명=정찰대의 방패; 슬롯=보조; 등급=고급; 권장 레벨=8; 기본 방어=22; 기본 마법방어=11; 중량=경량
+- AR-S0130-435 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5002: ID=ARM-0428; 장비명=왕국군의 방패; 슬롯=보조; 등급=고급; 권장 레벨=10; 기본 방어=24; 기본 마법방어=12; 중량=중량
+- AR-S0130-436 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5003: ID=ARM-0429; 장비명=기사단의 방패; 슬롯=보조; 등급=고급; 권장 레벨=12; 기본 방어=26; 기본 마법방어=13; 중량=중량
+- AR-S0130-437 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5004: ID=ARM-0430; 장비명=수호병의 방패; 슬롯=보조; 등급=고급; 권장 레벨=14; 기본 방어=27; 기본 마법방어=14; 중량=경량
+- AR-S0130-438 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5005: ID=ARM-0431; 장비명=설원의 방패; 슬롯=보조; 등급=고급; 권장 레벨=15; 기본 방어=28; 기본 마법방어=14; 중량=중량
+- AR-S0130-439 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5006: ID=ARM-0432; 장비명=사막의 방패; 슬롯=보조; 등급=고급; 권장 레벨=17; 기본 방어=30; 기본 마법방어=15; 중량=중량
+- AR-S0130-440 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5007: ID=ARM-0433; 장비명=늪지의 방패; 슬롯=보조; 등급=고급; 권장 레벨=20; 기본 방어=32; 기본 마법방어=16; 중량=경량
+- AR-S0130-441 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5008: ID=ARM-0434; 장비명=해안의 방패; 슬롯=보조; 등급=고급; 권장 레벨=22; 기본 방어=34; 기본 마법방어=17; 중량=중량
+- AR-S0130-442 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5009: ID=ARM-0435; 장비명=산악의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=24; 기본 방어=35; 기본 마법방어=18; 중량=중량
+- AR-S0130-443 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5010: ID=ARM-0436; 장비명=광산의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=26; 기본 방어=37; 기본 마법방어=18; 중량=경량
+- AR-S0130-444 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5011: ID=ARM-0437; 장비명=폐허의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=28; 기본 방어=38; 기본 마법방어=19; 중량=중량
+- AR-S0130-445 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5012: ID=ARM-0438; 장비명=황혼의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=31; 기본 방어=41; 기본 마법방어=20; 중량=중량
+- AR-S0130-446 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5013: ID=ARM-0439; 장비명=새벽의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=33; 기본 방어=42; 기본 마법방어=21; 중량=경량
+- AR-S0130-447 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5014: ID=ARM-0440; 장비명=밤그늘의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=35; 기본 방어=44; 기본 마법방어=22; 중량=중량
+- AR-S0130-448 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5015: ID=ARM-0441; 장비명=화염의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=38; 기본 방어=46; 기본 마법방어=23; 중량=중량
+- AR-S0130-449 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5016: ID=ARM-0442; 장비명=냉기의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=40; 기본 방어=48; 기본 마법방어=24; 중량=경량
+- AR-S0130-450 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5017: ID=ARM-0443; 장비명=폭풍의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=43; 기본 방어=50; 기본 마법방어=25; 중량=중량
+- AR-S0130-451 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5018: ID=ARM-0444; 장비명=번개의 방패; 슬롯=보조; 등급=희귀; 권장 레벨=46; 기본 방어=53; 기본 마법방어=26; 중량=중량
+- AR-S0130-452 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5019: ID=ARM-0445; 장비명=대지의 방패; 슬롯=보조; 등급=특급; 권장 레벨=48; 기본 방어=54; 기본 마법방어=27; 중량=경량
+- AR-S0130-453 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5020: ID=ARM-0446; 장비명=독안개의 방패; 슬롯=보조; 등급=특급; 권장 레벨=51; 기본 방어=57; 기본 마법방어=28; 중량=중량
+- AR-S0130-454 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5021: ID=ARM-0447; 장비명=성광의 방패; 슬롯=보조; 등급=특급; 권장 레벨=54; 기본 방어=59; 기본 마법방어=30; 중량=중량
+- AR-S0130-455 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5022: ID=ARM-0448; 장비명=암영의 방패; 슬롯=보조; 등급=특급; 권장 레벨=56; 기본 방어=61; 기본 마법방어=30; 중량=경량
+- AR-S0130-456 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5023: ID=ARM-0449; 장비명=마력의 방패; 슬롯=보조; 등급=특급; 권장 레벨=59; 기본 방어=63; 기본 마법방어=32; 중량=중량
+- AR-S0130-457 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5024: ID=ARM-0450; 장비명=정령의 방패; 슬롯=보조; 등급=특급; 권장 레벨=62; 기본 방어=66; 기본 마법방어=33; 중량=중량
+- AR-S0130-458 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5025: ID=ARM-0451; 장비명=흑철의 방패; 슬롯=보조; 등급=특급; 권장 레벨=65; 기본 방어=68; 기본 마법방어=34; 중량=경량
+- AR-S0130-459 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5026: ID=ARM-0452; 장비명=은강의 방패; 슬롯=보조; 등급=특급; 권장 레벨=68; 기본 방어=70; 기본 마법방어=35; 중량=중량
+- AR-S0130-460 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5027: ID=ARM-0453; 장비명=미스릴 방패; 슬롯=보조; 등급=특급; 권장 레벨=71; 기본 방어=73; 기본 마법방어=36; 중량=중량
+- AR-S0130-461 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5028: ID=ARM-0454; 장비명=아다만트 방패; 슬롯=보조; 등급=특급; 권장 레벨=74; 기본 방어=75; 기본 마법방어=38; 중량=경량
+- AR-S0130-462 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5029: ID=ARM-0455; 장비명=용린의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=77; 기본 방어=78; 기본 마법방어=39; 중량=중량
+- AR-S0130-463 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5030: ID=ARM-0456; 장비명=거인뼈의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=80; 기본 방어=80; 기본 마법방어=40; 중량=중량
+- AR-S0130-464 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5031: ID=ARM-0457; 장비명=악마가죽의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=83; 기본 방어=82; 기본 마법방어=41; 중량=경량
+- AR-S0130-465 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5032: ID=ARM-0458; 장비명=고대수의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=86; 기본 방어=85; 기본 마법방어=42; 중량=중량
+- AR-S0130-466 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5033: ID=ARM-0459; 장비명=별철의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=89; 기본 방어=87; 기본 마법방어=44; 중량=중량
+- AR-S0130-467 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5034: ID=ARM-0460; 장비명=월은의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=92; 기본 방어=90; 기본 마법방어=45; 중량=경량
+- AR-S0130-468 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5035: ID=ARM-0461; 장비명=고대의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=95; 기본 방어=92; 기본 마법방어=46; 중량=중량
+- AR-S0130-469 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5036: ID=ARM-0462; 장비명=왕실의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=98; 기본 방어=94; 기본 마법방어=47; 중량=중량
+- AR-S0130-470 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5037: ID=ARM-0463; 장비명=성역의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=101; 기본 방어=97; 기본 마법방어=48; 중량=경량
+- AR-S0130-471 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5038: ID=ARM-0464; 장비명=심연의 방패; 슬롯=보조; 등급=영웅; 권장 레벨=105; 기본 방어=100; 기본 마법방어=50; 중량=중량
+- AR-S0130-472 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5039: ID=ARM-0465; 장비명=천공의 방패; 슬롯=보조; 등급=전설; 권장 레벨=108; 기본 방어=102; 기본 마법방어=51; 중량=중량
+- AR-S0130-473 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5040: ID=ARM-0466; 장비명=지하왕국의 방패; 슬롯=보조; 등급=전설; 권장 레벨=111; 기본 방어=105; 기본 마법방어=52; 중량=경량
+- AR-S0130-474 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5041: ID=ARM-0467; 장비명=유목왕의 방패; 슬롯=보조; 등급=전설; 권장 레벨=115; 기본 방어=108; 기본 마법방어=54; 중량=중량
+- AR-S0130-475 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5042: ID=ARM-0468; 장비명=사제단의 방패; 슬롯=보조; 등급=전설; 권장 레벨=118; 기본 방어=110; 기본 마법방어=55; 중량=중량
+- AR-S0130-476 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5043: ID=ARM-0469; 장비명=마도원의 방패; 슬롯=보조; 등급=전설; 권장 레벨=121; 기본 방어=113; 기본 마법방어=56; 중량=경량
+- AR-S0130-477 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5044: ID=ARM-0470; 장비명=암살단의 방패; 슬롯=보조; 등급=전설; 권장 레벨=125; 기본 방어=116; 기본 마법방어=58; 중량=중량
+- AR-S0130-478 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5045: ID=ARM-0471; 장비명=영웅의 방패; 슬롯=보조; 등급=전설; 권장 레벨=128; 기본 방어=118; 기본 마법방어=59; 중량=중량
+- AR-S0130-479 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5046: ID=ARM-0472; 장비명=정복자의 방패; 슬롯=보조; 등급=전설; 권장 레벨=132; 기본 방어=122; 기본 마법방어=61; 중량=경량
+- AR-S0130-480 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5047: ID=ARM-0473; 장비명=수호성의 방패; 슬롯=보조; 등급=유물; 권장 레벨=135; 기본 방어=124; 기본 마법방어=62; 중량=중량
+- AR-S0130-481 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5048: ID=ARM-0474; 장비명=파멸의 방패; 슬롯=보조; 등급=유물; 권장 레벨=139; 기본 방어=127; 기본 마법방어=64; 중량=중량
+- AR-S0130-482 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5049: ID=ARM-0475; 장비명=불멸의 방패; 슬롯=보조; 등급=유물; 권장 레벨=142; 기본 방어=130; 기본 마법방어=65; 중량=경량
+- AR-S0130-483 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5050: ID=ARM-0476; 장비명=전설의 방패; 슬롯=보조; 등급=유물; 권장 레벨=146; 기본 방어=133; 기본 마법방어=66; 중량=중량
+- AR-S0130-484 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5051: ID=ARM-0477; 장비명=유물의 방패; 슬롯=보조; 등급=신화; 권장 레벨=149; 기본 방어=135; 기본 마법방어=68; 중량=중량
+- AR-S0130-485 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5052: ID=ARM-0478; 장비명=신화의 방패; 슬롯=보조; 등급=신화; 권장 레벨=153; 기본 방어=138; 기본 마법방어=69; 중량=경량
+- AR-S0130-486 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5053: ID=ARM-0479; 장비명=세계수의 방패; 슬롯=보조; 등급=신화; 권장 레벨=156; 기본 방어=141; 기본 마법방어=70; 중량=중량
+- AR-S0130-487 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0130` §130 방어구·방패 실제 데이터 480종 L5054: ID=ARM-0480; 장비명=종말의 방패; 슬롯=보조; 등급=신화; 권장 레벨=160; 기본 방어=144; 기본 마법방어=72; 중량=중량
+- AR-S0131-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5063: ID=ACC-0001; 아이템명=새벽의 목걸이; 슬롯=목; 등급=일반; 권장 레벨=1; 기본 효과=최대 생명력 증가 +2%
+- AR-S0131-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5064: ID=ACC-0002; 아이템명=황혼을 품은 목걸이; 슬롯=목; 등급=일반; 권장 레벨=1; 기본 효과=최대 마력 증가 +2%
+- AR-S0131-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5065: ID=ACC-0003; 아이템명=한밤이 새겨진 목걸이; 슬롯=목; 등급=일반; 권장 레벨=2; 기본 효과=최대 기력 증가 +2%
+- AR-S0131-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5066: ID=ACC-0004; 아이템명=정오의 목걸이; 슬롯=목; 등급=일반; 권장 레벨=3; 기본 효과=물리 공격력 증가 +2%
+- AR-S0131-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5067: ID=ACC-0005; 아이템명=붉은달을 품은 목걸이; 슬롯=목; 등급=일반; 권장 레벨=4; 기본 효과=마법 위력 증가 +2%
+- AR-S0131-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5068: ID=ACC-0006; 아이템명=푸른달이 새겨진 목걸이; 슬롯=목; 등급=일반; 권장 레벨=5; 기본 효과=물리 방어 증가 +2%
+- AR-S0131-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5069: ID=ACC-0007; 아이템명=초승달의 목걸이; 슬롯=목; 등급=일반; 권장 레벨=5; 기본 효과=마법 방어 증가 +2%
+- AR-S0131-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5070: ID=ACC-0008; 아이템명=보름달을 품은 목걸이; 슬롯=목; 등급=일반; 권장 레벨=6; 기본 효과=명중 증가 +2%
+- AR-S0131-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5071: ID=ACC-0009; 아이템명=별무리이 새겨진 목걸이; 슬롯=목; 등급=일반; 권장 레벨=7; 기본 효과=회피 증가 +2%
+- AR-S0131-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5072: ID=ACC-0010; 아이템명=혜성의 목걸이; 슬롯=목; 등급=일반; 권장 레벨=8; 기본 효과=치명타율 증가 +2%
+- AR-S0131-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5073: ID=ACC-0011; 아이템명=태양을 품은 목걸이; 슬롯=목; 등급=일반; 권장 레벨=10; 기본 효과=치명타 피해 증가 +3%
+- AR-S0131-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5074: ID=ACC-0012; 아이템명=유성이 새겨진 목걸이; 슬롯=목; 등급=일반; 권장 레벨=11; 기본 효과=행동속도 증가 +3%
+- AR-S0131-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5075: ID=ACC-0013; 아이템명=북풍의 목걸이; 슬롯=목; 등급=일반; 권장 레벨=12; 기본 효과=탐색력 증가 +3%
+- AR-S0131-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5076: ID=ACC-0014; 아이템명=남풍을 품은 목걸이; 슬롯=목; 등급=일반; 권장 레벨=13; 기본 효과=함정 탐지 증가 +3%
+- AR-S0131-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5077: ID=ACC-0015; 아이템명=동풍이 새겨진 목걸이; 슬롯=목; 등급=일반; 권장 레벨=14; 기본 효과=화염 저항 증가 +3%
+- AR-S0131-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5078: ID=ACC-0016; 아이템명=서풍의 목걸이; 슬롯=목; 등급=일반; 권장 레벨=15; 기본 효과=냉기 저항 증가 +3%
+- AR-S0131-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5079: ID=ACC-0017; 아이템명=천둥을 품은 목걸이; 슬롯=목; 등급=일반; 권장 레벨=16; 기본 효과=번개 저항 증가 +3%
+- AR-S0131-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5080: ID=ACC-0018; 아이템명=폭우이 새겨진 목걸이; 슬롯=목; 등급=일반; 권장 레벨=18; 기본 효과=독 저항 증가 +3%
+- AR-S0131-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5081: ID=ACC-0019; 아이템명=첫눈의 목걸이; 슬롯=목; 등급=고급; 권장 레벨=19; 기본 효과=암흑 저항 증가 +3%
+- AR-S0131-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5082: ID=ACC-0020; 아이템명=서리을 품은 목걸이; 슬롯=목; 등급=고급; 권장 레벨=20; 기본 효과=신성 저항 증가 +3%
+- AR-S0131-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5083: ID=ACC-0021; 아이템명=불꽃이 새겨진 목걸이; 슬롯=목; 등급=고급; 권장 레벨=21; 기본 효과=마력 회복 증가 +3%
+- AR-S0131-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5084: ID=ACC-0022; 아이템명=잿불의 목걸이; 슬롯=목; 등급=고급; 권장 레벨=23; 기본 효과=기력 회복 증가 +3%
+- AR-S0131-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5085: ID=ACC-0023; 아이템명=용암을 품은 목걸이; 슬롯=목; 등급=고급; 권장 레벨=24; 기본 효과=부상 저항 증가 +3%
+- AR-S0131-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5086: ID=ACC-0024; 아이템명=빙하이 새겨진 목걸이; 슬롯=목; 등급=고급; 권장 레벨=25; 기본 효과=공포 저항 증가 +3%
+- AR-S0131-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5087: ID=ACC-0025; 아이템명=파도의 목걸이; 슬롯=목; 등급=고급; 권장 레벨=26; 기본 효과=전리품 발견 보정 +3%
+- AR-S0131-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5088: ID=ACC-0026; 아이템명=심해을 품은 목걸이; 슬롯=목; 등급=고급; 권장 레벨=28; 기본 효과=최대 생명력 증가 +4%
+- AR-S0131-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5089: ID=ACC-0027; 아이템명=산맥이 새겨진 목걸이; 슬롯=목; 등급=고급; 권장 레벨=29; 기본 효과=최대 마력 증가 +4%
+- AR-S0131-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5090: ID=ACC-0028; 아이템명=대지의 목걸이; 슬롯=목; 등급=고급; 권장 레벨=30; 기본 효과=최대 기력 증가 +4%
+- AR-S0131-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5091: ID=ACC-0029; 아이템명=숲을 품은 목걸이; 슬롯=목; 등급=고급; 권장 레벨=32; 기본 효과=물리 공격력 증가 +4%
+- AR-S0131-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5092: ID=ACC-0030; 아이템명=세계수이 새겨진 목걸이; 슬롯=목; 등급=고급; 권장 레벨=33; 기본 효과=마법 위력 증가 +4%
+- AR-S0131-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5093: ID=ACC-0031; 아이템명=장미의 목걸이; 슬롯=목; 등급=고급; 권장 레벨=35; 기본 효과=물리 방어 증가 +4%
+- AR-S0131-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5094: ID=ACC-0032; 아이템명=백합을 품은 목걸이; 슬롯=목; 등급=고급; 권장 레벨=36; 기본 효과=마법 방어 증가 +4%
+- AR-S0131-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5095: ID=ACC-0033; 아이템명=가시이 새겨진 목걸이; 슬롯=목; 등급=고급; 권장 레벨=37; 기본 효과=명중 증가 +4%
+- AR-S0131-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5096: ID=ACC-0034; 아이템명=독초의 목걸이; 슬롯=목; 등급=고급; 권장 레벨=39; 기본 효과=회피 증가 +4%
+- AR-S0131-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5097: ID=ACC-0035; 아이템명=약초을 품은 목걸이; 슬롯=목; 등급=고급; 권장 레벨=40; 기본 효과=치명타율 증가 +4%
+- AR-S0131-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5098: ID=ACC-0036; 아이템명=까마귀이 새겨진 목걸이; 슬롯=목; 등급=고급; 권장 레벨=42; 기본 효과=치명타 피해 증가 +4%
+- AR-S0131-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5099: ID=ACC-0037; 아이템명=늑대의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=43; 기본 효과=행동속도 증가 +4%
+- AR-S0131-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5100: ID=ACC-0038; 아이템명=사자을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=45; 기본 효과=탐색력 증가 +4%
+- AR-S0131-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5101: ID=ACC-0039; 아이템명=매이 새겨진 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=46; 기본 효과=함정 탐지 증가 +5%
+- AR-S0131-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5102: ID=ACC-0040; 아이템명=부엉이의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=48; 기본 효과=화염 저항 증가 +5%
+- AR-S0131-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5103: ID=ACC-0041; 아이템명=사슴을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=49; 기본 효과=냉기 저항 증가 +5%
+- AR-S0131-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5104: ID=ACC-0042; 아이템명=뱀이 새겨진 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=51; 기본 효과=번개 저항 증가 +5%
+- AR-S0131-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5105: ID=ACC-0043; 아이템명=거미의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=52; 기본 효과=독 저항 증가 +5%
+- AR-S0131-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5106: ID=ACC-0044; 아이템명=용을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=54; 기본 효과=암흑 저항 증가 +5%
+- AR-S0131-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5107: ID=ACC-0045; 아이템명=와이번이 새겨진 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=55; 기본 효과=신성 저항 증가 +5%
+- AR-S0131-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5108: ID=ACC-0046; 아이템명=그리폰의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=57; 기본 효과=마력 회복 증가 +5%
+- AR-S0131-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5109: ID=ACC-0047; 아이템명=유니콘을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=58; 기본 효과=기력 회복 증가 +5%
+- AR-S0131-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5110: ID=ACC-0048; 아이템명=불사조이 새겨진 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=60; 기본 효과=부상 저항 증가 +5%
+- AR-S0131-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5111: ID=ACC-0049; 아이템명=거인의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=61; 기본 효과=공포 저항 증가 +5%
+- AR-S0131-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5112: ID=ACC-0050; 아이템명=요정을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=63; 기본 효과=전리품 발견 보정 +6%
+- AR-S0131-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5113: ID=ACC-0051; 아이템명=정령이 새겨진 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=65; 기본 효과=최대 생명력 증가 +6%
+- AR-S0131-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5114: ID=ACC-0052; 아이템명=천사의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=66; 기본 효과=최대 마력 증가 +6%
+- AR-S0131-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5115: ID=ACC-0053; 아이템명=악마을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=68; 기본 효과=최대 기력 증가 +6%
+- AR-S0131-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5116: ID=ACC-0054; 아이템명=심연이 새겨진 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=69; 기본 효과=물리 공격력 증가 +6%
+- AR-S0131-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5117: ID=ACC-0055; 아이템명=성역의 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=71; 기본 효과=마법 위력 증가 +6%
+- AR-S0131-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5118: ID=ACC-0056; 아이템명=왕관을 품은 목걸이; 슬롯=목; 등급=희귀; 권장 레벨=73; 기본 효과=물리 방어 증가 +6%
+- AR-S0131-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5119: ID=ACC-0057; 아이템명=기사이 새겨진 목걸이; 슬롯=목; 등급=특급; 권장 레벨=74; 기본 효과=마법 방어 증가 +6%
+- AR-S0131-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5120: ID=ACC-0058; 아이템명=마법사의 목걸이; 슬롯=목; 등급=특급; 권장 레벨=76; 기본 효과=명중 증가 +6%
+- AR-S0131-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5121: ID=ACC-0059; 아이템명=사제을 품은 목걸이; 슬롯=목; 등급=특급; 권장 레벨=78; 기본 효과=회피 증가 +6%
+- AR-S0131-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5122: ID=ACC-0060; 아이템명=도적이 새겨진 목걸이; 슬롯=목; 등급=특급; 권장 레벨=79; 기본 효과=치명타율 증가 +6%
+- AR-S0131-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5123: ID=ACC-0061; 아이템명=사냥꾼의 목걸이; 슬롯=목; 등급=특급; 권장 레벨=81; 기본 효과=치명타 피해 증가 +6%
+- AR-S0131-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5124: ID=ACC-0062; 아이템명=방랑자을 품은 목걸이; 슬롯=목; 등급=특급; 권장 레벨=83; 기본 효과=행동속도 증가 +7%
+- AR-S0131-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5125: ID=ACC-0063; 아이템명=용병이 새겨진 목걸이; 슬롯=목; 등급=특급; 권장 레벨=84; 기본 효과=탐색력 증가 +7%
+- AR-S0131-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5126: ID=ACC-0064; 아이템명=왕의 목걸이; 슬롯=목; 등급=특급; 권장 레벨=86; 기본 효과=함정 탐지 증가 +7%
+- AR-S0131-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5127: ID=ACC-0065; 아이템명=여왕을 품은 목걸이; 슬롯=목; 등급=특급; 권장 레벨=88; 기본 효과=화염 저항 증가 +7%
+- AR-S0131-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5128: ID=ACC-0066; 아이템명=황제이 새겨진 목걸이; 슬롯=목; 등급=특급; 권장 레벨=89; 기본 효과=냉기 저항 증가 +7%
+- AR-S0131-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5129: ID=ACC-0067; 아이템명=예언자의 목걸이; 슬롯=목; 등급=특급; 권장 레벨=91; 기본 효과=번개 저항 증가 +7%
+- AR-S0131-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5130: ID=ACC-0068; 아이템명=현자을 품은 목걸이; 슬롯=목; 등급=특급; 권장 레벨=93; 기본 효과=독 저항 증가 +7%
+- AR-S0131-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5131: ID=ACC-0069; 아이템명=순교자이 새겨진 목걸이; 슬롯=목; 등급=특급; 권장 레벨=94; 기본 효과=암흑 저항 증가 +7%
+- AR-S0131-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5132: ID=ACC-0070; 아이템명=수호자의 목걸이; 슬롯=목; 등급=특급; 권장 레벨=96; 기본 효과=신성 저항 증가 +7%
+- AR-S0131-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5133: ID=ACC-0071; 아이템명=정복자을 품은 목걸이; 슬롯=목; 등급=특급; 권장 레벨=98; 기본 효과=마력 회복 증가 +7%
+- AR-S0131-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5134: ID=ACC-0072; 아이템명=복수자이 새겨진 목걸이; 슬롯=목; 등급=특급; 권장 레벨=100; 기본 효과=기력 회복 증가 +8%
+- AR-S0131-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5135: ID=ACC-0073; 아이템명=구원자의 목걸이; 슬롯=목; 등급=특급; 권장 레벨=101; 기본 효과=부상 저항 증가 +8%
+- AR-S0131-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5136: ID=ACC-0074; 아이템명=파괴자을 품은 목걸이; 슬롯=목; 등급=특급; 권장 레벨=103; 기본 효과=공포 저항 증가 +8%
+- AR-S0131-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5137: ID=ACC-0075; 아이템명=방벽이 새겨진 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=105; 기본 효과=전리품 발견 보정 +8%
+- AR-S0131-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5138: ID=ACC-0076; 아이템명=검의 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=107; 기본 효과=최대 생명력 증가 +8%
+- AR-S0131-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5139: ID=ACC-0077; 아이템명=창을 품은 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=108; 기본 효과=최대 마력 증가 +8%
+- AR-S0131-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5140: ID=ACC-0078; 아이템명=활이 새겨진 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=110; 기본 효과=최대 기력 증가 +8%
+- AR-S0131-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5141: ID=ACC-0079; 아이템명=방패의 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=112; 기본 효과=물리 공격력 증가 +8%
+- AR-S0131-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5142: ID=ACC-0080; 아이템명=지팡이을 품은 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=114; 기본 효과=마법 위력 증가 +8%
+- AR-S0131-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5143: ID=ACC-0081; 아이템명=마도서이 새겨진 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=116; 기본 효과=물리 방어 증가 +8%
+- AR-S0131-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5144: ID=ACC-0082; 아이템명=성배의 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=117; 기본 효과=마법 방어 증가 +8%
+- AR-S0131-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5145: ID=ACC-0083; 아이템명=열쇠을 품은 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=119; 기본 효과=명중 증가 +9%
+- AR-S0131-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5146: ID=ACC-0084; 아이템명=거울이 새겨진 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=121; 기본 효과=회피 증가 +9%
+- AR-S0131-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5147: ID=ACC-0085; 아이템명=시계의 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=123; 기본 효과=치명타율 증가 +9%
+- AR-S0131-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5148: ID=ACC-0086; 아이템명=나침반을 품은 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=125; 기본 효과=치명타 피해 증가 +9%
+- AR-S0131-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5149: ID=ACC-0087; 아이템명=등불이 새겨진 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=126; 기본 효과=행동속도 증가 +9%
+- AR-S0131-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5150: ID=ACC-0088; 아이템명=봉인의 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=128; 기본 효과=탐색력 증가 +9%
+- AR-S0131-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5151: ID=ACC-0089; 아이템명=룬을 품은 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=130; 기본 효과=함정 탐지 증가 +9%
+- AR-S0131-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5152: ID=ACC-0090; 아이템명=문장이 새겨진 목걸이; 슬롯=목; 등급=영웅; 권장 레벨=132; 기본 효과=화염 저항 증가 +9%
+- AR-S0131-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5153: ID=ACC-0091; 아이템명=서약의 목걸이; 슬롯=목; 등급=전설; 권장 레벨=134; 기본 효과=냉기 저항 증가 +9%
+- AR-S0131-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5154: ID=ACC-0092; 아이템명=기억을 품은 목걸이; 슬롯=목; 등급=전설; 권장 레벨=136; 기본 효과=번개 저항 증가 +10%
+- AR-S0131-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5155: ID=ACC-0093; 아이템명=꿈이 새겨진 목걸이; 슬롯=목; 등급=전설; 권장 레벨=137; 기본 효과=독 저항 증가 +10%
+- AR-S0131-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5156: ID=ACC-0094; 아이템명=악몽의 목걸이; 슬롯=목; 등급=전설; 권장 레벨=139; 기본 효과=암흑 저항 증가 +10%
+- AR-S0131-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5157: ID=ACC-0095; 아이템명=침묵을 품은 목걸이; 슬롯=목; 등급=전설; 권장 레벨=141; 기본 효과=신성 저항 증가 +10%
+- AR-S0131-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5158: ID=ACC-0096; 아이템명=노래이 새겨진 목걸이; 슬롯=목; 등급=전설; 권장 레벨=143; 기본 효과=마력 회복 증가 +10%
+- AR-S0131-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5159: ID=ACC-0097; 아이템명=운명의 목걸이; 슬롯=목; 등급=전설; 권장 레벨=145; 기본 효과=기력 회복 증가 +10%
+- AR-S0131-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5160: ID=ACC-0098; 아이템명=인연을 품은 목걸이; 슬롯=목; 등급=전설; 권장 레벨=147; 기본 효과=부상 저항 증가 +10%
+- AR-S0131-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5161: ID=ACC-0099; 아이템명=귀환이 새겨진 목걸이; 슬롯=목; 등급=전설; 권장 레벨=149; 기본 효과=공포 저항 증가 +10%
+- AR-S0131-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5162: ID=ACC-0100; 아이템명=영원의 목걸이; 슬롯=목; 등급=유물; 권장 레벨=151; 기본 효과=전리품 발견 보정 +10%
+- AR-S0131-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5163: ID=ACC-0101; 아이템명=시간을 품은 목걸이; 슬롯=목; 등급=유물; 권장 레벨=152; 기본 효과=최대 생명력 증가 +10%
+- AR-S0131-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5164: ID=ACC-0102; 아이템명=공간이 새겨진 목걸이; 슬롯=목; 등급=유물; 권장 레벨=154; 기본 효과=최대 마력 증가 +11%
+- AR-S0131-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5165: ID=ACC-0103; 아이템명=생명의 목걸이; 슬롯=목; 등급=유물; 권장 레벨=156; 기본 효과=최대 기력 증가 +11%
+- AR-S0131-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5166: ID=ACC-0104; 아이템명=죽음을 품은 목걸이; 슬롯=목; 등급=신화; 권장 레벨=158; 기본 효과=물리 공격력 증가 +11%
+- AR-S0131-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5167: ID=ACC-0105; 아이템명=균열이 새겨진 목걸이; 슬롯=목; 등급=신화; 권장 레벨=160; 기본 효과=마법 위력 증가 +11%
+- AR-S0131-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5171: ID=ID; 아이템명=아이템명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 효과=기본 효과
+- AR-S0131-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5173: ID=ACC-0106; 아이템명=새벽의 반지; 슬롯=손가락; 등급=일반; 권장 레벨=1; 기본 효과=마법 방어 증가 +2%
+- AR-S0131-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5174: ID=ACC-0107; 아이템명=황혼을 품은 반지; 슬롯=손가락; 등급=일반; 권장 레벨=1; 기본 효과=명중 증가 +2%
+- AR-S0131-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5175: ID=ACC-0108; 아이템명=한밤이 새겨진 반지; 슬롯=손가락; 등급=일반; 권장 레벨=2; 기본 효과=회피 증가 +2%
+- AR-S0131-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5176: ID=ACC-0109; 아이템명=정오의 반지; 슬롯=손가락; 등급=일반; 권장 레벨=3; 기본 효과=치명타율 증가 +2%
+- AR-S0131-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5177: ID=ACC-0110; 아이템명=붉은달을 품은 반지; 슬롯=손가락; 등급=일반; 권장 레벨=4; 기본 효과=치명타 피해 증가 +2%
+- AR-S0131-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5178: ID=ACC-0111; 아이템명=푸른달이 새겨진 반지; 슬롯=손가락; 등급=일반; 권장 레벨=5; 기본 효과=행동속도 증가 +2%
+- AR-S0131-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5179: ID=ACC-0112; 아이템명=초승달의 반지; 슬롯=손가락; 등급=일반; 권장 레벨=5; 기본 효과=탐색력 증가 +2%
+- AR-S0131-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5180: ID=ACC-0113; 아이템명=보름달을 품은 반지; 슬롯=손가락; 등급=일반; 권장 레벨=6; 기본 효과=함정 탐지 증가 +2%
+- AR-S0131-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5181: ID=ACC-0114; 아이템명=별무리이 새겨진 반지; 슬롯=손가락; 등급=일반; 권장 레벨=7; 기본 효과=화염 저항 증가 +2%
+- AR-S0131-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5182: ID=ACC-0115; 아이템명=혜성의 반지; 슬롯=손가락; 등급=일반; 권장 레벨=8; 기본 효과=냉기 저항 증가 +2%
+- AR-S0131-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5183: ID=ACC-0116; 아이템명=태양을 품은 반지; 슬롯=손가락; 등급=일반; 권장 레벨=10; 기본 효과=번개 저항 증가 +3%
+- AR-S0131-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5184: ID=ACC-0117; 아이템명=유성이 새겨진 반지; 슬롯=손가락; 등급=일반; 권장 레벨=11; 기본 효과=독 저항 증가 +3%
+- AR-S0131-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5185: ID=ACC-0118; 아이템명=북풍의 반지; 슬롯=손가락; 등급=일반; 권장 레벨=12; 기본 효과=암흑 저항 증가 +3%
+- AR-S0131-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5186: ID=ACC-0119; 아이템명=남풍을 품은 반지; 슬롯=손가락; 등급=일반; 권장 레벨=13; 기본 효과=신성 저항 증가 +3%
+- AR-S0131-121 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5187: ID=ACC-0120; 아이템명=동풍이 새겨진 반지; 슬롯=손가락; 등급=일반; 권장 레벨=14; 기본 효과=마력 회복 증가 +3%
+- AR-S0131-122 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5188: ID=ACC-0121; 아이템명=서풍의 반지; 슬롯=손가락; 등급=일반; 권장 레벨=15; 기본 효과=기력 회복 증가 +3%
+- AR-S0131-123 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5189: ID=ACC-0122; 아이템명=천둥을 품은 반지; 슬롯=손가락; 등급=일반; 권장 레벨=16; 기본 효과=부상 저항 증가 +3%
+- AR-S0131-124 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5190: ID=ACC-0123; 아이템명=폭우이 새겨진 반지; 슬롯=손가락; 등급=일반; 권장 레벨=18; 기본 효과=공포 저항 증가 +3%
+- AR-S0131-125 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5191: ID=ACC-0124; 아이템명=첫눈의 반지; 슬롯=손가락; 등급=고급; 권장 레벨=19; 기본 효과=전리품 발견 보정 +3%
+- AR-S0131-126 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5192: ID=ACC-0125; 아이템명=서리을 품은 반지; 슬롯=손가락; 등급=고급; 권장 레벨=20; 기본 효과=최대 생명력 증가 +3%
+- AR-S0131-127 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5193: ID=ACC-0126; 아이템명=불꽃이 새겨진 반지; 슬롯=손가락; 등급=고급; 권장 레벨=21; 기본 효과=최대 마력 증가 +3%
+- AR-S0131-128 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5194: ID=ACC-0127; 아이템명=잿불의 반지; 슬롯=손가락; 등급=고급; 권장 레벨=23; 기본 효과=최대 기력 증가 +3%
+- AR-S0131-129 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5195: ID=ACC-0128; 아이템명=용암을 품은 반지; 슬롯=손가락; 등급=고급; 권장 레벨=24; 기본 효과=물리 공격력 증가 +3%
+- AR-S0131-130 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5196: ID=ACC-0129; 아이템명=빙하이 새겨진 반지; 슬롯=손가락; 등급=고급; 권장 레벨=25; 기본 효과=마법 위력 증가 +3%
+- AR-S0131-131 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5197: ID=ACC-0130; 아이템명=파도의 반지; 슬롯=손가락; 등급=고급; 권장 레벨=26; 기본 효과=물리 방어 증가 +3%
+- AR-S0131-132 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5198: ID=ACC-0131; 아이템명=심해을 품은 반지; 슬롯=손가락; 등급=고급; 권장 레벨=28; 기본 효과=마법 방어 증가 +4%
+- AR-S0131-133 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5199: ID=ACC-0132; 아이템명=산맥이 새겨진 반지; 슬롯=손가락; 등급=고급; 권장 레벨=29; 기본 효과=명중 증가 +4%
+- AR-S0131-134 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5200: ID=ACC-0133; 아이템명=대지의 반지; 슬롯=손가락; 등급=고급; 권장 레벨=30; 기본 효과=회피 증가 +4%
+- AR-S0131-135 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5201: ID=ACC-0134; 아이템명=숲을 품은 반지; 슬롯=손가락; 등급=고급; 권장 레벨=32; 기본 효과=치명타율 증가 +4%
+- AR-S0131-136 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5202: ID=ACC-0135; 아이템명=세계수이 새겨진 반지; 슬롯=손가락; 등급=고급; 권장 레벨=33; 기본 효과=치명타 피해 증가 +4%
+- AR-S0131-137 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5203: ID=ACC-0136; 아이템명=장미의 반지; 슬롯=손가락; 등급=고급; 권장 레벨=35; 기본 효과=행동속도 증가 +4%
+- AR-S0131-138 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5204: ID=ACC-0137; 아이템명=백합을 품은 반지; 슬롯=손가락; 등급=고급; 권장 레벨=36; 기본 효과=탐색력 증가 +4%
+- AR-S0131-139 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5205: ID=ACC-0138; 아이템명=가시이 새겨진 반지; 슬롯=손가락; 등급=고급; 권장 레벨=37; 기본 효과=함정 탐지 증가 +4%
+- AR-S0131-140 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5206: ID=ACC-0139; 아이템명=독초의 반지; 슬롯=손가락; 등급=고급; 권장 레벨=39; 기본 효과=화염 저항 증가 +4%
+- AR-S0131-141 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5207: ID=ACC-0140; 아이템명=약초을 품은 반지; 슬롯=손가락; 등급=고급; 권장 레벨=40; 기본 효과=냉기 저항 증가 +4%
+- AR-S0131-142 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5208: ID=ACC-0141; 아이템명=까마귀이 새겨진 반지; 슬롯=손가락; 등급=고급; 권장 레벨=42; 기본 효과=번개 저항 증가 +4%
+- AR-S0131-143 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5209: ID=ACC-0142; 아이템명=늑대의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=43; 기본 효과=독 저항 증가 +4%
+- AR-S0131-144 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5210: ID=ACC-0143; 아이템명=사자을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=45; 기본 효과=암흑 저항 증가 +4%
+- AR-S0131-145 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5211: ID=ACC-0144; 아이템명=매이 새겨진 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=46; 기본 효과=신성 저항 증가 +5%
+- AR-S0131-146 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5212: ID=ACC-0145; 아이템명=부엉이의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=48; 기본 효과=마력 회복 증가 +5%
+- AR-S0131-147 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5213: ID=ACC-0146; 아이템명=사슴을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=49; 기본 효과=기력 회복 증가 +5%
+- AR-S0131-148 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5214: ID=ACC-0147; 아이템명=뱀이 새겨진 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=51; 기본 효과=부상 저항 증가 +5%
+- AR-S0131-149 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5215: ID=ACC-0148; 아이템명=거미의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=52; 기본 효과=공포 저항 증가 +5%
+- AR-S0131-150 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5216: ID=ACC-0149; 아이템명=용을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=54; 기본 효과=전리품 발견 보정 +5%
+- AR-S0131-151 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5217: ID=ACC-0150; 아이템명=와이번이 새겨진 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=55; 기본 효과=최대 생명력 증가 +5%
+- AR-S0131-152 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5218: ID=ACC-0151; 아이템명=그리폰의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=57; 기본 효과=최대 마력 증가 +5%
+- AR-S0131-153 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5219: ID=ACC-0152; 아이템명=유니콘을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=58; 기본 효과=최대 기력 증가 +5%
+- AR-S0131-154 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5220: ID=ACC-0153; 아이템명=불사조이 새겨진 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=60; 기본 효과=물리 공격력 증가 +5%
+- AR-S0131-155 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5221: ID=ACC-0154; 아이템명=거인의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=61; 기본 효과=마법 위력 증가 +5%
+- AR-S0131-156 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5222: ID=ACC-0155; 아이템명=요정을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=63; 기본 효과=물리 방어 증가 +6%
+- AR-S0131-157 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5223: ID=ACC-0156; 아이템명=정령이 새겨진 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=65; 기본 효과=마법 방어 증가 +6%
+- AR-S0131-158 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5224: ID=ACC-0157; 아이템명=천사의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=66; 기본 효과=명중 증가 +6%
+- AR-S0131-159 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5225: ID=ACC-0158; 아이템명=악마을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=68; 기본 효과=회피 증가 +6%
+- AR-S0131-160 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5226: ID=ACC-0159; 아이템명=심연이 새겨진 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=69; 기본 효과=치명타율 증가 +6%
+- AR-S0131-161 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5227: ID=ACC-0160; 아이템명=성역의 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=71; 기본 효과=치명타 피해 증가 +6%
+- AR-S0131-162 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5228: ID=ACC-0161; 아이템명=왕관을 품은 반지; 슬롯=손가락; 등급=희귀; 권장 레벨=73; 기본 효과=행동속도 증가 +6%
+- AR-S0131-163 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5229: ID=ACC-0162; 아이템명=기사이 새겨진 반지; 슬롯=손가락; 등급=특급; 권장 레벨=74; 기본 효과=탐색력 증가 +6%
+- AR-S0131-164 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5230: ID=ACC-0163; 아이템명=마법사의 반지; 슬롯=손가락; 등급=특급; 권장 레벨=76; 기본 효과=함정 탐지 증가 +6%
+- AR-S0131-165 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5231: ID=ACC-0164; 아이템명=사제을 품은 반지; 슬롯=손가락; 등급=특급; 권장 레벨=78; 기본 효과=화염 저항 증가 +6%
+- AR-S0131-166 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5232: ID=ACC-0165; 아이템명=도적이 새겨진 반지; 슬롯=손가락; 등급=특급; 권장 레벨=79; 기본 효과=냉기 저항 증가 +6%
+- AR-S0131-167 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5233: ID=ACC-0166; 아이템명=사냥꾼의 반지; 슬롯=손가락; 등급=특급; 권장 레벨=81; 기본 효과=번개 저항 증가 +6%
+- AR-S0131-168 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5234: ID=ACC-0167; 아이템명=방랑자을 품은 반지; 슬롯=손가락; 등급=특급; 권장 레벨=83; 기본 효과=독 저항 증가 +7%
+- AR-S0131-169 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5235: ID=ACC-0168; 아이템명=용병이 새겨진 반지; 슬롯=손가락; 등급=특급; 권장 레벨=84; 기본 효과=암흑 저항 증가 +7%
+- AR-S0131-170 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5236: ID=ACC-0169; 아이템명=왕의 반지; 슬롯=손가락; 등급=특급; 권장 레벨=86; 기본 효과=신성 저항 증가 +7%
+- AR-S0131-171 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5237: ID=ACC-0170; 아이템명=여왕을 품은 반지; 슬롯=손가락; 등급=특급; 권장 레벨=88; 기본 효과=마력 회복 증가 +7%
+- AR-S0131-172 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5238: ID=ACC-0171; 아이템명=황제이 새겨진 반지; 슬롯=손가락; 등급=특급; 권장 레벨=89; 기본 효과=기력 회복 증가 +7%
+- AR-S0131-173 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5239: ID=ACC-0172; 아이템명=예언자의 반지; 슬롯=손가락; 등급=특급; 권장 레벨=91; 기본 효과=부상 저항 증가 +7%
+- AR-S0131-174 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5240: ID=ACC-0173; 아이템명=현자을 품은 반지; 슬롯=손가락; 등급=특급; 권장 레벨=93; 기본 효과=공포 저항 증가 +7%
+- AR-S0131-175 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5241: ID=ACC-0174; 아이템명=순교자이 새겨진 반지; 슬롯=손가락; 등급=특급; 권장 레벨=94; 기본 효과=전리품 발견 보정 +7%
+- AR-S0131-176 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5242: ID=ACC-0175; 아이템명=수호자의 반지; 슬롯=손가락; 등급=특급; 권장 레벨=96; 기본 효과=최대 생명력 증가 +7%
+- AR-S0131-177 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5243: ID=ACC-0176; 아이템명=정복자을 품은 반지; 슬롯=손가락; 등급=특급; 권장 레벨=98; 기본 효과=최대 마력 증가 +7%
+- AR-S0131-178 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5244: ID=ACC-0177; 아이템명=복수자이 새겨진 반지; 슬롯=손가락; 등급=특급; 권장 레벨=100; 기본 효과=최대 기력 증가 +8%
+- AR-S0131-179 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5245: ID=ACC-0178; 아이템명=구원자의 반지; 슬롯=손가락; 등급=특급; 권장 레벨=101; 기본 효과=물리 공격력 증가 +8%
+- AR-S0131-180 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5246: ID=ACC-0179; 아이템명=파괴자을 품은 반지; 슬롯=손가락; 등급=특급; 권장 레벨=103; 기본 효과=마법 위력 증가 +8%
+- AR-S0131-181 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5247: ID=ACC-0180; 아이템명=방벽이 새겨진 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=105; 기본 효과=물리 방어 증가 +8%
+- AR-S0131-182 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5248: ID=ACC-0181; 아이템명=검의 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=107; 기본 효과=마법 방어 증가 +8%
+- AR-S0131-183 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5249: ID=ACC-0182; 아이템명=창을 품은 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=108; 기본 효과=명중 증가 +8%
+- AR-S0131-184 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5250: ID=ACC-0183; 아이템명=활이 새겨진 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=110; 기본 효과=회피 증가 +8%
+- AR-S0131-185 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5251: ID=ACC-0184; 아이템명=방패의 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=112; 기본 효과=치명타율 증가 +8%
+- AR-S0131-186 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5252: ID=ACC-0185; 아이템명=지팡이을 품은 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=114; 기본 효과=치명타 피해 증가 +8%
+- AR-S0131-187 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5253: ID=ACC-0186; 아이템명=마도서이 새겨진 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=116; 기본 효과=행동속도 증가 +8%
+- AR-S0131-188 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5254: ID=ACC-0187; 아이템명=성배의 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=117; 기본 효과=탐색력 증가 +8%
+- AR-S0131-189 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5255: ID=ACC-0188; 아이템명=열쇠을 품은 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=119; 기본 효과=함정 탐지 증가 +9%
+- AR-S0131-190 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5256: ID=ACC-0189; 아이템명=거울이 새겨진 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=121; 기본 효과=화염 저항 증가 +9%
+- AR-S0131-191 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5257: ID=ACC-0190; 아이템명=시계의 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=123; 기본 효과=냉기 저항 증가 +9%
+- AR-S0131-192 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5258: ID=ACC-0191; 아이템명=나침반을 품은 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=125; 기본 효과=번개 저항 증가 +9%
+- AR-S0131-193 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5259: ID=ACC-0192; 아이템명=등불이 새겨진 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=126; 기본 효과=독 저항 증가 +9%
+- AR-S0131-194 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5260: ID=ACC-0193; 아이템명=봉인의 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=128; 기본 효과=암흑 저항 증가 +9%
+- AR-S0131-195 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5261: ID=ACC-0194; 아이템명=룬을 품은 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=130; 기본 효과=신성 저항 증가 +9%
+- AR-S0131-196 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5262: ID=ACC-0195; 아이템명=문장이 새겨진 반지; 슬롯=손가락; 등급=영웅; 권장 레벨=132; 기본 효과=마력 회복 증가 +9%
+- AR-S0131-197 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5263: ID=ACC-0196; 아이템명=서약의 반지; 슬롯=손가락; 등급=전설; 권장 레벨=134; 기본 효과=기력 회복 증가 +9%
+- AR-S0131-198 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5264: ID=ACC-0197; 아이템명=기억을 품은 반지; 슬롯=손가락; 등급=전설; 권장 레벨=136; 기본 효과=부상 저항 증가 +10%
+- AR-S0131-199 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5265: ID=ACC-0198; 아이템명=꿈이 새겨진 반지; 슬롯=손가락; 등급=전설; 권장 레벨=137; 기본 효과=공포 저항 증가 +10%
+- AR-S0131-200 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5266: ID=ACC-0199; 아이템명=악몽의 반지; 슬롯=손가락; 등급=전설; 권장 레벨=139; 기본 효과=전리품 발견 보정 +10%
+- AR-S0131-201 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5267: ID=ACC-0200; 아이템명=침묵을 품은 반지; 슬롯=손가락; 등급=전설; 권장 레벨=141; 기본 효과=최대 생명력 증가 +10%
+- AR-S0131-202 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5268: ID=ACC-0201; 아이템명=노래이 새겨진 반지; 슬롯=손가락; 등급=전설; 권장 레벨=143; 기본 효과=최대 마력 증가 +10%
+- AR-S0131-203 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5269: ID=ACC-0202; 아이템명=운명의 반지; 슬롯=손가락; 등급=전설; 권장 레벨=145; 기본 효과=최대 기력 증가 +10%
+- AR-S0131-204 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5270: ID=ACC-0203; 아이템명=인연을 품은 반지; 슬롯=손가락; 등급=전설; 권장 레벨=147; 기본 효과=물리 공격력 증가 +10%
+- AR-S0131-205 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5271: ID=ACC-0204; 아이템명=귀환이 새겨진 반지; 슬롯=손가락; 등급=전설; 권장 레벨=149; 기본 효과=마법 위력 증가 +10%
+- AR-S0131-206 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5272: ID=ACC-0205; 아이템명=영원의 반지; 슬롯=손가락; 등급=유물; 권장 레벨=151; 기본 효과=물리 방어 증가 +10%
+- AR-S0131-207 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5273: ID=ACC-0206; 아이템명=시간을 품은 반지; 슬롯=손가락; 등급=유물; 권장 레벨=152; 기본 효과=마법 방어 증가 +10%
+- AR-S0131-208 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5274: ID=ACC-0207; 아이템명=공간이 새겨진 반지; 슬롯=손가락; 등급=유물; 권장 레벨=154; 기본 효과=명중 증가 +11%
+- AR-S0131-209 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5275: ID=ACC-0208; 아이템명=생명의 반지; 슬롯=손가락; 등급=유물; 권장 레벨=156; 기본 효과=회피 증가 +11%
+- AR-S0131-210 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5276: ID=ACC-0209; 아이템명=죽음을 품은 반지; 슬롯=손가락; 등급=신화; 권장 레벨=158; 기본 효과=치명타율 증가 +11%
+- AR-S0131-211 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5277: ID=ACC-0210; 아이템명=균열이 새겨진 반지; 슬롯=손가락; 등급=신화; 권장 레벨=160; 기본 효과=치명타 피해 증가 +11%
+- AR-S0131-212 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5281: ID=ID; 아이템명=아이템명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 효과=기본 효과
+- AR-S0131-213 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5283: ID=ACC-0211; 아이템명=새벽의 부적; 슬롯=부적; 등급=일반; 권장 레벨=1; 기본 효과=탐색력 증가 +2%
+- AR-S0131-214 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5284: ID=ACC-0212; 아이템명=황혼을 품은 부적; 슬롯=부적; 등급=일반; 권장 레벨=1; 기본 효과=함정 탐지 증가 +2%
+- AR-S0131-215 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5285: ID=ACC-0213; 아이템명=한밤이 새겨진 부적; 슬롯=부적; 등급=일반; 권장 레벨=2; 기본 효과=화염 저항 증가 +2%
+- AR-S0131-216 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5286: ID=ACC-0214; 아이템명=정오의 부적; 슬롯=부적; 등급=일반; 권장 레벨=3; 기본 효과=냉기 저항 증가 +2%
+- AR-S0131-217 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5287: ID=ACC-0215; 아이템명=붉은달을 품은 부적; 슬롯=부적; 등급=일반; 권장 레벨=4; 기본 효과=번개 저항 증가 +2%
+- AR-S0131-218 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5288: ID=ACC-0216; 아이템명=푸른달이 새겨진 부적; 슬롯=부적; 등급=일반; 권장 레벨=5; 기본 효과=독 저항 증가 +2%
+- AR-S0131-219 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5289: ID=ACC-0217; 아이템명=초승달의 부적; 슬롯=부적; 등급=일반; 권장 레벨=5; 기본 효과=암흑 저항 증가 +2%
+- AR-S0131-220 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5290: ID=ACC-0218; 아이템명=보름달을 품은 부적; 슬롯=부적; 등급=일반; 권장 레벨=6; 기본 효과=신성 저항 증가 +2%
+- AR-S0131-221 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5291: ID=ACC-0219; 아이템명=별무리이 새겨진 부적; 슬롯=부적; 등급=일반; 권장 레벨=7; 기본 효과=마력 회복 증가 +2%
+- AR-S0131-222 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5292: ID=ACC-0220; 아이템명=혜성의 부적; 슬롯=부적; 등급=일반; 권장 레벨=8; 기본 효과=기력 회복 증가 +2%
+- AR-S0131-223 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5293: ID=ACC-0221; 아이템명=태양을 품은 부적; 슬롯=부적; 등급=일반; 권장 레벨=10; 기본 효과=부상 저항 증가 +3%
+- AR-S0131-224 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5294: ID=ACC-0222; 아이템명=유성이 새겨진 부적; 슬롯=부적; 등급=일반; 권장 레벨=11; 기본 효과=공포 저항 증가 +3%
+- AR-S0131-225 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5295: ID=ACC-0223; 아이템명=북풍의 부적; 슬롯=부적; 등급=일반; 권장 레벨=12; 기본 효과=전리품 발견 보정 +3%
+- AR-S0131-226 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5296: ID=ACC-0224; 아이템명=남풍을 품은 부적; 슬롯=부적; 등급=일반; 권장 레벨=13; 기본 효과=최대 생명력 증가 +3%
+- AR-S0131-227 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5297: ID=ACC-0225; 아이템명=동풍이 새겨진 부적; 슬롯=부적; 등급=일반; 권장 레벨=14; 기본 효과=최대 마력 증가 +3%
+- AR-S0131-228 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5298: ID=ACC-0226; 아이템명=서풍의 부적; 슬롯=부적; 등급=일반; 권장 레벨=15; 기본 효과=최대 기력 증가 +3%
+- AR-S0131-229 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5299: ID=ACC-0227; 아이템명=천둥을 품은 부적; 슬롯=부적; 등급=일반; 권장 레벨=16; 기본 효과=물리 공격력 증가 +3%
+- AR-S0131-230 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5300: ID=ACC-0228; 아이템명=폭우이 새겨진 부적; 슬롯=부적; 등급=일반; 권장 레벨=18; 기본 효과=마법 위력 증가 +3%
+- AR-S0131-231 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5301: ID=ACC-0229; 아이템명=첫눈의 부적; 슬롯=부적; 등급=고급; 권장 레벨=19; 기본 효과=물리 방어 증가 +3%
+- AR-S0131-232 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5302: ID=ACC-0230; 아이템명=서리을 품은 부적; 슬롯=부적; 등급=고급; 권장 레벨=20; 기본 효과=마법 방어 증가 +3%
+- AR-S0131-233 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5303: ID=ACC-0231; 아이템명=불꽃이 새겨진 부적; 슬롯=부적; 등급=고급; 권장 레벨=21; 기본 효과=명중 증가 +3%
+- AR-S0131-234 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5304: ID=ACC-0232; 아이템명=잿불의 부적; 슬롯=부적; 등급=고급; 권장 레벨=23; 기본 효과=회피 증가 +3%
+- AR-S0131-235 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5305: ID=ACC-0233; 아이템명=용암을 품은 부적; 슬롯=부적; 등급=고급; 권장 레벨=24; 기본 효과=치명타율 증가 +3%
+- AR-S0131-236 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5306: ID=ACC-0234; 아이템명=빙하이 새겨진 부적; 슬롯=부적; 등급=고급; 권장 레벨=25; 기본 효과=치명타 피해 증가 +3%
+- AR-S0131-237 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5307: ID=ACC-0235; 아이템명=파도의 부적; 슬롯=부적; 등급=고급; 권장 레벨=26; 기본 효과=행동속도 증가 +3%
+- AR-S0131-238 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5308: ID=ACC-0236; 아이템명=심해을 품은 부적; 슬롯=부적; 등급=고급; 권장 레벨=28; 기본 효과=탐색력 증가 +4%
+- AR-S0131-239 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5309: ID=ACC-0237; 아이템명=산맥이 새겨진 부적; 슬롯=부적; 등급=고급; 권장 레벨=29; 기본 효과=함정 탐지 증가 +4%
+- AR-S0131-240 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5310: ID=ACC-0238; 아이템명=대지의 부적; 슬롯=부적; 등급=고급; 권장 레벨=30; 기본 효과=화염 저항 증가 +4%
+- AR-S0131-241 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5311: ID=ACC-0239; 아이템명=숲을 품은 부적; 슬롯=부적; 등급=고급; 권장 레벨=32; 기본 효과=냉기 저항 증가 +4%
+- AR-S0131-242 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5312: ID=ACC-0240; 아이템명=세계수이 새겨진 부적; 슬롯=부적; 등급=고급; 권장 레벨=33; 기본 효과=번개 저항 증가 +4%
+- AR-S0131-243 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5313: ID=ACC-0241; 아이템명=장미의 부적; 슬롯=부적; 등급=고급; 권장 레벨=35; 기본 효과=독 저항 증가 +4%
+- AR-S0131-244 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5314: ID=ACC-0242; 아이템명=백합을 품은 부적; 슬롯=부적; 등급=고급; 권장 레벨=36; 기본 효과=암흑 저항 증가 +4%
+- AR-S0131-245 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5315: ID=ACC-0243; 아이템명=가시이 새겨진 부적; 슬롯=부적; 등급=고급; 권장 레벨=37; 기본 효과=신성 저항 증가 +4%
+- AR-S0131-246 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5316: ID=ACC-0244; 아이템명=독초의 부적; 슬롯=부적; 등급=고급; 권장 레벨=39; 기본 효과=마력 회복 증가 +4%
+- AR-S0131-247 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5317: ID=ACC-0245; 아이템명=약초을 품은 부적; 슬롯=부적; 등급=고급; 권장 레벨=40; 기본 효과=기력 회복 증가 +4%
+- AR-S0131-248 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5318: ID=ACC-0246; 아이템명=까마귀이 새겨진 부적; 슬롯=부적; 등급=고급; 권장 레벨=42; 기본 효과=부상 저항 증가 +4%
+- AR-S0131-249 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5319: ID=ACC-0247; 아이템명=늑대의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=43; 기본 효과=공포 저항 증가 +4%
+- AR-S0131-250 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5320: ID=ACC-0248; 아이템명=사자을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=45; 기본 효과=전리품 발견 보정 +4%
+- AR-S0131-251 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5321: ID=ACC-0249; 아이템명=매이 새겨진 부적; 슬롯=부적; 등급=희귀; 권장 레벨=46; 기본 효과=최대 생명력 증가 +5%
+- AR-S0131-252 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5322: ID=ACC-0250; 아이템명=부엉이의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=48; 기본 효과=최대 마력 증가 +5%
+- AR-S0131-253 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5323: ID=ACC-0251; 아이템명=사슴을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=49; 기본 효과=최대 기력 증가 +5%
+- AR-S0131-254 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5324: ID=ACC-0252; 아이템명=뱀이 새겨진 부적; 슬롯=부적; 등급=희귀; 권장 레벨=51; 기본 효과=물리 공격력 증가 +5%
+- AR-S0131-255 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5325: ID=ACC-0253; 아이템명=거미의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=52; 기본 효과=마법 위력 증가 +5%
+- AR-S0131-256 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5326: ID=ACC-0254; 아이템명=용을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=54; 기본 효과=물리 방어 증가 +5%
+- AR-S0131-257 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5327: ID=ACC-0255; 아이템명=와이번이 새겨진 부적; 슬롯=부적; 등급=희귀; 권장 레벨=55; 기본 효과=마법 방어 증가 +5%
+- AR-S0131-258 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5328: ID=ACC-0256; 아이템명=그리폰의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=57; 기본 효과=명중 증가 +5%
+- AR-S0131-259 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5329: ID=ACC-0257; 아이템명=유니콘을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=58; 기본 효과=회피 증가 +5%
+- AR-S0131-260 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5330: ID=ACC-0258; 아이템명=불사조이 새겨진 부적; 슬롯=부적; 등급=희귀; 권장 레벨=60; 기본 효과=치명타율 증가 +5%
+- AR-S0131-261 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5331: ID=ACC-0259; 아이템명=거인의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=61; 기본 효과=치명타 피해 증가 +5%
+- AR-S0131-262 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5332: ID=ACC-0260; 아이템명=요정을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=63; 기본 효과=행동속도 증가 +6%
+- AR-S0131-263 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5333: ID=ACC-0261; 아이템명=정령이 새겨진 부적; 슬롯=부적; 등급=희귀; 권장 레벨=65; 기본 효과=탐색력 증가 +6%
+- AR-S0131-264 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5334: ID=ACC-0262; 아이템명=천사의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=66; 기본 효과=함정 탐지 증가 +6%
+- AR-S0131-265 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5335: ID=ACC-0263; 아이템명=악마을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=68; 기본 효과=화염 저항 증가 +6%
+- AR-S0131-266 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5336: ID=ACC-0264; 아이템명=심연이 새겨진 부적; 슬롯=부적; 등급=희귀; 권장 레벨=69; 기본 효과=냉기 저항 증가 +6%
+- AR-S0131-267 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5337: ID=ACC-0265; 아이템명=성역의 부적; 슬롯=부적; 등급=희귀; 권장 레벨=71; 기본 효과=번개 저항 증가 +6%
+- AR-S0131-268 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5338: ID=ACC-0266; 아이템명=왕관을 품은 부적; 슬롯=부적; 등급=희귀; 권장 레벨=73; 기본 효과=독 저항 증가 +6%
+- AR-S0131-269 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5339: ID=ACC-0267; 아이템명=기사이 새겨진 부적; 슬롯=부적; 등급=특급; 권장 레벨=74; 기본 효과=암흑 저항 증가 +6%
+- AR-S0131-270 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5340: ID=ACC-0268; 아이템명=마법사의 부적; 슬롯=부적; 등급=특급; 권장 레벨=76; 기본 효과=신성 저항 증가 +6%
+- AR-S0131-271 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5341: ID=ACC-0269; 아이템명=사제을 품은 부적; 슬롯=부적; 등급=특급; 권장 레벨=78; 기본 효과=마력 회복 증가 +6%
+- AR-S0131-272 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5342: ID=ACC-0270; 아이템명=도적이 새겨진 부적; 슬롯=부적; 등급=특급; 권장 레벨=79; 기본 효과=기력 회복 증가 +6%
+- AR-S0131-273 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5343: ID=ACC-0271; 아이템명=사냥꾼의 부적; 슬롯=부적; 등급=특급; 권장 레벨=81; 기본 효과=부상 저항 증가 +6%
+- AR-S0131-274 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5344: ID=ACC-0272; 아이템명=방랑자을 품은 부적; 슬롯=부적; 등급=특급; 권장 레벨=83; 기본 효과=공포 저항 증가 +7%
+- AR-S0131-275 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5345: ID=ACC-0273; 아이템명=용병이 새겨진 부적; 슬롯=부적; 등급=특급; 권장 레벨=84; 기본 효과=전리품 발견 보정 +7%
+- AR-S0131-276 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5346: ID=ACC-0274; 아이템명=왕의 부적; 슬롯=부적; 등급=특급; 권장 레벨=86; 기본 효과=최대 생명력 증가 +7%
+- AR-S0131-277 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5347: ID=ACC-0275; 아이템명=여왕을 품은 부적; 슬롯=부적; 등급=특급; 권장 레벨=88; 기본 효과=최대 마력 증가 +7%
+- AR-S0131-278 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5348: ID=ACC-0276; 아이템명=황제이 새겨진 부적; 슬롯=부적; 등급=특급; 권장 레벨=89; 기본 효과=최대 기력 증가 +7%
+- AR-S0131-279 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5349: ID=ACC-0277; 아이템명=예언자의 부적; 슬롯=부적; 등급=특급; 권장 레벨=91; 기본 효과=물리 공격력 증가 +7%
+- AR-S0131-280 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5350: ID=ACC-0278; 아이템명=현자을 품은 부적; 슬롯=부적; 등급=특급; 권장 레벨=93; 기본 효과=마법 위력 증가 +7%
+- AR-S0131-281 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5351: ID=ACC-0279; 아이템명=순교자이 새겨진 부적; 슬롯=부적; 등급=특급; 권장 레벨=94; 기본 효과=물리 방어 증가 +7%
+- AR-S0131-282 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5352: ID=ACC-0280; 아이템명=수호자의 부적; 슬롯=부적; 등급=특급; 권장 레벨=96; 기본 효과=마법 방어 증가 +7%
+- AR-S0131-283 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5353: ID=ACC-0281; 아이템명=정복자을 품은 부적; 슬롯=부적; 등급=특급; 권장 레벨=98; 기본 효과=명중 증가 +7%
+- AR-S0131-284 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5354: ID=ACC-0282; 아이템명=복수자이 새겨진 부적; 슬롯=부적; 등급=특급; 권장 레벨=100; 기본 효과=회피 증가 +8%
+- AR-S0131-285 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5355: ID=ACC-0283; 아이템명=구원자의 부적; 슬롯=부적; 등급=특급; 권장 레벨=101; 기본 효과=치명타율 증가 +8%
+- AR-S0131-286 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5356: ID=ACC-0284; 아이템명=파괴자을 품은 부적; 슬롯=부적; 등급=특급; 권장 레벨=103; 기본 효과=치명타 피해 증가 +8%
+- AR-S0131-287 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5357: ID=ACC-0285; 아이템명=방벽이 새겨진 부적; 슬롯=부적; 등급=영웅; 권장 레벨=105; 기본 효과=행동속도 증가 +8%
+- AR-S0131-288 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5358: ID=ACC-0286; 아이템명=검의 부적; 슬롯=부적; 등급=영웅; 권장 레벨=107; 기본 효과=탐색력 증가 +8%
+- AR-S0131-289 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5359: ID=ACC-0287; 아이템명=창을 품은 부적; 슬롯=부적; 등급=영웅; 권장 레벨=108; 기본 효과=함정 탐지 증가 +8%
+- AR-S0131-290 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5360: ID=ACC-0288; 아이템명=활이 새겨진 부적; 슬롯=부적; 등급=영웅; 권장 레벨=110; 기본 효과=화염 저항 증가 +8%
+- AR-S0131-291 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5361: ID=ACC-0289; 아이템명=방패의 부적; 슬롯=부적; 등급=영웅; 권장 레벨=112; 기본 효과=냉기 저항 증가 +8%
+- AR-S0131-292 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5362: ID=ACC-0290; 아이템명=지팡이을 품은 부적; 슬롯=부적; 등급=영웅; 권장 레벨=114; 기본 효과=번개 저항 증가 +8%
+- AR-S0131-293 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5363: ID=ACC-0291; 아이템명=마도서이 새겨진 부적; 슬롯=부적; 등급=영웅; 권장 레벨=116; 기본 효과=독 저항 증가 +8%
+- AR-S0131-294 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5364: ID=ACC-0292; 아이템명=성배의 부적; 슬롯=부적; 등급=영웅; 권장 레벨=117; 기본 효과=암흑 저항 증가 +8%
+- AR-S0131-295 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5365: ID=ACC-0293; 아이템명=열쇠을 품은 부적; 슬롯=부적; 등급=영웅; 권장 레벨=119; 기본 효과=신성 저항 증가 +9%
+- AR-S0131-296 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5366: ID=ACC-0294; 아이템명=거울이 새겨진 부적; 슬롯=부적; 등급=영웅; 권장 레벨=121; 기본 효과=마력 회복 증가 +9%
+- AR-S0131-297 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5367: ID=ACC-0295; 아이템명=시계의 부적; 슬롯=부적; 등급=영웅; 권장 레벨=123; 기본 효과=기력 회복 증가 +9%
+- AR-S0131-298 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5368: ID=ACC-0296; 아이템명=나침반을 품은 부적; 슬롯=부적; 등급=영웅; 권장 레벨=125; 기본 효과=부상 저항 증가 +9%
+- AR-S0131-299 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5369: ID=ACC-0297; 아이템명=등불이 새겨진 부적; 슬롯=부적; 등급=영웅; 권장 레벨=126; 기본 효과=공포 저항 증가 +9%
+- AR-S0131-300 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5370: ID=ACC-0298; 아이템명=봉인의 부적; 슬롯=부적; 등급=영웅; 권장 레벨=128; 기본 효과=전리품 발견 보정 +9%
+- AR-S0131-301 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5371: ID=ACC-0299; 아이템명=룬을 품은 부적; 슬롯=부적; 등급=영웅; 권장 레벨=130; 기본 효과=최대 생명력 증가 +9%
+- AR-S0131-302 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5372: ID=ACC-0300; 아이템명=문장이 새겨진 부적; 슬롯=부적; 등급=영웅; 권장 레벨=132; 기본 효과=최대 마력 증가 +9%
+- AR-S0131-303 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5373: ID=ACC-0301; 아이템명=서약의 부적; 슬롯=부적; 등급=전설; 권장 레벨=134; 기본 효과=최대 기력 증가 +9%
+- AR-S0131-304 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5374: ID=ACC-0302; 아이템명=기억을 품은 부적; 슬롯=부적; 등급=전설; 권장 레벨=136; 기본 효과=물리 공격력 증가 +10%
+- AR-S0131-305 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5375: ID=ACC-0303; 아이템명=꿈이 새겨진 부적; 슬롯=부적; 등급=전설; 권장 레벨=137; 기본 효과=마법 위력 증가 +10%
+- AR-S0131-306 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5376: ID=ACC-0304; 아이템명=악몽의 부적; 슬롯=부적; 등급=전설; 권장 레벨=139; 기본 효과=물리 방어 증가 +10%
+- AR-S0131-307 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5377: ID=ACC-0305; 아이템명=침묵을 품은 부적; 슬롯=부적; 등급=전설; 권장 레벨=141; 기본 효과=마법 방어 증가 +10%
+- AR-S0131-308 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5378: ID=ACC-0306; 아이템명=노래이 새겨진 부적; 슬롯=부적; 등급=전설; 권장 레벨=143; 기본 효과=명중 증가 +10%
+- AR-S0131-309 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5379: ID=ACC-0307; 아이템명=운명의 부적; 슬롯=부적; 등급=전설; 권장 레벨=145; 기본 효과=회피 증가 +10%
+- AR-S0131-310 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5380: ID=ACC-0308; 아이템명=인연을 품은 부적; 슬롯=부적; 등급=전설; 권장 레벨=147; 기본 효과=치명타율 증가 +10%
+- AR-S0131-311 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5381: ID=ACC-0309; 아이템명=귀환이 새겨진 부적; 슬롯=부적; 등급=전설; 권장 레벨=149; 기본 효과=치명타 피해 증가 +10%
+- AR-S0131-312 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5382: ID=ACC-0310; 아이템명=영원의 부적; 슬롯=부적; 등급=유물; 권장 레벨=151; 기본 효과=행동속도 증가 +10%
+- AR-S0131-313 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5383: ID=ACC-0311; 아이템명=시간을 품은 부적; 슬롯=부적; 등급=유물; 권장 레벨=152; 기본 효과=탐색력 증가 +10%
+- AR-S0131-314 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5384: ID=ACC-0312; 아이템명=공간이 새겨진 부적; 슬롯=부적; 등급=유물; 권장 레벨=154; 기본 효과=함정 탐지 증가 +11%
+- AR-S0131-315 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5385: ID=ACC-0313; 아이템명=생명의 부적; 슬롯=부적; 등급=유물; 권장 레벨=156; 기본 효과=화염 저항 증가 +11%
+- AR-S0131-316 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5386: ID=ACC-0314; 아이템명=죽음을 품은 부적; 슬롯=부적; 등급=신화; 권장 레벨=158; 기본 효과=냉기 저항 증가 +11%
+- AR-S0131-317 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5387: ID=ACC-0315; 아이템명=균열이 새겨진 부적; 슬롯=부적; 등급=신화; 권장 레벨=160; 기본 효과=번개 저항 증가 +11%
+- AR-S0131-318 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5391: ID=ID; 아이템명=아이템명; 슬롯=슬롯; 등급=등급; 권장 레벨=권장 레벨; 기본 효과=기본 효과
+- AR-S0131-319 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5393: ID=ACC-0316; 아이템명=새벽의 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=1; 기본 효과=암흑 저항 증가 +2%
+- AR-S0131-320 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5394: ID=ACC-0317; 아이템명=황혼을 품은 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=1; 기본 효과=신성 저항 증가 +2%
+- AR-S0131-321 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5395: ID=ACC-0318; 아이템명=한밤이 새겨진 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=2; 기본 효과=마력 회복 증가 +2%
+- AR-S0131-322 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5396: ID=ACC-0319; 아이템명=정오의 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=3; 기본 효과=기력 회복 증가 +2%
+- AR-S0131-323 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5397: ID=ACC-0320; 아이템명=붉은달을 품은 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=4; 기본 효과=부상 저항 증가 +2%
+- AR-S0131-324 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5398: ID=ACC-0321; 아이템명=푸른달이 새겨진 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=5; 기본 효과=공포 저항 증가 +2%
+- AR-S0131-325 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5399: ID=ACC-0322; 아이템명=초승달의 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=5; 기본 효과=전리품 발견 보정 +2%
+- AR-S0131-326 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5400: ID=ACC-0323; 아이템명=보름달을 품은 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=6; 기본 효과=최대 생명력 증가 +2%
+- AR-S0131-327 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5401: ID=ACC-0324; 아이템명=별무리이 새겨진 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=7; 기본 효과=최대 마력 증가 +2%
+- AR-S0131-328 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5402: ID=ACC-0325; 아이템명=혜성의 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=8; 기본 효과=최대 기력 증가 +2%
+- AR-S0131-329 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5403: ID=ACC-0326; 아이템명=태양을 품은 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=10; 기본 효과=물리 공격력 증가 +3%
+- AR-S0131-330 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5404: ID=ACC-0327; 아이템명=유성이 새겨진 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=11; 기본 효과=마법 위력 증가 +3%
+- AR-S0131-331 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5405: ID=ACC-0328; 아이템명=북풍의 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=12; 기본 효과=물리 방어 증가 +3%
+- AR-S0131-332 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5406: ID=ACC-0329; 아이템명=남풍을 품은 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=13; 기본 효과=마법 방어 증가 +3%
+- AR-S0131-333 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5407: ID=ACC-0330; 아이템명=동풍이 새겨진 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=14; 기본 효과=명중 증가 +3%
+- AR-S0131-334 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5408: ID=ACC-0331; 아이템명=서풍의 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=15; 기본 효과=회피 증가 +3%
+- AR-S0131-335 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5409: ID=ACC-0332; 아이템명=천둥을 품은 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=16; 기본 효과=치명타율 증가 +3%
+- AR-S0131-336 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5410: ID=ACC-0333; 아이템명=폭우이 새겨진 귀걸이; 슬롯=귀; 등급=일반; 권장 레벨=18; 기본 효과=치명타 피해 증가 +3%
+- AR-S0131-337 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5411: ID=ACC-0334; 아이템명=첫눈의 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=19; 기본 효과=행동속도 증가 +3%
+- AR-S0131-338 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5412: ID=ACC-0335; 아이템명=서리을 품은 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=20; 기본 효과=탐색력 증가 +3%
+- AR-S0131-339 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5413: ID=ACC-0336; 아이템명=불꽃이 새겨진 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=21; 기본 효과=함정 탐지 증가 +3%
+- AR-S0131-340 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5414: ID=ACC-0337; 아이템명=잿불의 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=23; 기본 효과=화염 저항 증가 +3%
+- AR-S0131-341 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5415: ID=ACC-0338; 아이템명=용암을 품은 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=24; 기본 효과=냉기 저항 증가 +3%
+- AR-S0131-342 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5416: ID=ACC-0339; 아이템명=빙하이 새겨진 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=25; 기본 효과=번개 저항 증가 +3%
+- AR-S0131-343 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5417: ID=ACC-0340; 아이템명=파도의 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=26; 기본 효과=독 저항 증가 +3%
+- AR-S0131-344 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5418: ID=ACC-0341; 아이템명=심해을 품은 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=28; 기본 효과=암흑 저항 증가 +4%
+- AR-S0131-345 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5419: ID=ACC-0342; 아이템명=산맥이 새겨진 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=29; 기본 효과=신성 저항 증가 +4%
+- AR-S0131-346 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5420: ID=ACC-0343; 아이템명=대지의 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=30; 기본 효과=마력 회복 증가 +4%
+- AR-S0131-347 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5421: ID=ACC-0344; 아이템명=숲을 품은 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=32; 기본 효과=기력 회복 증가 +4%
+- AR-S0131-348 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5422: ID=ACC-0345; 아이템명=세계수이 새겨진 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=33; 기본 효과=부상 저항 증가 +4%
+- AR-S0131-349 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5423: ID=ACC-0346; 아이템명=장미의 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=35; 기본 효과=공포 저항 증가 +4%
+- AR-S0131-350 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5424: ID=ACC-0347; 아이템명=백합을 품은 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=36; 기본 효과=전리품 발견 보정 +4%
+- AR-S0131-351 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5425: ID=ACC-0348; 아이템명=가시이 새겨진 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=37; 기본 효과=최대 생명력 증가 +4%
+- AR-S0131-352 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5426: ID=ACC-0349; 아이템명=독초의 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=39; 기본 효과=최대 마력 증가 +4%
+- AR-S0131-353 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5427: ID=ACC-0350; 아이템명=약초을 품은 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=40; 기본 효과=최대 기력 증가 +4%
+- AR-S0131-354 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5428: ID=ACC-0351; 아이템명=까마귀이 새겨진 귀걸이; 슬롯=귀; 등급=고급; 권장 레벨=42; 기본 효과=물리 공격력 증가 +4%
+- AR-S0131-355 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5429: ID=ACC-0352; 아이템명=늑대의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=43; 기본 효과=마법 위력 증가 +4%
+- AR-S0131-356 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5430: ID=ACC-0353; 아이템명=사자을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=45; 기본 효과=물리 방어 증가 +4%
+- AR-S0131-357 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5431: ID=ACC-0354; 아이템명=매이 새겨진 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=46; 기본 효과=마법 방어 증가 +5%
+- AR-S0131-358 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5432: ID=ACC-0355; 아이템명=부엉이의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=48; 기본 효과=명중 증가 +5%
+- AR-S0131-359 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5433: ID=ACC-0356; 아이템명=사슴을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=49; 기본 효과=회피 증가 +5%
+- AR-S0131-360 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5434: ID=ACC-0357; 아이템명=뱀이 새겨진 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=51; 기본 효과=치명타율 증가 +5%
+- AR-S0131-361 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5435: ID=ACC-0358; 아이템명=거미의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=52; 기본 효과=치명타 피해 증가 +5%
+- AR-S0131-362 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5436: ID=ACC-0359; 아이템명=용을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=54; 기본 효과=행동속도 증가 +5%
+- AR-S0131-363 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5437: ID=ACC-0360; 아이템명=와이번이 새겨진 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=55; 기본 효과=탐색력 증가 +5%
+- AR-S0131-364 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5438: ID=ACC-0361; 아이템명=그리폰의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=57; 기본 효과=함정 탐지 증가 +5%
+- AR-S0131-365 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5439: ID=ACC-0362; 아이템명=유니콘을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=58; 기본 효과=화염 저항 증가 +5%
+- AR-S0131-366 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5440: ID=ACC-0363; 아이템명=불사조이 새겨진 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=60; 기본 효과=냉기 저항 증가 +5%
+- AR-S0131-367 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5441: ID=ACC-0364; 아이템명=거인의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=61; 기본 효과=번개 저항 증가 +5%
+- AR-S0131-368 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5442: ID=ACC-0365; 아이템명=요정을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=63; 기본 효과=독 저항 증가 +6%
+- AR-S0131-369 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5443: ID=ACC-0366; 아이템명=정령이 새겨진 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=65; 기본 효과=암흑 저항 증가 +6%
+- AR-S0131-370 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5444: ID=ACC-0367; 아이템명=천사의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=66; 기본 효과=신성 저항 증가 +6%
+- AR-S0131-371 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5445: ID=ACC-0368; 아이템명=악마을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=68; 기본 효과=마력 회복 증가 +6%
+- AR-S0131-372 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5446: ID=ACC-0369; 아이템명=심연이 새겨진 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=69; 기본 효과=기력 회복 증가 +6%
+- AR-S0131-373 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5447: ID=ACC-0370; 아이템명=성역의 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=71; 기본 효과=부상 저항 증가 +6%
+- AR-S0131-374 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5448: ID=ACC-0371; 아이템명=왕관을 품은 귀걸이; 슬롯=귀; 등급=희귀; 권장 레벨=73; 기본 효과=공포 저항 증가 +6%
+- AR-S0131-375 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5449: ID=ACC-0372; 아이템명=기사이 새겨진 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=74; 기본 효과=전리품 발견 보정 +6%
+- AR-S0131-376 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5450: ID=ACC-0373; 아이템명=마법사의 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=76; 기본 효과=최대 생명력 증가 +6%
+- AR-S0131-377 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5451: ID=ACC-0374; 아이템명=사제을 품은 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=78; 기본 효과=최대 마력 증가 +6%
+- AR-S0131-378 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5452: ID=ACC-0375; 아이템명=도적이 새겨진 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=79; 기본 효과=최대 기력 증가 +6%
+- AR-S0131-379 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5453: ID=ACC-0376; 아이템명=사냥꾼의 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=81; 기본 효과=물리 공격력 증가 +6%
+- AR-S0131-380 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5454: ID=ACC-0377; 아이템명=방랑자을 품은 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=83; 기본 효과=마법 위력 증가 +7%
+- AR-S0131-381 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5455: ID=ACC-0378; 아이템명=용병이 새겨진 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=84; 기본 효과=물리 방어 증가 +7%
+- AR-S0131-382 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5456: ID=ACC-0379; 아이템명=왕의 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=86; 기본 효과=마법 방어 증가 +7%
+- AR-S0131-383 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5457: ID=ACC-0380; 아이템명=여왕을 품은 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=88; 기본 효과=명중 증가 +7%
+- AR-S0131-384 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5458: ID=ACC-0381; 아이템명=황제이 새겨진 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=89; 기본 효과=회피 증가 +7%
+- AR-S0131-385 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5459: ID=ACC-0382; 아이템명=예언자의 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=91; 기본 효과=치명타율 증가 +7%
+- AR-S0131-386 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5460: ID=ACC-0383; 아이템명=현자을 품은 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=93; 기본 효과=치명타 피해 증가 +7%
+- AR-S0131-387 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5461: ID=ACC-0384; 아이템명=순교자이 새겨진 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=94; 기본 효과=행동속도 증가 +7%
+- AR-S0131-388 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5462: ID=ACC-0385; 아이템명=수호자의 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=96; 기본 효과=탐색력 증가 +7%
+- AR-S0131-389 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5463: ID=ACC-0386; 아이템명=정복자을 품은 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=98; 기본 효과=함정 탐지 증가 +7%
+- AR-S0131-390 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5464: ID=ACC-0387; 아이템명=복수자이 새겨진 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=100; 기본 효과=화염 저항 증가 +8%
+- AR-S0131-391 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5465: ID=ACC-0388; 아이템명=구원자의 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=101; 기본 효과=냉기 저항 증가 +8%
+- AR-S0131-392 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5466: ID=ACC-0389; 아이템명=파괴자을 품은 귀걸이; 슬롯=귀; 등급=특급; 권장 레벨=103; 기본 효과=번개 저항 증가 +8%
+- AR-S0131-393 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5467: ID=ACC-0390; 아이템명=방벽이 새겨진 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=105; 기본 효과=독 저항 증가 +8%
+- AR-S0131-394 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5468: ID=ACC-0391; 아이템명=검의 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=107; 기본 효과=암흑 저항 증가 +8%
+- AR-S0131-395 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5469: ID=ACC-0392; 아이템명=창을 품은 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=108; 기본 효과=신성 저항 증가 +8%
+- AR-S0131-396 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5470: ID=ACC-0393; 아이템명=활이 새겨진 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=110; 기본 효과=마력 회복 증가 +8%
+- AR-S0131-397 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5471: ID=ACC-0394; 아이템명=방패의 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=112; 기본 효과=기력 회복 증가 +8%
+- AR-S0131-398 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5472: ID=ACC-0395; 아이템명=지팡이을 품은 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=114; 기본 효과=부상 저항 증가 +8%
+- AR-S0131-399 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5473: ID=ACC-0396; 아이템명=마도서이 새겨진 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=116; 기본 효과=공포 저항 증가 +8%
+- AR-S0131-400 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5474: ID=ACC-0397; 아이템명=성배의 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=117; 기본 효과=전리품 발견 보정 +8%
+- AR-S0131-401 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5475: ID=ACC-0398; 아이템명=열쇠을 품은 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=119; 기본 효과=최대 생명력 증가 +9%
+- AR-S0131-402 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5476: ID=ACC-0399; 아이템명=거울이 새겨진 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=121; 기본 효과=최대 마력 증가 +9%
+- AR-S0131-403 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5477: ID=ACC-0400; 아이템명=시계의 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=123; 기본 효과=최대 기력 증가 +9%
+- AR-S0131-404 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5478: ID=ACC-0401; 아이템명=나침반을 품은 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=125; 기본 효과=물리 공격력 증가 +9%
+- AR-S0131-405 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5479: ID=ACC-0402; 아이템명=등불이 새겨진 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=126; 기본 효과=마법 위력 증가 +9%
+- AR-S0131-406 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5480: ID=ACC-0403; 아이템명=봉인의 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=128; 기본 효과=물리 방어 증가 +9%
+- AR-S0131-407 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5481: ID=ACC-0404; 아이템명=룬을 품은 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=130; 기본 효과=마법 방어 증가 +9%
+- AR-S0131-408 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5482: ID=ACC-0405; 아이템명=문장이 새겨진 귀걸이; 슬롯=귀; 등급=영웅; 권장 레벨=132; 기본 효과=명중 증가 +9%
+- AR-S0131-409 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5483: ID=ACC-0406; 아이템명=서약의 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=134; 기본 효과=회피 증가 +9%
+- AR-S0131-410 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5484: ID=ACC-0407; 아이템명=기억을 품은 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=136; 기본 효과=치명타율 증가 +10%
+- AR-S0131-411 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5485: ID=ACC-0408; 아이템명=꿈이 새겨진 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=137; 기본 효과=치명타 피해 증가 +10%
+- AR-S0131-412 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5486: ID=ACC-0409; 아이템명=악몽의 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=139; 기본 효과=행동속도 증가 +10%
+- AR-S0131-413 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5487: ID=ACC-0410; 아이템명=침묵을 품은 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=141; 기본 효과=탐색력 증가 +10%
+- AR-S0131-414 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5488: ID=ACC-0411; 아이템명=노래이 새겨진 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=143; 기본 효과=함정 탐지 증가 +10%
+- AR-S0131-415 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5489: ID=ACC-0412; 아이템명=운명의 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=145; 기본 효과=화염 저항 증가 +10%
+- AR-S0131-416 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5490: ID=ACC-0413; 아이템명=인연을 품은 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=147; 기본 효과=냉기 저항 증가 +10%
+- AR-S0131-417 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5491: ID=ACC-0414; 아이템명=귀환이 새겨진 귀걸이; 슬롯=귀; 등급=전설; 권장 레벨=149; 기본 효과=번개 저항 증가 +10%
+- AR-S0131-418 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5492: ID=ACC-0415; 아이템명=영원의 귀걸이; 슬롯=귀; 등급=유물; 권장 레벨=151; 기본 효과=독 저항 증가 +10%
+- AR-S0131-419 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5493: ID=ACC-0416; 아이템명=시간을 품은 귀걸이; 슬롯=귀; 등급=유물; 권장 레벨=152; 기본 효과=암흑 저항 증가 +10%
+- AR-S0131-420 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5494: ID=ACC-0417; 아이템명=공간이 새겨진 귀걸이; 슬롯=귀; 등급=유물; 권장 레벨=154; 기본 효과=신성 저항 증가 +11%
+- AR-S0131-421 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5495: ID=ACC-0418; 아이템명=생명의 귀걸이; 슬롯=귀; 등급=유물; 권장 레벨=156; 기본 효과=마력 회복 증가 +11%
+- AR-S0131-422 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5496: ID=ACC-0419; 아이템명=죽음을 품은 귀걸이; 슬롯=귀; 등급=신화; 권장 레벨=158; 기본 효과=기력 회복 증가 +11%
+- AR-S0131-423 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0131` §131 장신구 실제 데이터 420종 L5497: ID=ACC-0420; 아이템명=균열이 새겨진 귀걸이; 슬롯=귀; 등급=신화; 권장 레벨=160; 기본 효과=부상 저항 증가 +11%
+- AR-S0132-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5506: ID=ITM-0001; 아이템명=희석 생명 물약; 분류=회복물약; 등급=일반; 주 용도=생명력 또는 마력 회복
+- AR-S0132-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5507: ID=ITM-0002; 아이템명=소형 생명 물약; 분류=회복물약; 등급=일반; 주 용도=생명력 또는 마력 회복
+- AR-S0132-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5508: ID=ITM-0003; 아이템명=생명 물약; 분류=회복물약; 등급=일반; 주 용도=생명력 또는 마력 회복
+- AR-S0132-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5509: ID=ITM-0004; 아이템명=고급 생명 물약; 분류=회복물약; 등급=일반; 주 용도=생명력 또는 마력 회복
+- AR-S0132-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5510: ID=ITM-0005; 아이템명=상급 생명 물약; 분류=회복물약; 등급=일반; 주 용도=생명력 또는 마력 회복
+- AR-S0132-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5511: ID=ITM-0006; 아이템명=대형 생명 물약; 분류=회복물약; 등급=일반; 주 용도=생명력 또는 마력 회복
+- AR-S0132-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5512: ID=ITM-0007; 아이템명=응급 생명 물약; 분류=회복물약; 등급=고급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5513: ID=ITM-0008; 아이템명=재생 물약; 분류=회복물약; 등급=고급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5514: ID=ITM-0009; 아이템명=신속 재생 물약; 분류=회복물약; 등급=고급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5515: ID=ITM-0010; 아이템명=기사단 생명 물약; 분류=회복물약; 등급=고급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5516: ID=ITM-0011; 아이템명=용병왕 생명 물약; 분류=회복물약; 등급=고급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5517: ID=ITM-0012; 아이템명=성수 혼합 생명 물약; 분류=회복물약; 등급=고급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5518: ID=ITM-0013; 아이템명=붉은달 생명 물약; 분류=회복물약; 등급=희귀; 주 용도=생명력 또는 마력 회복
+- AR-S0132-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5519: ID=ITM-0014; 아이템명=세계수 수액 물약; 분류=회복물약; 등급=희귀; 주 용도=생명력 또는 마력 회복
+- AR-S0132-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5520: ID=ITM-0015; 아이템명=불사조 생명 물약; 분류=회복물약; 등급=희귀; 주 용도=생명력 또는 마력 회복
+- AR-S0132-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5521: ID=ITM-0016; 아이템명=희석 마력 물약; 분류=회복물약; 등급=희귀; 주 용도=생명력 또는 마력 회복
+- AR-S0132-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5522: ID=ITM-0017; 아이템명=소형 마력 물약; 분류=회복물약; 등급=희귀; 주 용도=생명력 또는 마력 회복
+- AR-S0132-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5523: ID=ITM-0018; 아이템명=마력 물약; 분류=회복물약; 등급=희귀; 주 용도=생명력 또는 마력 회복
+- AR-S0132-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5524: ID=ITM-0019; 아이템명=고급 마력 물약; 분류=회복물약; 등급=특급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5525: ID=ITM-0020; 아이템명=상급 마력 물약; 분류=회복물약; 등급=특급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5526: ID=ITM-0021; 아이템명=대형 마력 물약; 분류=회복물약; 등급=특급; 주 용도=생명력 또는 마력 회복
+- AR-S0132-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5527: ID=ITM-0022; 아이템명=집중 마력 물약; 분류=회복물약; 등급=영웅; 주 용도=생명력 또는 마력 회복
+- AR-S0132-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5528: ID=ITM-0023; 아이템명=마력 재생 물약; 분류=회복물약; 등급=영웅; 주 용도=생명력 또는 마력 회복
+- AR-S0132-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5529: ID=ITM-0024; 아이템명=신속 마력 물약; 분류=회복물약; 등급=영웅; 주 용도=생명력 또는 마력 회복
+- AR-S0132-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5530: ID=ITM-0025; 아이템명=마도원 마력 물약; 분류=회복물약; 등급=전설; 주 용도=생명력 또는 마력 회복
+- AR-S0132-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5531: ID=ITM-0026; 아이템명=별빛 마력 물약; 분류=회복물약; 등급=전설; 주 용도=생명력 또는 마력 회복
+- AR-S0132-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5532: ID=ITM-0027; 아이템명=심해 마력 물약; 분류=회복물약; 등급=전설; 주 용도=생명력 또는 마력 회복
+- AR-S0132-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5533: ID=ITM-0028; 아이템명=고대 마력 물약; 분류=회복물약; 등급=유물; 주 용도=생명력 또는 마력 회복
+- AR-S0132-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5534: ID=ITM-0029; 아이템명=균열 마력 물약; 분류=회복물약; 등급=유물; 주 용도=생명력 또는 마력 회복
+- AR-S0132-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5535: ID=ITM-0030; 아이템명=대현자 마력 물약; 분류=회복물약; 등급=유물; 주 용도=생명력 또는 마력 회복
+- AR-S0132-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5539: ID=ID; 아이템명=아이템명; 분류=분류; 등급=등급; 주 용도=주 용도
+- AR-S0132-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5541: ID=ITM-0031; 아이템명=해독제; 분류=상태회복; 등급=일반; 주 용도=상태이상 치료/저항
+- AR-S0132-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5542: ID=ITM-0032; 아이템명=강력 해독제; 분류=상태회복; 등급=일반; 주 용도=상태이상 치료/저항
+- AR-S0132-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5543: ID=ITM-0033; 아이템명=출혈 지혈제; 분류=상태회복; 등급=일반; 주 용도=상태이상 치료/저항
+- AR-S0132-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5544: ID=ITM-0034; 아이템명=고급 지혈제; 분류=상태회복; 등급=일반; 주 용도=상태이상 치료/저항
+- AR-S0132-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5545: ID=ITM-0035; 아이템명=해열 물약; 분류=상태회복; 등급=일반; 주 용도=상태이상 치료/저항
+- AR-S0132-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5546: ID=ITM-0036; 아이템명=항마비 물약; 분류=상태회복; 등급=일반; 주 용도=상태이상 치료/저항
+- AR-S0132-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5547: ID=ITM-0037; 아이템명=항혼란 약; 분류=상태회복; 등급=고급; 주 용도=상태이상 치료/저항
+- AR-S0132-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5548: ID=ITM-0038; 아이템명=공포 진정제; 분류=상태회복; 등급=고급; 주 용도=상태이상 치료/저항
+- AR-S0132-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5549: ID=ITM-0039; 아이템명=저주 완화제; 분류=상태회복; 등급=고급; 주 용도=상태이상 치료/저항
+- AR-S0132-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5550: ID=ITM-0040; 아이템명=침묵 해제약; 분류=상태회복; 등급=고급; 주 용도=상태이상 치료/저항
+- AR-S0132-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5551: ID=ITM-0041; 아이템명=화상 연고; 분류=상태회복; 등급=고급; 주 용도=상태이상 치료/저항
+- AR-S0132-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5552: ID=ITM-0042; 아이템명=동상 연고; 분류=상태회복; 등급=고급; 주 용도=상태이상 치료/저항
+- AR-S0132-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5553: ID=ITM-0043; 아이템명=산성 중화제; 분류=상태회복; 등급=희귀; 주 용도=상태이상 치료/저항
+- AR-S0132-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5554: ID=ITM-0044; 아이템명=독안개 중화제; 분류=상태회복; 등급=희귀; 주 용도=상태이상 치료/저항
+- AR-S0132-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5555: ID=ITM-0045; 아이템명=마력 과부하 안정제; 분류=상태회복; 등급=희귀; 주 용도=상태이상 치료/저항
+- AR-S0132-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5556: ID=ITM-0046; 아이템명=피로 회복제; 분류=상태회복; 등급=희귀; 주 용도=상태이상 치료/저항
+- AR-S0132-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5557: ID=ITM-0047; 아이템명=상급 피로 회복제; 분류=상태회복; 등급=희귀; 주 용도=상태이상 치료/저항
+- AR-S0132-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5558: ID=ITM-0048; 아이템명=근육 이완제; 분류=상태회복; 등급=희귀; 주 용도=상태이상 치료/저항
+- AR-S0132-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5559: ID=ITM-0049; 아이템명=집중 회복제; 분류=상태회복; 등급=특급; 주 용도=상태이상 치료/저항
+- AR-S0132-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5560: ID=ITM-0050; 아이템명=정신 안정제; 분류=상태회복; 등급=특급; 주 용도=상태이상 치료/저항
+- AR-S0132-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5561: ID=ITM-0051; 아이템명=성수; 분류=상태회복; 등급=특급; 주 용도=상태이상 치료/저항
+- AR-S0132-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5562: ID=ITM-0052; 아이템명=고급 성수; 분류=상태회복; 등급=영웅; 주 용도=상태이상 치료/저항
+- AR-S0132-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5563: ID=ITM-0053; 아이템명=정화 성수; 분류=상태회복; 등급=영웅; 주 용도=상태이상 치료/저항
+- AR-S0132-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5564: ID=ITM-0054; 아이템명=악마독 해독제; 분류=상태회복; 등급=영웅; 주 용도=상태이상 치료/저항
+- AR-S0132-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5565: ID=ITM-0055; 아이템명=언데드 부패 억제제; 분류=상태회복; 등급=전설; 주 용도=상태이상 치료/저항
+- AR-S0132-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5566: ID=ITM-0056; 아이템명=심연 오염 정화제; 분류=상태회복; 등급=전설; 주 용도=상태이상 치료/저항
+- AR-S0132-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5567: ID=ITM-0057; 아이템명=균열병 억제제; 분류=상태회복; 등급=전설; 주 용도=상태이상 치료/저항
+- AR-S0132-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5568: ID=ITM-0058; 아이템명=기억 혼탁 치료제; 분류=상태회복; 등급=유물; 주 용도=상태이상 치료/저항
+- AR-S0132-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5569: ID=ITM-0059; 아이템명=영혼 진정제; 분류=상태회복; 등급=유물; 주 용도=상태이상 치료/저항
+- AR-S0132-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5570: ID=ITM-0060; 아이템명=완전 정화약; 분류=상태회복; 등급=유물; 주 용도=상태이상 치료/저항
+- AR-S0132-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5574: ID=ID; 아이템명=아이템명; 분류=분류; 등급=등급; 주 용도=주 용도
+- AR-S0132-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5576: ID=ITM-0061; 아이템명=연막탄; 분류=전투도구; 등급=일반; 주 용도=전투/탐색 보조
+- AR-S0132-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5577: ID=ITM-0062; 아이템명=섬광탄; 분류=전투도구; 등급=일반; 주 용도=전투/탐색 보조
+- AR-S0132-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5578: ID=ITM-0063; 아이템명=화염병; 분류=전투도구; 등급=일반; 주 용도=전투/탐색 보조
+- AR-S0132-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5579: ID=ITM-0064; 아이템명=냉기병; 분류=전투도구; 등급=일반; 주 용도=전투/탐색 보조
+- AR-S0132-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5580: ID=ITM-0065; 아이템명=번개병; 분류=전투도구; 등급=일반; 주 용도=전투/탐색 보조
+- AR-S0132-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5581: ID=ITM-0066; 아이템명=산성병; 분류=전투도구; 등급=일반; 주 용도=전투/탐색 보조
+- AR-S0132-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5582: ID=ITM-0067; 아이템명=독병; 분류=전투도구; 등급=고급; 주 용도=전투/탐색 보조
+- AR-S0132-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5583: ID=ITM-0068; 아이템명=접착병; 분류=전투도구; 등급=고급; 주 용도=전투/탐색 보조
+- AR-S0132-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5584: ID=ITM-0069; 아이템명=소음 유인탄; 분류=전투도구; 등급=고급; 주 용도=전투/탐색 보조
+- AR-S0132-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5585: ID=ITM-0070; 아이템명=진동탄; 분류=전투도구; 등급=고급; 주 용도=전투/탐색 보조
+- AR-S0132-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5586: ID=ITM-0071; 아이템명=철제 투척못; 분류=전투도구; 등급=고급; 주 용도=전투/탐색 보조
+- AR-S0132-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5587: ID=ITM-0072; 아이템명=은제 투척못; 분류=전투도구; 등급=고급; 주 용도=전투/탐색 보조
+- AR-S0132-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5588: ID=ITM-0073; 아이템명=성수 폭탄; 분류=전투도구; 등급=희귀; 주 용도=전투/탐색 보조
+- AR-S0132-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5589: ID=ITM-0074; 아이템명=악마 봉인탄; 분류=전투도구; 등급=희귀; 주 용도=전투/탐색 보조
+- AR-S0132-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5590: ID=ITM-0075; 아이템명=거미줄 폭탄; 분류=전투도구; 등급=희귀; 주 용도=전투/탐색 보조
+- AR-S0132-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5591: ID=ITM-0076; 아이템명=화염 함정키트; 분류=전투도구; 등급=희귀; 주 용도=전투/탐색 보조
+- AR-S0132-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5592: ID=ITM-0077; 아이템명=빙결 함정키트; 분류=전투도구; 등급=희귀; 주 용도=전투/탐색 보조
+- AR-S0132-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5593: ID=ITM-0078; 아이템명=경보 함정키트; 분류=전투도구; 등급=희귀; 주 용도=전투/탐색 보조
+- AR-S0132-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5594: ID=ITM-0079; 아이템명=추적 표식탄; 분류=전투도구; 등급=특급; 주 용도=전투/탐색 보조
+- AR-S0132-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5595: ID=ITM-0080; 아이템명=마력 교란탄; 분류=전투도구; 등급=특급; 주 용도=전투/탐색 보조
+- AR-S0132-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5596: ID=ITM-0081; 아이템명=방벽 설치키트; 분류=전투도구; 등급=특급; 주 용도=전투/탐색 보조
+- AR-S0132-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5597: ID=ITM-0082; 아이템명=휴대 철가시; 분류=전투도구; 등급=영웅; 주 용도=전투/탐색 보조
+- AR-S0132-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5598: ID=ITM-0083; 아이템명=로프 발사기; 분류=전투도구; 등급=영웅; 주 용도=전투/탐색 보조
+- AR-S0132-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5599: ID=ITM-0084; 아이템명=휴대 조명구; 분류=전투도구; 등급=영웅; 주 용도=전투/탐색 보조
+- AR-S0132-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5600: ID=ITM-0085; 아이템명=마력 조명구; 분류=전투도구; 등급=전설; 주 용도=전투/탐색 보조
+- AR-S0132-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5601: ID=ITM-0086; 아이템명=임시 결계석; 분류=전투도구; 등급=전설; 주 용도=전투/탐색 보조
+- AR-S0132-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5602: ID=ITM-0087; 아이템명=퇴마 부적 묶음; 분류=전투도구; 등급=전설; 주 용도=전투/탐색 보조
+- AR-S0132-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5603: ID=ITM-0088; 아이템명=몬스터 유인향; 분류=전투도구; 등급=유물; 주 용도=전투/탐색 보조
+- AR-S0132-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5604: ID=ITM-0089; 아이템명=몬스터 기피향; 분류=전투도구; 등급=유물; 주 용도=전투/탐색 보조
+- AR-S0132-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5605: ID=ITM-0090; 아이템명=귀환 신호탄; 분류=전투도구; 등급=유물; 주 용도=전투/탐색 보조
+- AR-S0132-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5609: ID=ID; 아이템명=아이템명; 분류=분류; 등급=등급; 주 용도=주 용도
+- AR-S0132-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5611: ID=ITM-0091; 아이템명=검은빵; 분류=식량; 등급=일반; 주 용도=피로/허기 회복
+- AR-S0132-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5612: ID=ITM-0092; 아이템명=보존빵; 분류=식량; 등급=일반; 주 용도=피로/허기 회복
+- AR-S0132-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5613: ID=ITM-0093; 아이템명=말린 고기; 분류=식량; 등급=일반; 주 용도=피로/허기 회복
+- AR-S0132-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5614: ID=ITM-0094; 아이템명=훈제 고기; 분류=식량; 등급=일반; 주 용도=피로/허기 회복
+- AR-S0132-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5615: ID=ITM-0095; 아이템명=소금육; 분류=식량; 등급=일반; 주 용도=피로/허기 회복
+- AR-S0132-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5616: ID=ITM-0096; 아이템명=건조 생선; 분류=식량; 등급=일반; 주 용도=피로/허기 회복
+- AR-S0132-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5617: ID=ITM-0097; 아이템명=견과 주머니; 분류=식량; 등급=고급; 주 용도=피로/허기 회복
+- AR-S0132-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5618: ID=ITM-0098; 아이템명=건조 과일; 분류=식량; 등급=고급; 주 용도=피로/허기 회복
+- AR-S0132-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5619: ID=ITM-0099; 아이템명=치즈 덩어리; 분류=식량; 등급=고급; 주 용도=피로/허기 회복
+- AR-S0132-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5620: ID=ITM-0100; 아이템명=용병식 스튜; 분류=식량; 등급=고급; 주 용도=피로/허기 회복
+- AR-S0132-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5621: ID=ITM-0101; 아이템명=고단백 육포; 분류=식량; 등급=고급; 주 용도=피로/허기 회복
+- AR-S0132-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5622: ID=ITM-0102; 아이템명=매운 육포; 분류=식량; 등급=고급; 주 용도=피로/허기 회복
+- AR-S0132-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5623: ID=ITM-0103; 아이템명=꿀빵; 분류=식량; 등급=희귀; 주 용도=피로/허기 회복
+- AR-S0132-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5624: ID=ITM-0104; 아이템명=사과 파이; 분류=식량; 등급=희귀; 주 용도=피로/허기 회복
+- AR-S0132-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5625: ID=ITM-0105; 아이템명=버섯 수프; 분류=식량; 등급=희귀; 주 용도=피로/허기 회복
+- AR-S0132-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5626: ID=ITM-0106; 아이템명=허브 수프; 분류=식량; 등급=희귀; 주 용도=피로/허기 회복
+- AR-S0132-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5627: ID=ITM-0107; 아이템명=생선 수프; 분류=식량; 등급=희귀; 주 용도=피로/허기 회복
+- AR-S0132-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5628: ID=ITM-0108; 아이템명=기사단 전투식; 분류=식량; 등급=희귀; 주 용도=피로/허기 회복
+- AR-S0132-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5629: ID=ITM-0109; 아이템명=사냥꾼 전투식; 분류=식량; 등급=특급; 주 용도=피로/허기 회복
+- AR-S0132-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5630: ID=ITM-0110; 아이템명=마법사 집중식; 분류=식량; 등급=특급; 주 용도=피로/허기 회복
+- AR-S0132-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5631: ID=ITM-0111; 아이템명=사제단 건빵; 분류=식량; 등급=특급; 주 용도=피로/허기 회복
+- AR-S0132-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5632: ID=ITM-0112; 아이템명=고급 보존식; 분류=식량; 등급=영웅; 주 용도=피로/허기 회복
+- AR-S0132-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5633: ID=ITM-0113; 아이템명=장기 원정식; 분류=식량; 등급=영웅; 주 용도=피로/허기 회복
+- AR-S0132-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5634: ID=ITM-0114; 아이템명=설원 전투식; 분류=식량; 등급=영웅; 주 용도=피로/허기 회복
+- AR-S0132-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5635: ID=ITM-0115; 아이템명=사막 전투식; 분류=식량; 등급=전설; 주 용도=피로/허기 회복
+- AR-S0132-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5636: ID=ITM-0116; 아이템명=늪지 생존식; 분류=식량; 등급=전설; 주 용도=피로/허기 회복
+- AR-S0132-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5637: ID=ITM-0117; 아이템명=광산 노동식; 분류=식량; 등급=전설; 주 용도=피로/허기 회복
+- AR-S0132-121 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5638: ID=ITM-0118; 아이템명=왕실 휴대식; 분류=식량; 등급=유물; 주 용도=피로/허기 회복
+- AR-S0132-122 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5639: ID=ITM-0119; 아이템명=영웅의 전투식; 분류=식량; 등급=유물; 주 용도=피로/허기 회복
+- AR-S0132-123 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5640: ID=ITM-0120; 아이템명=축복받은 원정식; 분류=식량; 등급=유물; 주 용도=피로/허기 회복
+- AR-S0132-124 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5644: ID=ID; 아이템명=아이템명; 분류=분류; 등급=등급; 주 용도=주 용도
+- AR-S0132-125 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5646: ID=ITM-0121; 아이템명=철광석; 분류=광석·재료; 등급=일반; 주 용도=제작/강화 재료
+- AR-S0132-126 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5647: ID=ITM-0122; 아이템명=양질 철광석; 분류=광석·재료; 등급=일반; 주 용도=제작/강화 재료
+- AR-S0132-127 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5648: ID=ITM-0123; 아이템명=강철괴; 분류=광석·재료; 등급=일반; 주 용도=제작/강화 재료
+- AR-S0132-128 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5649: ID=ITM-0124; 아이템명=흑철광; 분류=광석·재료; 등급=일반; 주 용도=제작/강화 재료
+- AR-S0132-129 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5650: ID=ITM-0125; 아이템명=흑철괴; 분류=광석·재료; 등급=일반; 주 용도=제작/강화 재료
+- AR-S0132-130 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5651: ID=ITM-0126; 아이템명=은광석; 분류=광석·재료; 등급=일반; 주 용도=제작/강화 재료
+- AR-S0132-131 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5652: ID=ITM-0127; 아이템명=은괴; 분류=광석·재료; 등급=고급; 주 용도=제작/강화 재료
+- AR-S0132-132 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5653: ID=ITM-0128; 아이템명=월은광; 분류=광석·재료; 등급=고급; 주 용도=제작/강화 재료
+- AR-S0132-133 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5654: ID=ITM-0129; 아이템명=월은괴; 분류=광석·재료; 등급=고급; 주 용도=제작/강화 재료
+- AR-S0132-134 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5655: ID=ITM-0130; 아이템명=미스릴 광석; 분류=광석·재료; 등급=고급; 주 용도=제작/강화 재료
+- AR-S0132-135 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5656: ID=ITM-0131; 아이템명=미스릴괴; 분류=광석·재료; 등급=고급; 주 용도=제작/강화 재료
+- AR-S0132-136 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5657: ID=ITM-0132; 아이템명=아다만트 광석; 분류=광석·재료; 등급=고급; 주 용도=제작/강화 재료
+- AR-S0132-137 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5658: ID=ITM-0133; 아이템명=아다만트괴; 분류=광석·재료; 등급=희귀; 주 용도=제작/강화 재료
+- AR-S0132-138 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5659: ID=ITM-0134; 아이템명=별철 파편; 분류=광석·재료; 등급=희귀; 주 용도=제작/강화 재료
+- AR-S0132-139 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5660: ID=ITM-0135; 아이템명=별철괴; 분류=광석·재료; 등급=희귀; 주 용도=제작/강화 재료
+- AR-S0132-140 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5661: ID=ITM-0136; 아이템명=화염석; 분류=광석·재료; 등급=희귀; 주 용도=제작/강화 재료
+- AR-S0132-141 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5662: ID=ITM-0137; 아이템명=냉기석; 분류=광석·재료; 등급=희귀; 주 용도=제작/강화 재료
+- AR-S0132-142 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5663: ID=ITM-0138; 아이템명=번개석; 분류=광석·재료; 등급=희귀; 주 용도=제작/강화 재료
+- AR-S0132-143 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5664: ID=ITM-0139; 아이템명=대지석; 분류=광석·재료; 등급=특급; 주 용도=제작/강화 재료
+- AR-S0132-144 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5665: ID=ITM-0140; 아이템명=바람석; 분류=광석·재료; 등급=특급; 주 용도=제작/강화 재료
+- AR-S0132-145 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5666: ID=ITM-0141; 아이템명=마력 결정; 분류=광석·재료; 등급=특급; 주 용도=제작/강화 재료
+- AR-S0132-146 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5667: ID=ITM-0142; 아이템명=상급 마력 결정; 분류=광석·재료; 등급=영웅; 주 용도=제작/강화 재료
+- AR-S0132-147 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5668: ID=ITM-0143; 아이템명=심연 결정; 분류=광석·재료; 등급=영웅; 주 용도=제작/강화 재료
+- AR-S0132-148 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5669: ID=ITM-0144; 아이템명=성광 결정; 분류=광석·재료; 등급=영웅; 주 용도=제작/강화 재료
+- AR-S0132-149 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5670: ID=ITM-0145; 아이템명=용린 조각; 분류=광석·재료; 등급=전설; 주 용도=제작/강화 재료
+- AR-S0132-150 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5671: ID=ITM-0146; 아이템명=와이번 가죽; 분류=광석·재료; 등급=전설; 주 용도=제작/강화 재료
+- AR-S0132-151 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5672: ID=ITM-0147; 아이템명=트롤 심줄; 분류=광석·재료; 등급=전설; 주 용도=제작/강화 재료
+- AR-S0132-152 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5673: ID=ITM-0148; 아이템명=거인뼈 조각; 분류=광석·재료; 등급=유물; 주 용도=제작/강화 재료
+- AR-S0132-153 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5674: ID=ITM-0149; 아이템명=세계수 가지; 분류=광석·재료; 등급=유물; 주 용도=제작/강화 재료
+- AR-S0132-154 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5675: ID=ITM-0150; 아이템명=고대 룬석; 분류=광석·재료; 등급=유물; 주 용도=제작/강화 재료
+- AR-S0132-155 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5679: ID=ID; 아이템명=아이템명; 분류=분류; 등급=등급; 주 용도=주 용도
+- AR-S0132-156 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5681: ID=ITM-0151; 아이템명=슬라임 점액; 분류=몬스터재료; 등급=일반; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-157 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5682: ID=ITM-0152; 아이템명=농축 슬라임 점액; 분류=몬스터재료; 등급=일반; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-158 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5683: ID=ITM-0153; 아이템명=고블린 송곳니; 분류=몬스터재료; 등급=일반; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-159 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5684: ID=ITM-0154; 아이템명=고블린 귀; 분류=몬스터재료; 등급=일반; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-160 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5685: ID=ITM-0155; 아이템명=오크 엄니; 분류=몬스터재료; 등급=일반; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-161 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5686: ID=ITM-0156; 아이템명=오우거 가죽; 분류=몬스터재료; 등급=일반; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-162 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5687: ID=ITM-0157; 아이템명=트롤 피; 분류=몬스터재료; 등급=고급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-163 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5688: ID=ITM-0158; 아이템명=늑대 송곳니; 분류=몬스터재료; 등급=고급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-164 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5689: ID=ITM-0159; 아이템명=광폭늑대 가죽; 분류=몬스터재료; 등급=고급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-165 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5690: ID=ITM-0160; 아이템명=거대거미 독낭; 분류=몬스터재료; 등급=고급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-166 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5691: ID=ITM-0161; 아이템명=거대거미 실; 분류=몬스터재료; 등급=고급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-167 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5692: ID=ITM-0162; 아이템명=박쥐 날개; 분류=몬스터재료; 등급=고급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-168 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5693: ID=ITM-0163; 아이템명=흡혈박쥐 피; 분류=몬스터재료; 등급=희귀; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-169 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5694: ID=ITM-0164; 아이템명=해골 마력핵; 분류=몬스터재료; 등급=희귀; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-170 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5695: ID=ITM-0165; 아이템명=망령 잔재; 분류=몬스터재료; 등급=희귀; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-171 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5696: ID=ITM-0166; 아이템명=구울 발톱; 분류=몬스터재료; 등급=희귀; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-172 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5697: ID=ITM-0167; 아이템명=미라 붕대; 분류=몬스터재료; 등급=희귀; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-173 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5698: ID=ITM-0168; 아이템명=골렘 핵; 분류=몬스터재료; 등급=희귀; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-174 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5699: ID=ITM-0169; 아이템명=정령 가루; 분류=몬스터재료; 등급=특급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-175 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5700: ID=ITM-0170; 아이템명=화염 정령핵; 분류=몬스터재료; 등급=특급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-176 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5701: ID=ITM-0171; 아이템명=냉기 정령핵; 분류=몬스터재료; 등급=특급; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-177 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5702: ID=ITM-0172; 아이템명=악마 뿔; 분류=몬스터재료; 등급=영웅; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-178 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5703: ID=ITM-0173; 아이템명=악마 피; 분류=몬스터재료; 등급=영웅; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-179 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5704: ID=ITM-0174; 아이템명=악마 심장편; 분류=몬스터재료; 등급=영웅; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-180 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5705: ID=ITM-0175; 아이템명=심연 촉수; 분류=몬스터재료; 등급=전설; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-181 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5706: ID=ITM-0176; 아이템명=와이번 비늘; 분류=몬스터재료; 등급=전설; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-182 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5707: ID=ITM-0177; 아이템명=드래곤 비늘; 분류=몬스터재료; 등급=전설; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-183 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5708: ID=ITM-0178; 아이템명=드래곤 피; 분류=몬스터재료; 등급=유물; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-184 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5709: ID=ITM-0179; 아이템명=드래곤 심장편; 분류=몬스터재료; 등급=유물; 주 용도=제작/의뢰/연금술 재료
+- AR-S0132-185 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0132` §132 소모품·재료 아이템 실제 데이터 180종 L5710: ID=ITM-0180; 아이템명=균열핵 파편; 분류=몬스터재료; 등급=유물; 주 용도=제작/의뢰/연금술 재료
+- AR-S0133-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5719: ID=MON-0001; 몬스터명=들쥐; 계열=야수; 기본 레벨 범위=1~9; 위협 계수=0.82; 역할=공격형; 주 속성=물리
+- AR-S0133-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5720: ID=MON-0002; 몬스터명=거대쥐; 계열=야수; 기본 레벨 범위=5~13; 위협 계수=0.84; 역할=공격형; 주 속성=물리
+- AR-S0133-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5721: ID=MON-0003; 몬스터명=동굴쥐; 계열=야수; 기본 레벨 범위=8~17; 위협 계수=0.87; 역할=공격형; 주 속성=물리
+- AR-S0133-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5722: ID=MON-0004; 몬스터명=야생견; 계열=야수; 기본 레벨 범위=12~21; 위협 계수=0.9; 역할=공격형; 주 속성=물리
+- AR-S0133-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5723: ID=MON-0005; 몬스터명=들개 우두머리; 계열=야수; 기본 레벨 범위=16~26; 위협 계수=0.92; 역할=공격형; 주 속성=물리
+- AR-S0133-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5724: ID=MON-0006; 몬스터명=회색늑대; 계열=야수; 기본 레벨 범위=20~30; 위협 계수=0.94; 역할=공격형; 주 속성=물리
+- AR-S0133-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5725: ID=MON-0007; 몬스터명=검은늑대; 계열=야수; 기본 레벨 범위=23~34; 위협 계수=0.97; 역할=공격형; 주 속성=물리
+- AR-S0133-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5726: ID=MON-0008; 몬스터명=설원늑대; 계열=야수; 기본 레벨 범위=27~38; 위협 계수=0.99; 역할=공격형; 주 속성=물리
+- AR-S0133-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5727: ID=MON-0009; 몬스터명=광폭늑대; 계열=야수; 기본 레벨 범위=31~43; 위협 계수=1.02; 역할=공격형; 주 속성=물리
+- AR-S0133-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5728: ID=MON-0010; 몬스터명=멧돼지; 계열=야수; 기본 레벨 범위=34~46; 위협 계수=1.04; 역할=공격형; 주 속성=물리
+- AR-S0133-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5729: ID=MON-0011; 몬스터명=갑주멧돼지; 계열=야수; 기본 레벨 범위=38~51; 위협 계수=1.07; 역할=공격형; 주 속성=물리
+- AR-S0133-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5730: ID=MON-0012; 몬스터명=갈색곰; 계열=야수; 기본 레벨 범위=42~55; 위협 계수=1.09; 역할=공격형; 주 속성=물리
+- AR-S0133-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5731: ID=MON-0013; 몬스터명=동굴곰; 계열=야수; 기본 레벨 범위=45~59; 위협 계수=1.12; 역할=공격형; 주 속성=물리
+- AR-S0133-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5732: ID=MON-0014; 몬스터명=설원곰; 계열=야수; 기본 레벨 범위=49~63; 위협 계수=1.15; 역할=공격형; 주 속성=물리
+- AR-S0133-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5733: ID=MON-0015; 몬스터명=산표범; 계열=야수; 기본 레벨 범위=53~68; 위협 계수=1.17; 역할=공격형; 주 속성=물리
+- AR-S0133-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5734: ID=MON-0016; 몬스터명=동굴표범; 계열=야수; 기본 레벨 범위=57~72; 위협 계수=1.19; 역할=공격형; 주 속성=물리
+- AR-S0133-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5735: ID=MON-0017; 몬스터명=검치수; 계열=야수; 기본 레벨 범위=60~76; 위협 계수=1.22; 역할=공격형; 주 속성=물리
+- AR-S0133-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5736: ID=MON-0018; 몬스터명=뿔사슴; 계열=야수; 기본 레벨 범위=64~80; 위협 계수=1.25; 역할=공격형; 주 속성=물리
+- AR-S0133-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5737: ID=MON-0019; 몬스터명=거대산양; 계열=야수; 기본 레벨 범위=68~85; 위협 계수=1.27; 역할=공격형; 주 속성=물리
+- AR-S0133-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5738: ID=MON-0020; 몬스터명=혈갈기 사자; 계열=야수; 기본 레벨 범위=71~88; 위협 계수=1.29; 역할=공격형; 주 속성=물리
+- AR-S0133-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5742: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5744: ID=MON-0021; 몬스터명=거대개미; 계열=곤충·절지류; 기본 레벨 범위=2~10; 위협 계수=0.74; 역할=제어형; 주 속성=독
+- AR-S0133-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5745: ID=MON-0022; 몬스터명=병정개미; 계열=곤충·절지류; 기본 레벨 범위=6~14; 위협 계수=0.76; 역할=제어형; 주 속성=독
+- AR-S0133-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5746: ID=MON-0023; 몬스터명=독개미; 계열=곤충·절지류; 기본 레벨 범위=10~19; 위협 계수=0.78; 역할=제어형; 주 속성=독
+- AR-S0133-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5747: ID=MON-0024; 몬스터명=거대거미; 계열=곤충·절지류; 기본 레벨 범위=14~23; 위협 계수=0.81; 역할=제어형; 주 속성=독
+- AR-S0133-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5748: ID=MON-0025; 몬스터명=동굴거미; 계열=곤충·절지류; 기본 레벨 범위=18~28; 위협 계수=0.83; 역할=제어형; 주 속성=독
+- AR-S0133-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5749: ID=MON-0026; 몬스터명=철갑거미; 계열=곤충·절지류; 기본 레벨 범위=21~31; 위협 계수=0.85; 역할=제어형; 주 속성=독
+- AR-S0133-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5750: ID=MON-0027; 몬스터명=독거미; 계열=곤충·절지류; 기본 레벨 범위=25~36; 위협 계수=0.87; 역할=제어형; 주 속성=독
+- AR-S0133-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5751: ID=MON-0028; 몬스터명=그림자거미; 계열=곤충·절지류; 기본 레벨 범위=29~40; 위협 계수=0.9; 역할=제어형; 주 속성=독
+- AR-S0133-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5752: ID=MON-0029; 몬스터명=전갈; 계열=곤충·절지류; 기본 레벨 범위=33~45; 위협 계수=0.92; 역할=제어형; 주 속성=독
+- AR-S0133-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5753: ID=MON-0030; 몬스터명=갑주전갈; 계열=곤충·절지류; 기본 레벨 범위=37~49; 위협 계수=0.94; 역할=제어형; 주 속성=독
+- AR-S0133-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5754: ID=MON-0031; 몬스터명=독전갈; 계열=곤충·절지류; 기본 레벨 범위=41~54; 위협 계수=0.96; 역할=제어형; 주 속성=독
+- AR-S0133-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5755: ID=MON-0032; 몬스터명=거대지네; 계열=곤충·절지류; 기본 레벨 범위=45~58; 위협 계수=0.99; 역할=제어형; 주 속성=독
+- AR-S0133-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5756: ID=MON-0033; 몬스터명=산성지네; 계열=곤충·절지류; 기본 레벨 범위=48~62; 위협 계수=1.01; 역할=제어형; 주 속성=독
+- AR-S0133-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5757: ID=MON-0034; 몬스터명=흡혈진드기; 계열=곤충·절지류; 기본 레벨 범위=52~66; 위협 계수=1.03; 역할=제어형; 주 속성=독
+- AR-S0133-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5758: ID=MON-0035; 몬스터명=거대벌; 계열=곤충·절지류; 기본 레벨 범위=56~71; 위협 계수=1.05; 역할=제어형; 주 속성=독
+- AR-S0133-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5759: ID=MON-0036; 몬스터명=독벌; 계열=곤충·절지류; 기본 레벨 범위=60~75; 위협 계수=1.08; 역할=제어형; 주 속성=독
+- AR-S0133-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5760: ID=MON-0037; 몬스터명=불개미 여왕; 계열=곤충·절지류; 기본 레벨 범위=64~80; 위협 계수=1.1; 역할=제어형; 주 속성=독
+- AR-S0133-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5761: ID=MON-0038; 몬스터명=거미 여왕; 계열=곤충·절지류; 기본 레벨 범위=68~84; 위협 계수=1.12; 역할=제어형; 주 속성=독
+- AR-S0133-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5762: ID=MON-0039; 몬스터명=전갈왕; 계열=곤충·절지류; 기본 레벨 범위=72~89; 위협 계수=1.14; 역할=제어형; 주 속성=독
+- AR-S0133-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5763: ID=MON-0040; 몬스터명=심연딱정벌레; 계열=곤충·절지류; 기본 레벨 범위=76~93; 위협 계수=1.17; 역할=제어형; 주 속성=독
+- AR-S0133-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5767: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5769: ID=MON-0041; 몬스터명=움직이는 덩굴; 계열=식물·균류; 기본 레벨 범위=4~12; 위협 계수=0.82; 역할=제어형; 주 속성=독
+- AR-S0133-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5770: ID=MON-0042; 몬스터명=가시덩굴; 계열=식물·균류; 기본 레벨 범위=8~16; 위협 계수=0.84; 역할=제어형; 주 속성=독
+- AR-S0133-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5771: ID=MON-0043; 몬스터명=독덩굴; 계열=식물·균류; 기본 레벨 범위=13~22; 위협 계수=0.87; 역할=제어형; 주 속성=독
+- AR-S0133-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5772: ID=MON-0044; 몬스터명=식인꽃; 계열=식물·균류; 기본 레벨 범위=17~26; 위협 계수=0.9; 역할=제어형; 주 속성=독
+- AR-S0133-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5773: ID=MON-0045; 몬스터명=포자버섯; 계열=식물·균류; 기본 레벨 범위=22~32; 위협 계수=0.92; 역할=제어형; 주 속성=독
+- AR-S0133-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5774: ID=MON-0046; 몬스터명=독버섯; 계열=식물·균류; 기본 레벨 범위=26~36; 위협 계수=0.94; 역할=제어형; 주 속성=독
+- AR-S0133-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5775: ID=MON-0047; 몬스터명=폭발버섯; 계열=식물·균류; 기본 레벨 범위=30~41; 위협 계수=0.97; 역할=제어형; 주 속성=독
+- AR-S0133-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5776: ID=MON-0048; 몬스터명=수면버섯; 계열=식물·균류; 기본 레벨 범위=35~46; 위협 계수=0.99; 역할=제어형; 주 속성=독
+- AR-S0133-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5777: ID=MON-0049; 몬스터명=환각버섯; 계열=식물·균류; 기본 레벨 범위=39~51; 위협 계수=1.02; 역할=제어형; 주 속성=독
+- AR-S0133-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5778: ID=MON-0050; 몬스터명=포자괴물; 계열=식물·균류; 기본 레벨 범위=44~56; 위협 계수=1.04; 역할=제어형; 주 속성=독
+- AR-S0133-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5779: ID=MON-0051; 몬스터명=나무정령 묘목; 계열=식물·균류; 기본 레벨 범위=48~61; 위협 계수=1.07; 역할=제어형; 주 속성=독
+- AR-S0133-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5780: ID=MON-0052; 몬스터명=살아있는 뿌리; 계열=식물·균류; 기본 레벨 범위=53~66; 위협 계수=1.09; 역할=제어형; 주 속성=독
+- AR-S0133-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5781: ID=MON-0053; 몬스터명=피흡수 꽃; 계열=식물·균류; 기본 레벨 범위=57~71; 위협 계수=1.12; 역할=제어형; 주 속성=독
+- AR-S0133-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5782: ID=MON-0054; 몬스터명=철목 수호자; 계열=식물·균류; 기본 레벨 범위=61~75; 위협 계수=1.15; 역할=제어형; 주 속성=독
+- AR-S0133-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5783: ID=MON-0055; 몬스터명=저주받은 고목; 계열=식물·균류; 기본 레벨 범위=66~81; 위협 계수=1.17; 역할=제어형; 주 속성=독
+- AR-S0133-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5784: ID=MON-0056; 몬스터명=울부짖는 나무; 계열=식물·균류; 기본 레벨 범위=70~85; 위협 계수=1.19; 역할=제어형; 주 속성=독
+- AR-S0133-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5785: ID=MON-0057; 몬스터명=독안개 꽃; 계열=식물·균류; 기본 레벨 범위=75~91; 위협 계수=1.22; 역할=제어형; 주 속성=독
+- AR-S0133-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5786: ID=MON-0058; 몬스터명=심연균사체; 계열=식물·균류; 기본 레벨 범위=79~95; 위협 계수=1.25; 역할=제어형; 주 속성=독
+- AR-S0133-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5787: ID=MON-0059; 몬스터명=마력버섯 군락; 계열=식물·균류; 기본 레벨 범위=84~101; 위협 계수=1.27; 역할=제어형; 주 속성=독
+- AR-S0133-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5788: ID=MON-0060; 몬스터명=세계수의 타락한 가지; 계열=식물·균류; 기본 레벨 범위=88~105; 위협 계수=1.29; 역할=제어형; 주 속성=독
+- AR-S0133-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5792: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5794: ID=MON-0061; 몬스터명=슬라임; 계열=슬라임·점액체; 기본 레벨 범위=1~9; 위협 계수=0.61; 역할=방어형; 주 속성=물리
+- AR-S0133-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5795: ID=MON-0062; 몬스터명=대형 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=6~14; 위협 계수=0.63; 역할=방어형; 주 속성=물리
+- AR-S0133-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5796: ID=MON-0063; 몬스터명=거대 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=12~21; 위협 계수=0.65; 역할=방어형; 주 속성=물리
+- AR-S0133-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5797: ID=MON-0064; 몬스터명=산성 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=17~26; 위협 계수=0.67; 역할=방어형; 주 속성=물리
+- AR-S0133-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5798: ID=MON-0065; 몬스터명=독 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=23~33; 위협 계수=0.69; 역할=방어형; 주 속성=물리
+- AR-S0133-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5799: ID=MON-0066; 몬스터명=화염 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=28~38; 위협 계수=0.71; 역할=방어형; 주 속성=물리
+- AR-S0133-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5800: ID=MON-0067; 몬스터명=냉기 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=33~44; 위협 계수=0.73; 역할=방어형; 주 속성=물리
+- AR-S0133-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5801: ID=MON-0068; 몬스터명=전격 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=39~50; 위협 계수=0.75; 역할=방어형; 주 속성=물리
+- AR-S0133-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5802: ID=MON-0069; 몬스터명=철 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=44~56; 위협 계수=0.77; 역할=방어형; 주 속성=물리
+- AR-S0133-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5803: ID=MON-0070; 몬스터명=황금 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=49~61; 위협 계수=0.78; 역할=방어형; 주 속성=물리
+- AR-S0133-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5804: ID=MON-0071; 몬스터명=마력 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=55~68; 위협 계수=0.8; 역할=방어형; 주 속성=물리
+- AR-S0133-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5805: ID=MON-0072; 몬스터명=분열 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=60~73; 위협 계수=0.82; 역할=방어형; 주 속성=물리
+- AR-S0133-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5806: ID=MON-0073; 몬스터명=포식 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=65~79; 위협 계수=0.84; 역할=방어형; 주 속성=물리
+- AR-S0133-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5807: ID=MON-0074; 몬스터명=암흑 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=71~85; 위협 계수=0.86; 역할=방어형; 주 속성=물리
+- AR-S0133-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5808: ID=MON-0075; 몬스터명=성광 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=76~91; 위협 계수=0.88; 역할=방어형; 주 속성=물리
+- AR-S0133-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5809: ID=MON-0076; 몬스터명=혈액 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=82~97; 위협 계수=0.9; 역할=방어형; 주 속성=물리
+- AR-S0133-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5810: ID=MON-0077; 몬스터명=점액 포식자; 계열=슬라임·점액체; 기본 레벨 범위=87~103; 위협 계수=0.92; 역할=방어형; 주 속성=물리
+- AR-S0133-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5811: ID=MON-0078; 몬스터명=슬라임 군체; 계열=슬라임·점액체; 기본 레벨 범위=92~108; 위협 계수=0.93; 역할=방어형; 주 속성=물리
+- AR-S0133-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5812: ID=MON-0079; 몬스터명=고대 슬라임; 계열=슬라임·점액체; 기본 레벨 범위=98~115; 위협 계수=0.95; 역할=방어형; 주 속성=물리
+- AR-S0133-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5813: ID=MON-0080; 몬스터명=슬라임 왕; 계열=슬라임·점액체; 기본 레벨 범위=103~120; 위협 계수=0.97; 역할=방어형; 주 속성=물리
+- AR-S0133-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5817: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5819: ID=MON-0081; 몬스터명=고블린; 계열=고블린·코볼트; 기본 레벨 범위=2~10; 위협 계수=0.74; 역할=혼합형; 주 속성=물리
+- AR-S0133-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5820: ID=MON-0082; 몬스터명=고블린 광부; 계열=고블린·코볼트; 기본 레벨 범위=6~14; 위협 계수=0.76; 역할=혼합형; 주 속성=물리
+- AR-S0133-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5821: ID=MON-0083; 몬스터명=고블린 정찰병; 계열=고블린·코볼트; 기본 레벨 범위=11~20; 위협 계수=0.78; 역할=혼합형; 주 속성=물리
+- AR-S0133-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5822: ID=MON-0084; 몬스터명=고블린 투척병; 계열=고블린·코볼트; 기본 레벨 범위=16~25; 위협 계수=0.81; 역할=혼합형; 주 속성=물리
+- AR-S0133-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5823: ID=MON-0085; 몬스터명=고블린 궁수; 계열=고블린·코볼트; 기본 레벨 범위=20~30; 위협 계수=0.83; 역할=혼합형; 주 속성=물리
+- AR-S0133-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5824: ID=MON-0086; 몬스터명=고블린 전사; 계열=고블린·코볼트; 기본 레벨 범위=24~34; 위협 계수=0.85; 역할=혼합형; 주 속성=물리
+- AR-S0133-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5825: ID=MON-0087; 몬스터명=고블린 방패병; 계열=고블린·코볼트; 기본 레벨 범위=29~40; 위협 계수=0.87; 역할=혼합형; 주 속성=물리
+- AR-S0133-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5826: ID=MON-0088; 몬스터명=고블린 광전사; 계열=고블린·코볼트; 기본 레벨 범위=34~45; 위협 계수=0.9; 역할=혼합형; 주 속성=물리
+- AR-S0133-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5827: ID=MON-0089; 몬스터명=고블린 주술사; 계열=고블린·코볼트; 기본 레벨 범위=38~50; 위협 계수=0.92; 역할=혼합형; 주 속성=물리
+- AR-S0133-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5828: ID=MON-0090; 몬스터명=고블린 사제; 계열=고블린·코볼트; 기본 레벨 범위=42~54; 위협 계수=0.94; 역할=혼합형; 주 속성=물리
+- AR-S0133-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5829: ID=MON-0091; 몬스터명=고블린 암살자; 계열=고블린·코볼트; 기본 레벨 범위=47~60; 위협 계수=0.96; 역할=혼합형; 주 속성=물리
+- AR-S0133-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5830: ID=MON-0092; 몬스터명=고블린 기수; 계열=고블린·코볼트; 기본 레벨 범위=52~65; 위협 계수=0.99; 역할=혼합형; 주 속성=물리
+- AR-S0133-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5831: ID=MON-0093; 몬스터명=고블린 대장; 계열=고블린·코볼트; 기본 레벨 범위=56~70; 위협 계수=1.01; 역할=혼합형; 주 속성=물리
+- AR-S0133-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5832: ID=MON-0094; 몬스터명=코볼트; 계열=고블린·코볼트; 기본 레벨 범위=60~74; 위협 계수=1.03; 역할=혼합형; 주 속성=물리
+- AR-S0133-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5833: ID=MON-0095; 몬스터명=코볼트 창병; 계열=고블린·코볼트; 기본 레벨 범위=65~80; 위협 계수=1.05; 역할=혼합형; 주 속성=물리
+- AR-S0133-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5834: ID=MON-0096; 몬스터명=코볼트 투석병; 계열=고블린·코볼트; 기본 레벨 범위=70~85; 위협 계수=1.08; 역할=혼합형; 주 속성=물리
+- AR-S0133-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5835: ID=MON-0097; 몬스터명=코볼트 덫사냥꾼; 계열=고블린·코볼트; 기본 레벨 범위=74~90; 위협 계수=1.1; 역할=혼합형; 주 속성=물리
+- AR-S0133-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5836: ID=MON-0098; 몬스터명=코볼트 주술사; 계열=고블린·코볼트; 기본 레벨 범위=78~94; 위협 계수=1.12; 역할=혼합형; 주 속성=물리
+- AR-S0133-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5837: ID=MON-0099; 몬스터명=코볼트 대장; 계열=고블린·코볼트; 기본 레벨 범위=83~100; 위협 계수=1.14; 역할=혼합형; 주 속성=물리
+- AR-S0133-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5838: ID=MON-0100; 몬스터명=고블린 군주; 계열=고블린·코볼트; 기본 레벨 범위=88~105; 위협 계수=1.17; 역할=혼합형; 주 속성=물리
+- AR-S0133-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5842: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5844: ID=MON-0101; 몬스터명=오크; 계열=오크·오우거·트롤; 기본 레벨 범위=8~16; 위협 계수=1.19; 역할=공격형; 주 속성=물리
+- AR-S0133-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5845: ID=MON-0102; 몬스터명=오크 전사; 계열=오크·오우거·트롤; 기본 레벨 범위=14~22; 위협 계수=1.23; 역할=공격형; 주 속성=물리
+- AR-S0133-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5846: ID=MON-0103; 몬스터명=오크 창병; 계열=오크·오우거·트롤; 기본 레벨 범위=20~29; 위협 계수=1.26; 역할=공격형; 주 속성=물리
+- AR-S0133-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5847: ID=MON-0104; 몬스터명=오크 궁수; 계열=오크·오우거·트롤; 기본 레벨 범위=26~35; 위협 계수=1.3; 역할=공격형; 주 속성=물리
+- AR-S0133-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5848: ID=MON-0105; 몬스터명=오크 광전사; 계열=오크·오우거·트롤; 기본 레벨 범위=32~42; 위협 계수=1.33; 역할=공격형; 주 속성=물리
+- AR-S0133-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5849: ID=MON-0106; 몬스터명=오크 주술사; 계열=오크·오우거·트롤; 기본 레벨 범위=38~48; 위협 계수=1.37; 역할=공격형; 주 속성=물리
+- AR-S0133-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5850: ID=MON-0107; 몬스터명=오크 대장; 계열=오크·오우거·트롤; 기본 레벨 범위=44~55; 위협 계수=1.41; 역할=공격형; 주 속성=물리
+- AR-S0133-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5851: ID=MON-0108; 몬스터명=검은오크; 계열=오크·오우거·트롤; 기본 레벨 범위=49~60; 위협 계수=1.44; 역할=공격형; 주 속성=물리
+- AR-S0133-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5852: ID=MON-0109; 몬스터명=붉은오크; 계열=오크·오우거·트롤; 기본 레벨 범위=55~67; 위협 계수=1.48; 역할=공격형; 주 속성=물리
+- AR-S0133-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5853: ID=MON-0110; 몬스터명=산악오크; 계열=오크·오우거·트롤; 기본 레벨 범위=61~73; 위협 계수=1.52; 역할=공격형; 주 속성=물리
+- AR-S0133-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5854: ID=MON-0111; 몬스터명=오우거; 계열=오크·오우거·트롤; 기본 레벨 범위=67~80; 위협 계수=1.55; 역할=공격형; 주 속성=물리
+- AR-S0133-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5855: ID=MON-0112; 몬스터명=오우거 전사; 계열=오크·오우거·트롤; 기본 레벨 범위=73~86; 위협 계수=1.59; 역할=공격형; 주 속성=물리
+- AR-S0133-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5856: ID=MON-0113; 몬스터명=오우거 투척병; 계열=오크·오우거·트롤; 기본 레벨 범위=79~93; 위협 계수=1.62; 역할=공격형; 주 속성=물리
+- AR-S0133-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5857: ID=MON-0114; 몬스터명=오우거 광전사; 계열=오크·오우거·트롤; 기본 레벨 범위=85~99; 위협 계수=1.66; 역할=공격형; 주 속성=물리
+- AR-S0133-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5858: ID=MON-0115; 몬스터명=쌍두 오우거; 계열=오크·오우거·트롤; 기본 레벨 범위=91~106; 위협 계수=1.7; 역할=공격형; 주 속성=물리
+- AR-S0133-121 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5859: ID=MON-0116; 몬스터명=트롤; 계열=오크·오우거·트롤; 기본 레벨 범위=97~112; 위협 계수=1.73; 역할=공격형; 주 속성=물리
+- AR-S0133-122 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5860: ID=MON-0117; 몬스터명=동굴트롤; 계열=오크·오우거·트롤; 기본 레벨 범위=103~119; 위협 계수=1.77; 역할=공격형; 주 속성=물리
+- AR-S0133-123 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5861: ID=MON-0118; 몬스터명=설원트롤; 계열=오크·오우거·트롤; 기본 레벨 범위=109~125; 위협 계수=1.81; 역할=공격형; 주 속성=물리
+- AR-S0133-124 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5862: ID=MON-0119; 몬스터명=전쟁트롤; 계열=오크·오우거·트롤; 기본 레벨 범위=114~131; 위협 계수=1.84; 역할=공격형; 주 속성=물리
+- AR-S0133-125 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5863: ID=MON-0120; 몬스터명=트롤 족장; 계열=오크·오우거·트롤; 기본 레벨 범위=120~137; 위협 계수=1.88; 역할=공격형; 주 속성=물리
+- AR-S0133-126 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5867: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-127 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5869: ID=MON-0121; 몬스터명=산적; 계열=인간형 적대세력; 기본 레벨 범위=5~13; 위협 계수=0.9; 역할=혼합형; 주 속성=물리
+- AR-S0133-128 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5870: ID=MON-0122; 몬스터명=산적 궁수; 계열=인간형 적대세력; 기본 레벨 범위=11~19; 위협 계수=0.93; 역할=혼합형; 주 속성=물리
+- AR-S0133-129 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5871: ID=MON-0123; 몬스터명=산적 창병; 계열=인간형 적대세력; 기본 레벨 범위=16~25; 위협 계수=0.96; 역할=혼합형; 주 속성=물리
+- AR-S0133-130 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5872: ID=MON-0124; 몬스터명=산적 방패병; 계열=인간형 적대세력; 기본 레벨 범위=22~31; 위협 계수=0.98; 역할=혼합형; 주 속성=물리
+- AR-S0133-131 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5873: ID=MON-0125; 몬스터명=산적 두목; 계열=인간형 적대세력; 기본 레벨 범위=27~37; 위협 계수=1.01; 역할=혼합형; 주 속성=물리
+- AR-S0133-132 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5874: ID=MON-0126; 몬스터명=탈영병; 계열=인간형 적대세력; 기본 레벨 범위=33~43; 위협 계수=1.04; 역할=혼합형; 주 속성=물리
+- AR-S0133-133 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5875: ID=MON-0127; 몬스터명=용병 약탈자; 계열=인간형 적대세력; 기본 레벨 범위=39~50; 위협 계수=1.07; 역할=혼합형; 주 속성=물리
+- AR-S0133-134 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5876: ID=MON-0128; 몬스터명=도굴꾼; 계열=인간형 적대세력; 기본 레벨 범위=44~55; 위협 계수=1.09; 역할=혼합형; 주 속성=물리
+- AR-S0133-135 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5877: ID=MON-0129; 몬스터명=암시장 사냥꾼; 계열=인간형 적대세력; 기본 레벨 범위=50~62; 위협 계수=1.12; 역할=혼합형; 주 속성=물리
+- AR-S0133-136 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5878: ID=MON-0130; 몬스터명=광신도; 계열=인간형 적대세력; 기본 레벨 범위=56~68; 위협 계수=1.15; 역할=혼합형; 주 속성=물리
+- AR-S0133-137 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5879: ID=MON-0131; 몬스터명=광신도 사제; 계열=인간형 적대세력; 기본 레벨 범위=61~74; 위협 계수=1.18; 역할=혼합형; 주 속성=물리
+- AR-S0133-138 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5880: ID=MON-0132; 몬스터명=흑마법사; 계열=인간형 적대세력; 기본 레벨 범위=67~80; 위협 계수=1.2; 역할=혼합형; 주 속성=물리
+- AR-S0133-139 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5881: ID=MON-0133; 몬스터명=저주술사; 계열=인간형 적대세력; 기본 레벨 범위=73~87; 위협 계수=1.23; 역할=혼합형; 주 속성=물리
+- AR-S0133-140 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5882: ID=MON-0134; 몬스터명=암살자; 계열=인간형 적대세력; 기본 레벨 범위=78~92; 위협 계수=1.26; 역할=혼합형; 주 속성=물리
+- AR-S0133-141 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5883: ID=MON-0135; 몬스터명=현상수배 검사; 계열=인간형 적대세력; 기본 레벨 범위=84~99; 위협 계수=1.29; 역할=혼합형; 주 속성=물리
+- AR-S0133-142 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5884: ID=MON-0136; 몬스터명=타락한 기사; 계열=인간형 적대세력; 기본 레벨 범위=89~104; 위협 계수=1.31; 역할=혼합형; 주 속성=물리
+- AR-S0133-143 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5885: ID=MON-0137; 몬스터명=타락한 성기사; 계열=인간형 적대세력; 기본 레벨 범위=95~111; 위협 계수=1.34; 역할=혼합형; 주 속성=물리
+- AR-S0133-144 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5886: ID=MON-0138; 몬스터명=악마 계약자; 계열=인간형 적대세력; 기본 레벨 범위=101~117; 위협 계수=1.37; 역할=혼합형; 주 속성=물리
+- AR-S0133-145 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5887: ID=MON-0139; 몬스터명=이단 심문관; 계열=인간형 적대세력; 기본 레벨 범위=106~123; 위협 계수=1.4; 역할=혼합형; 주 속성=물리
+- AR-S0133-146 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5888: ID=MON-0140; 몬스터명=검은가면 대장; 계열=인간형 적대세력; 기본 레벨 범위=112~129; 위협 계수=1.42; 역할=혼합형; 주 속성=물리
+- AR-S0133-147 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5892: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-148 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5894: ID=MON-0141; 몬스터명=해골; 계열=언데드; 기본 레벨 범위=5~13; 위협 계수=0.98; 역할=혼합형; 주 속성=암흑
+- AR-S0133-149 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5895: ID=MON-0142; 몬스터명=해골병사; 계열=언데드; 기본 레벨 범위=12~20; 위협 계수=1.01; 역할=혼합형; 주 속성=암흑
+- AR-S0133-150 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5896: ID=MON-0143; 몬스터명=해골궁수; 계열=언데드; 기본 레벨 범위=19~28; 위협 계수=1.04; 역할=혼합형; 주 속성=암흑
+- AR-S0133-151 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5897: ID=MON-0144; 몬스터명=해골창병; 계열=언데드; 기본 레벨 범위=26~35; 위협 계수=1.07; 역할=혼합형; 주 속성=암흑
+- AR-S0133-152 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5898: ID=MON-0145; 몬스터명=해골방패병; 계열=언데드; 기본 레벨 범위=33~43; 위협 계수=1.1; 역할=혼합형; 주 속성=암흑
+- AR-S0133-153 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5899: ID=MON-0146; 몬스터명=해골기사; 계열=언데드; 기본 레벨 범위=39~49; 위협 계수=1.13; 역할=혼합형; 주 속성=암흑
+- AR-S0133-154 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5900: ID=MON-0147; 몬스터명=해골마법사; 계열=언데드; 기본 레벨 범위=46~57; 위협 계수=1.16; 역할=혼합형; 주 속성=암흑
+- AR-S0133-155 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5901: ID=MON-0148; 몬스터명=좀비; 계열=언데드; 기본 레벨 범위=53~64; 위협 계수=1.19; 역할=혼합형; 주 속성=암흑
+- AR-S0133-156 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5902: ID=MON-0149; 몬스터명=부패한 좀비; 계열=언데드; 기본 레벨 범위=60~72; 위협 계수=1.22; 역할=혼합형; 주 속성=암흑
+- AR-S0133-157 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5903: ID=MON-0150; 몬스터명=갑주좀비; 계열=언데드; 기본 레벨 범위=67~79; 위협 계수=1.25; 역할=혼합형; 주 속성=암흑
+- AR-S0133-158 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5904: ID=MON-0151; 몬스터명=구울; 계열=언데드; 기본 레벨 범위=74~87; 위협 계수=1.28; 역할=혼합형; 주 속성=암흑
+- AR-S0133-159 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5905: ID=MON-0152; 몬스터명=구울 포식자; 계열=언데드; 기본 레벨 범위=81~94; 위협 계수=1.31; 역할=혼합형; 주 속성=암흑
+- AR-S0133-160 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5906: ID=MON-0153; 몬스터명=망령; 계열=언데드; 기본 레벨 범위=87~101; 위협 계수=1.34; 역할=혼합형; 주 속성=암흑
+- AR-S0133-161 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5907: ID=MON-0154; 몬스터명=원혼; 계열=언데드; 기본 레벨 범위=94~108; 위협 계수=1.37; 역할=혼합형; 주 속성=암흑
+- AR-S0133-162 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5908: ID=MON-0155; 몬스터명=악령; 계열=언데드; 기본 레벨 범위=101~116; 위협 계수=1.4; 역할=혼합형; 주 속성=암흑
+- AR-S0133-163 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5909: ID=MON-0156; 몬스터명=미라; 계열=언데드; 기본 레벨 범위=108~123; 위협 계수=1.43; 역할=혼합형; 주 속성=암흑
+- AR-S0133-164 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5910: ID=MON-0157; 몬스터명=저주받은 미라; 계열=언데드; 기본 레벨 범위=115~131; 위협 계수=1.46; 역할=혼합형; 주 속성=암흑
+- AR-S0133-165 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5911: ID=MON-0158; 몬스터명=듀라한; 계열=언데드; 기본 레벨 범위=122~138; 위협 계수=1.49; 역할=혼합형; 주 속성=암흑
+- AR-S0133-166 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5912: ID=MON-0159; 몬스터명=죽음의 기사; 계열=언데드; 기본 레벨 범위=129~146; 위협 계수=1.52; 역할=혼합형; 주 속성=암흑
+- AR-S0133-167 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5913: ID=MON-0160; 몬스터명=리치; 계열=언데드; 기본 레벨 범위=136~153; 위협 계수=1.55; 역할=혼합형; 주 속성=암흑
+- AR-S0133-168 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5917: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-169 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5919: ID=MON-0161; 몬스터명=마력늑대; 계열=마수; 기본 레벨 범위=10~18; 위협 계수=1.15; 역할=공격형; 주 속성=마력
+- AR-S0133-170 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5920: ID=MON-0162; 몬스터명=불꽃늑대; 계열=마수; 기본 레벨 범위=16~24; 위협 계수=1.18; 역할=공격형; 주 속성=마력
+- AR-S0133-171 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5921: ID=MON-0163; 몬스터명=빙결늑대; 계열=마수; 기본 레벨 범위=22~31; 위협 계수=1.22; 역할=공격형; 주 속성=마력
+- AR-S0133-172 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5922: ID=MON-0164; 몬스터명=번개표범; 계열=마수; 기본 레벨 범위=29~38; 위협 계수=1.25; 역할=공격형; 주 속성=마력
+- AR-S0133-173 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5923: ID=MON-0165; 몬스터명=암영표범; 계열=마수; 기본 레벨 범위=35~45; 위협 계수=1.29; 역할=공격형; 주 속성=마력
+- AR-S0133-174 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5924: ID=MON-0166; 몬스터명=뿔마수; 계열=마수; 기본 레벨 범위=41~51; 위협 계수=1.32; 역할=공격형; 주 속성=마력
+- AR-S0133-175 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5925: ID=MON-0167; 몬스터명=갑주마수; 계열=마수; 기본 레벨 범위=48~59; 위협 계수=1.36; 역할=공격형; 주 속성=마력
+- AR-S0133-176 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5926: ID=MON-0168; 몬스터명=독가시마수; 계열=마수; 기본 레벨 범위=54~65; 위협 계수=1.39; 역할=공격형; 주 속성=마력
+- AR-S0133-177 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5927: ID=MON-0169; 몬스터명=밤갈기수; 계열=마수; 기본 레벨 범위=60~72; 위협 계수=1.43; 역할=공격형; 주 속성=마력
+- AR-S0133-178 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5928: ID=MON-0170; 몬스터명=흑수정 사자; 계열=마수; 기본 레벨 범위=66~78; 위협 계수=1.46; 역할=공격형; 주 속성=마력
+- AR-S0133-179 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5929: ID=MON-0171; 몬스터명=화염사자; 계열=마수; 기본 레벨 범위=72~85; 위협 계수=1.5; 역할=공격형; 주 속성=마력
+- AR-S0133-180 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5930: ID=MON-0172; 몬스터명=폭풍독수리; 계열=마수; 기본 레벨 범위=79~92; 위협 계수=1.53; 역할=공격형; 주 속성=마력
+- AR-S0133-181 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5931: ID=MON-0173; 몬스터명=철갑멧돼지; 계열=마수; 기본 레벨 범위=85~99; 위협 계수=1.57; 역할=공격형; 주 속성=마력
+- AR-S0133-182 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5932: ID=MON-0174; 몬스터명=마력곰; 계열=마수; 기본 레벨 범위=91~105; 위협 계수=1.6; 역할=공격형; 주 속성=마력
+- AR-S0133-183 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5933: ID=MON-0175; 몬스터명=심연박쥐; 계열=마수; 기본 레벨 범위=98~113; 위협 계수=1.64; 역할=공격형; 주 속성=마력
+- AR-S0133-184 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5934: ID=MON-0176; 몬스터명=붉은송곳니; 계열=마수; 기본 레벨 범위=104~119; 위협 계수=1.67; 역할=공격형; 주 속성=마력
+- AR-S0133-185 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5935: ID=MON-0177; 몬스터명=수정사슴; 계열=마수; 기본 레벨 범위=110~126; 위협 계수=1.71; 역할=공격형; 주 속성=마력
+- AR-S0133-186 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5936: ID=MON-0178; 몬스터명=월광수; 계열=마수; 기본 레벨 범위=116~132; 위협 계수=1.74; 역할=공격형; 주 속성=마력
+- AR-S0133-187 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5937: ID=MON-0179; 몬스터명=악몽수; 계열=마수; 기본 레벨 범위=122~139; 위협 계수=1.78; 역할=공격형; 주 속성=마력
+- AR-S0133-188 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5938: ID=MON-0180; 몬스터명=마수왕; 계열=마수; 기본 레벨 범위=129~146; 위협 계수=1.81; 역할=공격형; 주 속성=마력
+- AR-S0133-189 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5942: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-190 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5944: ID=MON-0181; 몬스터명=미약한 불정령; 계열=정령; 기본 레벨 범위=12~20; 위협 계수=1.23; 역할=마법형; 주 속성=원소
+- AR-S0133-191 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5945: ID=MON-0182; 몬스터명=불정령; 계열=정령; 기본 레벨 범위=19~27; 위협 계수=1.27; 역할=마법형; 주 속성=원소
+- AR-S0133-192 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5946: ID=MON-0183; 몬스터명=상급 불정령; 계열=정령; 기본 레벨 범위=26~35; 위협 계수=1.3; 역할=마법형; 주 속성=원소
+- AR-S0133-193 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5947: ID=MON-0184; 몬스터명=미약한 물정령; 계열=정령; 기본 레벨 범위=33~42; 위협 계수=1.34; 역할=마법형; 주 속성=원소
+- AR-S0133-194 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5948: ID=MON-0185; 몬스터명=물정령; 계열=정령; 기본 레벨 범위=40~50; 위협 계수=1.38; 역할=마법형; 주 속성=원소
+- AR-S0133-195 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5949: ID=MON-0186; 몬스터명=상급 물정령; 계열=정령; 기본 레벨 범위=47~57; 위협 계수=1.42; 역할=마법형; 주 속성=원소
+- AR-S0133-196 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5950: ID=MON-0187; 몬스터명=바람정령; 계열=정령; 기본 레벨 범위=54~65; 위협 계수=1.46; 역할=마법형; 주 속성=원소
+- AR-S0133-197 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5951: ID=MON-0188; 몬스터명=폭풍정령; 계열=정령; 기본 레벨 범위=61~72; 위협 계수=1.49; 역할=마법형; 주 속성=원소
+- AR-S0133-198 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5952: ID=MON-0189; 몬스터명=대지정령; 계열=정령; 기본 레벨 범위=68~80; 위협 계수=1.53; 역할=마법형; 주 속성=원소
+- AR-S0133-199 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5953: ID=MON-0190; 몬스터명=암석정령; 계열=정령; 기본 레벨 범위=75~87; 위협 계수=1.57; 역할=마법형; 주 속성=원소
+- AR-S0133-200 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5954: ID=MON-0191; 몬스터명=냉기정령; 계열=정령; 기본 레벨 범위=82~95; 위협 계수=1.6; 역할=마법형; 주 속성=원소
+- AR-S0133-201 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5955: ID=MON-0192; 몬스터명=번개정령; 계열=정령; 기본 레벨 범위=89~102; 위협 계수=1.64; 역할=마법형; 주 속성=원소
+- AR-S0133-202 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5956: ID=MON-0193; 몬스터명=빛정령; 계열=정령; 기본 레벨 범위=96~110; 위협 계수=1.68; 역할=마법형; 주 속성=원소
+- AR-S0133-203 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5957: ID=MON-0194; 몬스터명=어둠정령; 계열=정령; 기본 레벨 범위=103~117; 위협 계수=1.72; 역할=마법형; 주 속성=원소
+- AR-S0133-204 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5958: ID=MON-0195; 몬스터명=숲정령; 계열=정령; 기본 레벨 범위=110~125; 위협 계수=1.75; 역할=마법형; 주 속성=원소
+- AR-S0133-205 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5959: ID=MON-0196; 몬스터명=독안개정령; 계열=정령; 기본 레벨 범위=117~132; 위협 계수=1.79; 역할=마법형; 주 속성=원소
+- AR-S0133-206 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5960: ID=MON-0197; 몬스터명=금속정령; 계열=정령; 기본 레벨 범위=124~140; 위협 계수=1.83; 역할=마법형; 주 속성=원소
+- AR-S0133-207 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5961: ID=MON-0198; 몬스터명=마력정령; 계열=정령; 기본 레벨 범위=131~147; 위협 계수=1.87; 역할=마법형; 주 속성=원소
+- AR-S0133-208 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5962: ID=MON-0199; 몬스터명=상급 원소정령; 계열=정령; 기본 레벨 범위=138~155; 위협 계수=1.91; 역할=마법형; 주 속성=원소
+- AR-S0133-209 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5963: ID=MON-0200; 몬스터명=정령군주; 계열=정령; 기본 레벨 범위=145~162; 위협 계수=1.94; 역할=마법형; 주 속성=원소
+- AR-S0133-210 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5967: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-211 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5969: ID=MON-0201; 몬스터명=점토골렘; 계열=골렘·마법생물; 기본 레벨 범위=10~18; 위협 계수=1.31; 역할=방어형; 주 속성=물리
+- AR-S0133-212 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5970: ID=MON-0202; 몬스터명=석재골렘; 계열=골렘·마법생물; 기본 레벨 범위=17~25; 위협 계수=1.35; 역할=방어형; 주 속성=물리
+- AR-S0133-213 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5971: ID=MON-0203; 몬스터명=철골렘; 계열=골렘·마법생물; 기본 레벨 범위=24~33; 위협 계수=1.39; 역할=방어형; 주 속성=물리
+- AR-S0133-214 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5972: ID=MON-0204; 몬스터명=흑철골렘; 계열=골렘·마법생물; 기본 레벨 범위=31~40; 위협 계수=1.43; 역할=방어형; 주 속성=물리
+- AR-S0133-215 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5973: ID=MON-0205; 몬스터명=수정골렘; 계열=골렘·마법생물; 기본 레벨 범위=38~48; 위협 계수=1.47; 역할=방어형; 주 속성=물리
+- AR-S0133-216 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5974: ID=MON-0206; 몬스터명=화염골렘; 계열=골렘·마법생물; 기본 레벨 범위=45~55; 위협 계수=1.51; 역할=방어형; 주 속성=물리
+- AR-S0133-217 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5975: ID=MON-0207; 몬스터명=냉기골렘; 계열=골렘·마법생물; 기본 레벨 범위=52~63; 위협 계수=1.55; 역할=방어형; 주 속성=물리
+- AR-S0133-218 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5976: ID=MON-0208; 몬스터명=번개골렘; 계열=골렘·마법생물; 기본 레벨 범위=60~71; 위협 계수=1.59; 역할=방어형; 주 속성=물리
+- AR-S0133-219 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5977: ID=MON-0209; 몬스터명=마력골렘; 계열=골렘·마법생물; 기본 레벨 범위=67~79; 위협 계수=1.63; 역할=방어형; 주 속성=물리
+- AR-S0133-220 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5978: ID=MON-0210; 몬스터명=수호석상; 계열=골렘·마법생물; 기본 레벨 범위=74~86; 위협 계수=1.67; 역할=방어형; 주 속성=물리
+- AR-S0133-221 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5979: ID=MON-0211; 몬스터명=살아있는 갑옷; 계열=골렘·마법생물; 기본 레벨 범위=81~94; 위협 계수=1.71; 역할=방어형; 주 속성=물리
+- AR-S0133-222 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5980: ID=MON-0212; 몬스터명=살아있는 검; 계열=골렘·마법생물; 기본 레벨 범위=88~101; 위협 계수=1.75; 역할=방어형; 주 속성=물리
+- AR-S0133-223 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5981: ID=MON-0213; 몬스터명=마법인형; 계열=골렘·마법생물; 기본 레벨 범위=95~109; 위협 계수=1.79; 역할=방어형; 주 속성=물리
+- AR-S0133-224 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5982: ID=MON-0214; 몬스터명=마도수호기; 계열=골렘·마법생물; 기본 레벨 범위=102~116; 위협 계수=1.83; 역할=방어형; 주 속성=물리
+- AR-S0133-225 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5983: ID=MON-0215; 몬스터명=룬골렘; 계열=골렘·마법생물; 기본 레벨 범위=109~124; 위협 계수=1.87; 역할=방어형; 주 속성=물리
+- AR-S0133-226 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5984: ID=MON-0216; 몬스터명=고대수호자; 계열=골렘·마법생물; 기본 레벨 범위=116~131; 위협 계수=1.91; 역할=방어형; 주 속성=물리
+- AR-S0133-227 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5985: ID=MON-0217; 몬스터명=전쟁골렘; 계열=골렘·마법생물; 기본 레벨 범위=123~139; 위협 계수=1.95; 역할=방어형; 주 속성=물리
+- AR-S0133-228 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5986: ID=MON-0218; 몬스터명=성역수호상; 계열=골렘·마법생물; 기본 레벨 범위=130~146; 위협 계수=1.99; 역할=방어형; 주 속성=물리
+- AR-S0133-229 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5987: ID=MON-0219; 몬스터명=심연골렘; 계열=골렘·마법생물; 기본 레벨 범위=138~155; 위협 계수=2.03; 역할=방어형; 주 속성=물리
+- AR-S0133-230 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5988: ID=MON-0220; 몬스터명=왕실 자동인형; 계열=골렘·마법생물; 기본 레벨 범위=145~162; 위협 계수=2.07; 역할=방어형; 주 속성=물리
+- AR-S0133-231 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5992: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-232 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5994: ID=MON-0221; 몬스터명=늪개구리; 계열=수생·습지; 기본 레벨 범위=3~11; 위협 계수=0.82; 역할=혼합형; 주 속성=물/독
+- AR-S0133-233 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5995: ID=MON-0222; 몬스터명=거대늪개구리; 계열=수생·습지; 기본 레벨 범위=8~16; 위협 계수=0.84; 역할=혼합형; 주 속성=물/독
+- AR-S0133-234 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5996: ID=MON-0223; 몬스터명=흡혈거머리; 계열=수생·습지; 기본 레벨 범위=14~23; 위협 계수=0.87; 역할=혼합형; 주 속성=물/독
+- AR-S0133-235 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5997: ID=MON-0224; 몬스터명=거대거머리; 계열=수생·습지; 기본 레벨 범위=19~28; 위협 계수=0.9; 역할=혼합형; 주 속성=물/독
+- AR-S0133-236 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5998: ID=MON-0225; 몬스터명=늪악어; 계열=수생·습지; 기본 레벨 범위=24~34; 위협 계수=0.92; 역할=혼합형; 주 속성=물/독
+- AR-S0133-237 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L5999: ID=MON-0226; 몬스터명=갑주악어; 계열=수생·습지; 기본 레벨 범위=29~39; 위협 계수=0.94; 역할=혼합형; 주 속성=물/독
+- AR-S0133-238 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6000: ID=MON-0227; 몬스터명=수중뱀; 계열=수생·습지; 기본 레벨 범위=35~46; 위협 계수=0.97; 역할=혼합형; 주 속성=물/독
+- AR-S0133-239 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6001: ID=MON-0228; 몬스터명=독수중뱀; 계열=수생·습지; 기본 레벨 범위=40~51; 위협 계수=0.99; 역할=혼합형; 주 속성=물/독
+- AR-S0133-240 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6002: ID=MON-0229; 몬스터명=늪도마뱀; 계열=수생·습지; 기본 레벨 범위=45~57; 위협 계수=1.02; 역할=혼합형; 주 속성=물/독
+- AR-S0133-241 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6003: ID=MON-0230; 몬스터명=수생슬라임; 계열=수생·습지; 기본 레벨 범위=51~63; 위협 계수=1.04; 역할=혼합형; 주 속성=물/독
+- AR-S0133-242 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6004: ID=MON-0231; 몬스터명=진흙괴물; 계열=수생·습지; 기본 레벨 범위=56~69; 위협 계수=1.07; 역할=혼합형; 주 속성=물/독
+- AR-S0133-243 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6005: ID=MON-0232; 몬스터명=늪지사냥꾼; 계열=수생·습지; 기본 레벨 범위=61~74; 위협 계수=1.09; 역할=혼합형; 주 속성=물/독
+- AR-S0133-244 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6006: ID=MON-0233; 몬스터명=거대게; 계열=수생·습지; 기본 레벨 범위=67~81; 위협 계수=1.12; 역할=혼합형; 주 속성=물/독
+- AR-S0133-245 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6007: ID=MON-0234; 몬스터명=철갑게; 계열=수생·습지; 기본 레벨 범위=72~86; 위협 계수=1.15; 역할=혼합형; 주 속성=물/독
+- AR-S0133-246 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6008: ID=MON-0235; 몬스터명=심해어; 계열=수생·습지; 기본 레벨 범위=77~92; 위협 계수=1.17; 역할=혼합형; 주 속성=물/독
+- AR-S0133-247 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6009: ID=MON-0236; 몬스터명=식인어 떼; 계열=수생·습지; 기본 레벨 범위=82~97; 위협 계수=1.19; 역할=혼합형; 주 속성=물/독
+- AR-S0133-248 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6010: ID=MON-0237; 몬스터명=수중정령; 계열=수생·습지; 기본 레벨 범위=88~104; 위협 계수=1.22; 역할=혼합형; 주 속성=물/독
+- AR-S0133-249 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6011: ID=MON-0238; 몬스터명=습지마녀수; 계열=수생·습지; 기본 레벨 범위=93~109; 위협 계수=1.25; 역할=혼합형; 주 속성=물/독
+- AR-S0133-250 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6012: ID=MON-0239; 몬스터명=심해촉수; 계열=수생·습지; 기본 레벨 범위=98~115; 위협 계수=1.27; 역할=혼합형; 주 속성=물/독
+- AR-S0133-251 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6013: ID=MON-0240; 몬스터명=늪지군주; 계열=수생·습지; 기본 레벨 범위=104~121; 위협 계수=1.29; 역할=혼합형; 주 속성=물/독
+- AR-S0133-252 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6017: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-253 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6019: ID=MON-0241; 몬스터명=새끼와이번; 계열=용·용족; 기본 레벨 범위=20~28; 위협 계수=2.3; 역할=공격형; 주 속성=원소
+- AR-S0133-254 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6020: ID=MON-0242; 몬스터명=와이번; 계열=용·용족; 기본 레벨 범위=28~36; 위협 계수=2.37; 역할=공격형; 주 속성=원소
+- AR-S0133-255 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6021: ID=MON-0243; 몬스터명=독와이번; 계열=용·용족; 기본 레벨 범위=37~46; 위협 계수=2.44; 역할=공격형; 주 속성=원소
+- AR-S0133-256 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6022: ID=MON-0244; 몬스터명=화염와이번; 계열=용·용족; 기본 레벨 범위=45~54; 위협 계수=2.51; 역할=공격형; 주 속성=원소
+- AR-S0133-257 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6023: ID=MON-0245; 몬스터명=냉기와이번; 계열=용·용족; 기본 레벨 범위=53~63; 위협 계수=2.58; 역할=공격형; 주 속성=원소
+- AR-S0133-258 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6024: ID=MON-0246; 몬스터명=폭풍와이번; 계열=용·용족; 기본 레벨 범위=62~72; 위협 계수=2.65; 역할=공격형; 주 속성=원소
+- AR-S0133-259 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6025: ID=MON-0247; 몬스터명=드레이크; 계열=용·용족; 기본 레벨 범위=70~81; 위협 계수=2.72; 역할=공격형; 주 속성=원소
+- AR-S0133-260 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6026: ID=MON-0248; 몬스터명=화염드레이크; 계열=용·용족; 기본 레벨 범위=78~89; 위협 계수=2.79; 역할=공격형; 주 속성=원소
+- AR-S0133-261 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6027: ID=MON-0249; 몬스터명=빙결드레이크; 계열=용·용족; 기본 레벨 범위=87~99; 위협 계수=2.86; 역할=공격형; 주 속성=원소
+- AR-S0133-262 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6028: ID=MON-0250; 몬스터명=암흑드레이크; 계열=용·용족; 기본 레벨 범위=95~107; 위협 계수=2.93; 역할=공격형; 주 속성=원소
+- AR-S0133-263 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6029: ID=MON-0251; 몬스터명=어린 용; 계열=용·용족; 기본 레벨 범위=103~116; 위협 계수=3.0; 역할=공격형; 주 속성=원소
+- AR-S0133-264 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6030: ID=MON-0252; 몬스터명=화염용; 계열=용·용족; 기본 레벨 범위=112~125; 위협 계수=3.07; 역할=공격형; 주 속성=원소
+- AR-S0133-265 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6031: ID=MON-0253; 몬스터명=빙결용; 계열=용·용족; 기본 레벨 범위=120~134; 위협 계수=3.14; 역할=공격형; 주 속성=원소
+- AR-S0133-266 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6032: ID=MON-0254; 몬스터명=폭풍용; 계열=용·용족; 기본 레벨 범위=128~142; 위협 계수=3.21; 역할=공격형; 주 속성=원소
+- AR-S0133-267 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6033: ID=MON-0255; 몬스터명=대지용; 계열=용·용족; 기본 레벨 범위=137~152; 위협 계수=3.28; 역할=공격형; 주 속성=원소
+- AR-S0133-268 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6034: ID=MON-0256; 몬스터명=독룡; 계열=용·용족; 기본 레벨 범위=145~160; 위협 계수=3.35; 역할=공격형; 주 속성=원소
+- AR-S0133-269 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6035: ID=MON-0257; 몬스터명=암흑룡; 계열=용·용족; 기본 레벨 범위=153~169; 위협 계수=3.42; 역할=공격형; 주 속성=원소
+- AR-S0133-270 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6036: ID=MON-0258; 몬스터명=성광룡; 계열=용·용족; 기본 레벨 범위=162~178; 위협 계수=3.49; 역할=공격형; 주 속성=원소
+- AR-S0133-271 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6037: ID=MON-0259; 몬스터명=고대용; 계열=용·용족; 기본 레벨 범위=170~187; 위협 계수=3.56; 역할=공격형; 주 속성=원소
+- AR-S0133-272 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6038: ID=MON-0260; 몬스터명=용왕; 계열=용·용족; 기본 레벨 범위=178~195; 위협 계수=3.63; 역할=공격형; 주 속성=원소
+- AR-S0133-273 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6042: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-274 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6044: ID=MON-0261; 몬스터명=하급임프; 계열=악마; 기본 레벨 범위=15~23; 위협 계수=1.97; 역할=혼합형; 주 속성=암흑
+- AR-S0133-275 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6045: ID=MON-0262; 몬스터명=뿔임프; 계열=악마; 기본 레벨 범위=24~32; 위협 계수=2.03; 역할=혼합형; 주 속성=암흑
+- AR-S0133-276 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6046: ID=MON-0263; 몬스터명=화염임프; 계열=악마; 기본 레벨 범위=33~42; 위협 계수=2.09; 역할=혼합형; 주 속성=암흑
+- AR-S0133-277 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6047: ID=MON-0264; 몬스터명=그림자임프; 계열=악마; 기본 레벨 범위=42~51; 위협 계수=2.15; 역할=혼합형; 주 속성=암흑
+- AR-S0133-278 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6048: ID=MON-0265; 몬스터명=악마병; 계열=악마; 기본 레벨 범위=51~61; 위협 계수=2.21; 역할=혼합형; 주 속성=암흑
+- AR-S0133-279 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6049: ID=MON-0266; 몬스터명=악마궁수; 계열=악마; 기본 레벨 범위=60~70; 위협 계수=2.27; 역할=혼합형; 주 속성=암흑
+- AR-S0133-280 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6050: ID=MON-0267; 몬스터명=악마창병; 계열=악마; 기본 레벨 범위=69~80; 위협 계수=2.33; 역할=혼합형; 주 속성=암흑
+- AR-S0133-281 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6051: ID=MON-0268; 몬스터명=악마기사; 계열=악마; 기본 레벨 범위=78~89; 위협 계수=2.39; 역할=혼합형; 주 속성=암흑
+- AR-S0133-282 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6052: ID=MON-0269; 몬스터명=악마마도사; 계열=악마; 기본 레벨 범위=87~99; 위협 계수=2.45; 역할=혼합형; 주 속성=암흑
+- AR-S0133-283 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6053: ID=MON-0270; 몬스터명=악마사제; 계열=악마; 기본 레벨 범위=96~108; 위협 계수=2.51; 역할=혼합형; 주 속성=암흑
+- AR-S0133-284 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6054: ID=MON-0271; 몬스터명=고통의 악마; 계열=악마; 기본 레벨 범위=105~118; 위협 계수=2.57; 역할=혼합형; 주 속성=암흑
+- AR-S0133-285 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6055: ID=MON-0272; 몬스터명=탐욕의 악마; 계열=악마; 기본 레벨 범위=114~127; 위협 계수=2.63; 역할=혼합형; 주 속성=암흑
+- AR-S0133-286 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6056: ID=MON-0273; 몬스터명=부패의 악마; 계열=악마; 기본 레벨 범위=123~137; 위협 계수=2.69; 역할=혼합형; 주 속성=암흑
+- AR-S0133-287 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6057: ID=MON-0274; 몬스터명=광기의 악마; 계열=악마; 기본 레벨 범위=131~145; 위협 계수=2.75; 역할=혼합형; 주 속성=암흑
+- AR-S0133-288 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6058: ID=MON-0275; 몬스터명=악마처형자; 계열=악마; 기본 레벨 범위=140~155; 위협 계수=2.81; 역할=혼합형; 주 속성=암흑
+- AR-S0133-289 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6059: ID=MON-0276; 몬스터명=심연기사; 계열=악마; 기본 레벨 범위=149~164; 위협 계수=2.87; 역할=혼합형; 주 속성=암흑
+- AR-S0133-290 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6060: ID=MON-0277; 몬스터명=심연마법사; 계열=악마; 기본 레벨 범위=158~174; 위협 계수=2.93; 역할=혼합형; 주 속성=암흑
+- AR-S0133-291 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6061: ID=MON-0278; 몬스터명=악마장군; 계열=악마; 기본 레벨 범위=167~183; 위협 계수=2.99; 역할=혼합형; 주 속성=암흑
+- AR-S0133-292 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6062: ID=MON-0279; 몬스터명=악마공작; 계열=악마; 기본 레벨 범위=176~193; 위협 계수=3.05; 역할=혼합형; 주 속성=암흑
+- AR-S0133-293 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6063: ID=MON-0280; 몬스터명=악마군주; 계열=악마; 기본 레벨 범위=185~202; 위협 계수=3.11; 역할=혼합형; 주 속성=암흑
+- AR-S0133-294 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6067: ID=ID; 몬스터명=몬스터명; 계열=계열; 기본 레벨 범위=기본 레벨 범위; 위협 계수=위협 계수; 역할=역할; 주 속성=주 속성
+- AR-S0133-295 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6069: ID=MON-0281; 몬스터명=눈알괴물; 계열=이형·심연; 기본 레벨 범위=25~33; 위협 계수=2.21; 역할=특수형; 주 속성=심연
+- AR-S0133-296 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6070: ID=MON-0282; 몬스터명=촉수괴물; 계열=이형·심연; 기본 레벨 범위=34~42; 위협 계수=2.28; 역할=특수형; 주 속성=심연
+- AR-S0133-297 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6071: ID=MON-0283; 몬스터명=기어다니는 살점; 계열=이형·심연; 기본 레벨 범위=44~53; 위협 계수=2.35; 역할=특수형; 주 속성=심연
+- AR-S0133-298 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6072: ID=MON-0284; 몬스터명=울부짖는 입; 계열=이형·심연; 기본 레벨 범위=53~62; 위협 계수=2.42; 역할=특수형; 주 속성=심연
+- AR-S0133-299 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6073: ID=MON-0285; 몬스터명=심연벌레; 계열=이형·심연; 기본 레벨 범위=63~73; 위협 계수=2.48; 역할=특수형; 주 속성=심연
+- AR-S0133-300 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6074: ID=MON-0286; 몬스터명=심연사냥꾼; 계열=이형·심연; 기본 레벨 범위=72~82; 위협 계수=2.55; 역할=특수형; 주 속성=심연
+- AR-S0133-301 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6075: ID=MON-0287; 몬스터명=뒤틀린 인간형; 계열=이형·심연; 기본 레벨 범위=81~92; 위협 계수=2.62; 역할=특수형; 주 속성=심연
+- AR-S0133-302 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6076: ID=MON-0288; 몬스터명=공허포식자; 계열=이형·심연; 기본 레벨 범위=91~102; 위협 계수=2.69; 역할=특수형; 주 속성=심연
+- AR-S0133-303 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6077: ID=MON-0289; 몬스터명=공간포식자; 계열=이형·심연; 기본 레벨 범위=100~112; 위협 계수=2.75; 역할=특수형; 주 속성=심연
+- AR-S0133-304 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6078: ID=MON-0290; 몬스터명=기억포식자; 계열=이형·심연; 기본 레벨 범위=109~121; 위협 계수=2.82; 역할=특수형; 주 속성=심연
+- AR-S0133-305 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6079: ID=MON-0291; 몬스터명=꿈먹는 자; 계열=이형·심연; 기본 레벨 범위=119~132; 위협 계수=2.89; 역할=특수형; 주 속성=심연
+- AR-S0133-306 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6080: ID=MON-0292; 몬스터명=시간벌레; 계열=이형·심연; 기본 레벨 범위=128~141; 위협 계수=2.96; 역할=특수형; 주 속성=심연
+- AR-S0133-307 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6081: ID=MON-0293; 몬스터명=균열수호자; 계열=이형·심연; 기본 레벨 범위=137~151; 위협 계수=3.02; 역할=특수형; 주 속성=심연
+- AR-S0133-308 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6082: ID=MON-0294; 몬스터명=검은별 사도; 계열=이형·심연; 기본 레벨 범위=147~161; 위협 계수=3.09; 역할=특수형; 주 속성=심연
+- AR-S0133-309 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6083: ID=MON-0295; 몬스터명=무형의 그림자; 계열=이형·심연; 기본 레벨 범위=156~171; 위협 계수=3.16; 역할=특수형; 주 속성=심연
+- AR-S0133-310 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6084: ID=MON-0296; 몬스터명=심연의 손; 계열=이형·심연; 기본 레벨 범위=166~181; 위협 계수=3.23; 역할=특수형; 주 속성=심연
+- AR-S0133-311 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6085: ID=MON-0297; 몬스터명=공허의 눈; 계열=이형·심연; 기본 레벨 범위=175~191; 위협 계수=3.29; 역할=특수형; 주 속성=심연
+- AR-S0133-312 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6086: ID=MON-0298; 몬스터명=뒤틀린 거인; 계열=이형·심연; 기본 레벨 범위=184~200; 위협 계수=3.36; 역할=특수형; 주 속성=심연
+- AR-S0133-313 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6087: ID=MON-0299; 몬스터명=균열괴수; 계열=이형·심연; 기본 레벨 범위=194~211; 위협 계수=3.43; 역할=특수형; 주 속성=심연
+- AR-S0133-314 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0133` §133 몬스터 실제 데이터 300종 L6088: ID=MON-0300; 몬스터명=심연군주; 계열=이형·심연; 기본 레벨 범위=203~220; 위협 계수=3.5; 역할=특수형; 주 속성=심연
+- AR-S0134-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6094: ID=EPRE-001; 접두어=날카로운; 등급=일반; 효과=물리 공격력 +4%; 허용=장비 전반
+- AR-S0134-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6095: ID=EPRE-002; 접두어=예리한; 등급=고급; 효과=물리 공격력 +7%; 허용=장비 전반
+- AR-S0134-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6096: ID=EPRE-003; 접두어=절삭의; 등급=희귀; 효과=물리 공격력 +11%; 허용=장비 전반
+- AR-S0134-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6097: ID=EPRE-004; 접두어=참수자의; 등급=영웅; 효과=물리 공격력 +16%; 허용=장비 전반
+- AR-S0134-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6098: ID=EPRE-005; 접두어=극예의; 등급=전설; 효과=물리 공격력 +24%; 허용=장비 전반
+- AR-S0134-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6099: ID=EPRE-006; 접두어=단단한; 등급=일반; 효과=물리 방어력 +4%; 허용=장비 전반
+- AR-S0134-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6100: ID=EPRE-007; 접두어=견고한; 등급=고급; 효과=물리 방어력 +7%; 허용=장비 전반
+- AR-S0134-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6101: ID=EPRE-008; 접두어=강철의; 등급=희귀; 효과=물리 방어력 +11%; 허용=장비 전반
+- AR-S0134-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6102: ID=EPRE-009; 접두어=불굴의; 등급=영웅; 효과=물리 방어력 +16%; 허용=장비 전반
+- AR-S0134-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6103: ID=EPRE-010; 접두어=불괴의; 등급=전설; 효과=물리 방어력 +24%; 허용=장비 전반
+- AR-S0134-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6104: ID=EPRE-011; 접두어=영리한; 등급=일반; 효과=마법 위력 +4%; 허용=장비 전반
+- AR-S0134-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6105: ID=EPRE-012; 접두어=총명한; 등급=고급; 효과=마법 위력 +7%; 허용=장비 전반
+- AR-S0134-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6106: ID=EPRE-013; 접두어=현자의; 등급=희귀; 효과=마법 위력 +11%; 허용=장비 전반
+- AR-S0134-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6107: ID=EPRE-014; 접두어=대현자의; 등급=영웅; 효과=마법 위력 +16%; 허용=장비 전반
+- AR-S0134-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6108: ID=EPRE-015; 접두어=초월지성의; 등급=전설; 효과=마법 위력 +24%; 허용=장비 전반
+- AR-S0134-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6109: ID=EPRE-016; 접두어=굳센; 등급=일반; 효과=최대 생명력 +4%; 허용=장비 전반
+- AR-S0134-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6110: ID=EPRE-017; 접두어=강건한; 등급=고급; 효과=최대 생명력 +7%; 허용=장비 전반
+- AR-S0134-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6111: ID=EPRE-018; 접두어=거인의; 등급=희귀; 효과=최대 생명력 +11%; 허용=장비 전반
+- AR-S0134-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6112: ID=EPRE-019; 접두어=생명수의; 등급=영웅; 효과=최대 생명력 +16%; 허용=장비 전반
+- AR-S0134-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6113: ID=EPRE-020; 접두어=불사의; 등급=전설; 효과=최대 생명력 +24%; 허용=장비 전반
+- AR-S0134-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6114: ID=EPRE-021; 접두어=집중된; 등급=일반; 효과=최대 마력 +4%; 허용=장비 전반
+- AR-S0134-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6115: ID=EPRE-022; 접두어=명료한; 등급=고급; 효과=최대 마력 +7%; 허용=장비 전반
+- AR-S0134-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6116: ID=EPRE-023; 접두어=마력의; 등급=희귀; 효과=최대 마력 +11%; 허용=장비 전반
+- AR-S0134-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6117: ID=EPRE-024; 접두어=대마력의; 등급=영웅; 효과=최대 마력 +16%; 허용=장비 전반
+- AR-S0134-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6118: ID=EPRE-025; 접두어=무한마력의; 등급=전설; 효과=최대 마력 +24%; 허용=장비 전반
+- AR-S0134-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6119: ID=EPRE-026; 접두어=활력의; 등급=일반; 효과=최대 기력 +4%; 허용=장비 전반
+- AR-S0134-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6120: ID=EPRE-027; 접두어=지치지 않는; 등급=고급; 효과=최대 기력 +7%; 허용=장비 전반
+- AR-S0134-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6121: ID=EPRE-028; 접두어=전투활력의; 등급=희귀; 효과=최대 기력 +11%; 허용=장비 전반
+- AR-S0134-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6122: ID=EPRE-029; 접두어=폭발기력의; 등급=영웅; 효과=최대 기력 +16%; 허용=장비 전반
+- AR-S0134-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6123: ID=EPRE-030; 접두어=무한기력의; 등급=전설; 효과=최대 기력 +24%; 허용=장비 전반
+- AR-S0134-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6124: ID=EPRE-031; 접두어=정밀한; 등급=일반; 효과=명중 +4%; 허용=장비 전반
+- AR-S0134-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6125: ID=EPRE-032; 접두어=정확한; 등급=고급; 효과=명중 +7%; 허용=장비 전반
+- AR-S0134-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6126: ID=EPRE-033; 접두어=명사수의; 등급=희귀; 효과=명중 +11%; 허용=장비 전반
+- AR-S0134-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6127: ID=EPRE-034; 접두어=천리안의; 등급=영웅; 효과=명중 +16%; 허용=장비 전반
+- AR-S0134-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6128: ID=EPRE-035; 접두어=필중의; 등급=전설; 효과=명중 +24%; 허용=장비 전반
+- AR-S0134-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6129: ID=EPRE-036; 접두어=가벼운; 등급=일반; 효과=회피 +4%; 허용=장비 전반
+- AR-S0134-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6130: ID=EPRE-037; 접두어=민첩한; 등급=고급; 효과=회피 +7%; 허용=장비 전반
+- AR-S0134-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6131: ID=EPRE-038; 접두어=바람걸음의; 등급=희귀; 효과=회피 +11%; 허용=장비 전반
+- AR-S0134-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6132: ID=EPRE-039; 접두어=질풍의; 등급=영웅; 효과=회피 +16%; 허용=장비 전반
+- AR-S0134-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6133: ID=EPRE-040; 접두어=무영의; 등급=전설; 효과=회피 +24%; 허용=장비 전반
+- AR-S0134-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6134: ID=EPRE-041; 접두어=치명적인; 등급=일반; 효과=치명타율 +4%; 허용=장비 전반
+- AR-S0134-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6135: ID=EPRE-042; 접두어=잔혹한; 등급=고급; 효과=치명타율 +7%; 허용=장비 전반
+- AR-S0134-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6136: ID=EPRE-043; 접두어=사형집행인의; 등급=희귀; 효과=치명타율 +11%; 허용=장비 전반
+- AR-S0134-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6137: ID=EPRE-044; 접두어=살육자의; 등급=영웅; 효과=치명타율 +16%; 허용=장비 전반
+- AR-S0134-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6138: ID=EPRE-045; 접두어=필살의; 등급=전설; 효과=치명타율 +24%; 허용=장비 전반
+- AR-S0134-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6139: ID=EPRE-046; 접두어=파괴적인; 등급=일반; 효과=치명타 피해 +4%; 허용=장비 전반
+- AR-S0134-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6140: ID=EPRE-047; 접두어=압도적인; 등급=고급; 효과=치명타 피해 +7%; 허용=장비 전반
+- AR-S0134-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6141: ID=EPRE-048; 접두어=분쇄자의; 등급=희귀; 효과=치명타 피해 +11%; 허용=장비 전반
+- AR-S0134-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6142: ID=EPRE-049; 접두어=멸절의; 등급=영웅; 효과=치명타 피해 +16%; 허용=장비 전반
+- AR-S0134-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6143: ID=EPRE-050; 접두어=종말의; 등급=전설; 효과=치명타 피해 +24%; 허용=장비 전반
+- AR-S0134-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6144: ID=EPRE-051; 접두어=불꽃의; 등급=일반; 효과=화염 피해 +4%; 허용=장비 전반
+- AR-S0134-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6145: ID=EPRE-052; 접두어=화염의; 등급=고급; 효과=화염 피해 +7%; 허용=장비 전반
+- AR-S0134-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6146: ID=EPRE-053; 접두어=업화의; 등급=희귀; 효과=화염 피해 +11%; 허용=장비 전반
+- AR-S0134-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6147: ID=EPRE-054; 접두어=용염의; 등급=영웅; 효과=화염 피해 +16%; 허용=장비 전반
+- AR-S0134-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6148: ID=EPRE-055; 접두어=태양화염의; 등급=전설; 효과=화염 피해 +24%; 허용=장비 전반
+- AR-S0134-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6149: ID=EPRE-056; 접두어=서리의; 등급=일반; 효과=냉기 피해 +4%; 허용=장비 전반
+- AR-S0134-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6150: ID=EPRE-057; 접두어=냉기의; 등급=고급; 효과=냉기 피해 +7%; 허용=장비 전반
+- AR-S0134-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6151: ID=EPRE-058; 접두어=빙결의; 등급=희귀; 효과=냉기 피해 +11%; 허용=장비 전반
+- AR-S0134-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6152: ID=EPRE-059; 접두어=빙룡의; 등급=영웅; 효과=냉기 피해 +16%; 허용=장비 전반
+- AR-S0134-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6153: ID=EPRE-060; 접두어=절대영도의; 등급=전설; 효과=냉기 피해 +24%; 허용=장비 전반
+- AR-S0134-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6154: ID=EPRE-061; 접두어=전기의; 등급=일반; 효과=번개 피해 +4%; 허용=장비 전반
+- AR-S0134-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6155: ID=EPRE-062; 접두어=번개의; 등급=고급; 효과=번개 피해 +7%; 허용=장비 전반
+- AR-S0134-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6156: ID=EPRE-063; 접두어=뇌광의; 등급=희귀; 효과=번개 피해 +11%; 허용=장비 전반
+- AR-S0134-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6157: ID=EPRE-064; 접두어=폭풍뇌의; 등급=영웅; 효과=번개 피해 +16%; 허용=장비 전반
+- AR-S0134-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6158: ID=EPRE-065; 접두어=천벌의; 등급=전설; 효과=번개 피해 +24%; 허용=장비 전반
+- AR-S0134-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6159: ID=EPRE-066; 접두어=독묻은; 등급=일반; 효과=독 피해 +4%; 허용=장비 전반
+- AR-S0134-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6160: ID=EPRE-067; 접두어=맹독의; 등급=고급; 효과=독 피해 +7%; 허용=장비 전반
+- AR-S0134-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6161: ID=EPRE-068; 접두어=독왕의; 등급=희귀; 효과=독 피해 +11%; 허용=장비 전반
+- AR-S0134-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6162: ID=EPRE-069; 접두어=부패독의; 등급=영웅; 효과=독 피해 +16%; 허용=장비 전반
+- AR-S0134-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6163: ID=EPRE-070; 접두어=절독의; 등급=전설; 효과=독 피해 +24%; 허용=장비 전반
+- AR-S0134-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6164: ID=EPRE-071; 접두어=성스러운; 등급=일반; 효과=신성 피해 +4%; 허용=장비 전반
+- AR-S0134-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6165: ID=EPRE-072; 접두어=성광의; 등급=고급; 효과=신성 피해 +7%; 허용=장비 전반
+- AR-S0134-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6166: ID=EPRE-073; 접두어=축성의; 등급=희귀; 효과=신성 피해 +11%; 허용=장비 전반
+- AR-S0134-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6167: ID=EPRE-074; 접두어=성역의; 등급=영웅; 효과=신성 피해 +16%; 허용=장비 전반
+- AR-S0134-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6168: ID=EPRE-075; 접두어=신벌의; 등급=전설; 효과=신성 피해 +24%; 허용=장비 전반
+- AR-S0134-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6169: ID=EPRE-076; 접두어=그늘진; 등급=일반; 효과=암흑 피해 +4%; 허용=장비 전반
+- AR-S0134-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6170: ID=EPRE-077; 접두어=암흑의; 등급=고급; 효과=암흑 피해 +7%; 허용=장비 전반
+- AR-S0134-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6171: ID=EPRE-078; 접두어=심연의; 등급=희귀; 효과=암흑 피해 +11%; 허용=장비 전반
+- AR-S0134-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6172: ID=EPRE-079; 접두어=공허의; 등급=영웅; 효과=암흑 피해 +16%; 허용=장비 전반
+- AR-S0134-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6173: ID=EPRE-080; 접두어=흑성의; 등급=전설; 효과=암흑 피해 +24%; 허용=장비 전반
+- AR-S0134-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6174: ID=EPRE-081; 접두어=방염의; 등급=일반; 효과=화염 저항 +4%; 허용=장비 전반
+- AR-S0134-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6175: ID=EPRE-082; 접두어=내화의; 등급=고급; 효과=화염 저항 +7%; 허용=장비 전반
+- AR-S0134-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6176: ID=EPRE-083; 접두어=화염저항의; 등급=희귀; 효과=화염 저항 +11%; 허용=장비 전반
+- AR-S0134-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6177: ID=EPRE-084; 접두어=용린방염의; 등급=영웅; 효과=화염 저항 +16%; 허용=장비 전반
+- AR-S0134-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6178: ID=EPRE-085; 접두어=태양내성의; 등급=전설; 효과=화염 저항 +24%; 허용=장비 전반
+- AR-S0134-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6179: ID=EPRE-086; 접두어=방한의; 등급=일반; 효과=냉기 저항 +4%; 허용=장비 전반
+- AR-S0134-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6180: ID=EPRE-087; 접두어=내빙의; 등급=고급; 효과=냉기 저항 +7%; 허용=장비 전반
+- AR-S0134-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6181: ID=EPRE-088; 접두어=냉기저항의; 등급=희귀; 효과=냉기 저항 +11%; 허용=장비 전반
+- AR-S0134-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6182: ID=EPRE-089; 접두어=빙룡내성의; 등급=영웅; 효과=냉기 저항 +16%; 허용=장비 전반
+- AR-S0134-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6183: ID=EPRE-090; 접두어=절대빙결내성의; 등급=전설; 효과=냉기 저항 +24%; 허용=장비 전반
+- AR-S0134-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6184: ID=EPRE-091; 접두어=절연의; 등급=일반; 효과=번개 저항 +4%; 허용=장비 전반
+- AR-S0134-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6185: ID=EPRE-092; 접두어=내전의; 등급=고급; 효과=번개 저항 +7%; 허용=장비 전반
+- AR-S0134-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6186: ID=EPRE-093; 접두어=번개저항의; 등급=희귀; 효과=번개 저항 +11%; 허용=장비 전반
+- AR-S0134-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6187: ID=EPRE-094; 접두어=폭풍내성의; 등급=영웅; 효과=번개 저항 +16%; 허용=장비 전반
+- AR-S0134-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6188: ID=EPRE-095; 접두어=천뢰내성의; 등급=전설; 효과=번개 저항 +24%; 허용=장비 전반
+- AR-S0134-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6189: ID=EPRE-096; 접두어=해독의; 등급=일반; 효과=독 저항 +4%; 허용=장비 전반
+- AR-S0134-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6190: ID=EPRE-097; 접두어=항독의; 등급=고급; 효과=독 저항 +7%; 허용=장비 전반
+- AR-S0134-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6191: ID=EPRE-098; 접두어=맹독저항의; 등급=희귀; 효과=독 저항 +11%; 허용=장비 전반
+- AR-S0134-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6192: ID=EPRE-099; 접두어=독왕내성의; 등급=영웅; 효과=독 저항 +16%; 허용=장비 전반
+- AR-S0134-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6193: ID=EPRE-100; 접두어=절독내성의; 등급=전설; 효과=독 저항 +24%; 허용=장비 전반
+- AR-S0134-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6194: ID=EPRE-101; 접두어=빠른; 등급=일반; 효과=행동속도 +4%; 허용=장비 전반
+- AR-S0134-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6195: ID=EPRE-102; 접두어=신속한; 등급=고급; 효과=행동속도 +7%; 허용=장비 전반
+- AR-S0134-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6196: ID=EPRE-103; 접두어=질주의; 등급=희귀; 효과=행동속도 +11%; 허용=장비 전반
+- AR-S0134-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6197: ID=EPRE-104; 접두어=번개의; 등급=영웅; 효과=행동속도 +16%; 허용=장비 전반
+- AR-S0134-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6198: ID=EPRE-105; 접두어=시간가속의; 등급=전설; 효과=행동속도 +24%; 허용=장비 전반
+- AR-S0134-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6199: ID=EPRE-106; 접두어=탐색자의; 등급=일반; 효과=탐색력 +4%; 허용=장비 전반
+- AR-S0134-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6200: ID=EPRE-107; 접두어=정찰자의; 등급=고급; 효과=탐색력 +7%; 허용=장비 전반
+- AR-S0134-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6201: ID=EPRE-108; 접두어=추적자의; 등급=희귀; 효과=탐색력 +11%; 허용=장비 전반
+- AR-S0134-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6202: ID=EPRE-109; 접두어=현안의; 등급=영웅; 효과=탐색력 +16%; 허용=장비 전반
+- AR-S0134-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6203: ID=EPRE-110; 접두어=만물감지의; 등급=전설; 효과=탐색력 +24%; 허용=장비 전반
+- AR-S0134-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6204: ID=EPRE-111; 접두어=튼튼한; 등급=일반; 효과=생명력 회복 +4%; 허용=장비 전반
+- AR-S0134-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6205: ID=EPRE-112; 접두어=회복력있는; 등급=고급; 효과=생명력 회복 +7%; 허용=장비 전반
+- AR-S0134-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6206: ID=EPRE-113; 접두어=재생의; 등급=희귀; 효과=생명력 회복 +11%; 허용=장비 전반
+- AR-S0134-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6207: ID=EPRE-114; 접두어=고속재생의; 등급=영웅; 효과=생명력 회복 +16%; 허용=장비 전반
+- AR-S0134-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6208: ID=EPRE-115; 접두어=영원재생의; 등급=전설; 효과=생명력 회복 +24%; 허용=장비 전반
+- AR-S0134-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6209: ID=EPRE-116; 접두어=마력회복의; 등급=일반; 효과=마력 회복 +4%; 허용=장비 전반
+- AR-S0134-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6210: ID=EPRE-117; 접두어=명상의; 등급=고급; 효과=마력 회복 +7%; 허용=장비 전반
+- AR-S0134-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6211: ID=EPRE-118; 접두어=마나순환의; 등급=희귀; 효과=마력 회복 +11%; 허용=장비 전반
+- AR-S0134-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6212: ID=EPRE-119; 접두어=대순환의; 등급=영웅; 효과=마력 회복 +16%; 허용=장비 전반
+- AR-S0134-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0134` §134 장비 접두어 실제 데이터 120종 L6213: ID=EPRE-120; 접두어=영구기관의; 등급=전설; 효과=마력 회복 +24%; 허용=장비 전반
+- AR-S0135-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6219: ID=ESUF-001; 접미어=- 힘; 등급=일반; 효과=근력 +3%; 허용=장비 전반
+- AR-S0135-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6220: ID=ESUF-002; 접미어=- 강력; 등급=고급; 효과=근력 +5%; 허용=장비 전반
+- AR-S0135-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6221: ID=ESUF-003; 접미어=- 거력; 등급=희귀; 효과=근력 +8%; 허용=장비 전반
+- AR-S0135-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6222: ID=ESUF-004; 접미어=- 괴력; 등급=영웅; 효과=근력 +12%; 허용=장비 전반
+- AR-S0135-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6223: ID=ESUF-005; 접미어=- 신력; 등급=전설; 효과=근력 +18%; 허용=장비 전반
+- AR-S0135-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6224: ID=ESUF-006; 접미어=- 체력; 등급=일반; 효과=체력 +3%; 허용=장비 전반
+- AR-S0135-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6225: ID=ESUF-007; 접미어=- 강건; 등급=고급; 효과=체력 +5%; 허용=장비 전반
+- AR-S0135-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6226: ID=ESUF-008; 접미어=- 불굴; 등급=희귀; 효과=체력 +8%; 허용=장비 전반
+- AR-S0135-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6227: ID=ESUF-009; 접미어=- 거체; 등급=영웅; 효과=체력 +12%; 허용=장비 전반
+- AR-S0135-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6228: ID=ESUF-010; 접미어=- 불사; 등급=전설; 효과=체력 +18%; 허용=장비 전반
+- AR-S0135-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6229: ID=ESUF-011; 접미어=- 기교; 등급=일반; 효과=기교 +3%; 허용=장비 전반
+- AR-S0135-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6230: ID=ESUF-012; 접미어=- 숙련; 등급=고급; 효과=기교 +5%; 허용=장비 전반
+- AR-S0135-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6231: ID=ESUF-013; 접미어=- 정밀; 등급=희귀; 효과=기교 +8%; 허용=장비 전반
+- AR-S0135-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6232: ID=ESUF-014; 접미어=- 명인의; 등급=영웅; 효과=기교 +12%; 허용=장비 전반
+- AR-S0135-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6233: ID=ESUF-015; 접미어=- 신기의; 등급=전설; 효과=기교 +18%; 허용=장비 전반
+- AR-S0135-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6234: ID=ESUF-016; 접미어=- 민첩; 등급=일반; 효과=민첩 +3%; 허용=장비 전반
+- AR-S0135-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6235: ID=ESUF-017; 접미어=- 경쾌; 등급=고급; 효과=민첩 +5%; 허용=장비 전반
+- AR-S0135-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6236: ID=ESUF-018; 접미어=- 질풍; 등급=희귀; 효과=민첩 +8%; 허용=장비 전반
+- AR-S0135-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6237: ID=ESUF-019; 접미어=- 무영; 등급=영웅; 효과=민첩 +12%; 허용=장비 전반
+- AR-S0135-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6238: ID=ESUF-020; 접미어=- 순간; 등급=전설; 효과=민첩 +18%; 허용=장비 전반
+- AR-S0135-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6239: ID=ESUF-021; 접미어=- 지능; 등급=일반; 효과=지능 +3%; 허용=장비 전반
+- AR-S0135-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6240: ID=ESUF-022; 접미어=- 지혜; 등급=고급; 효과=지능 +5%; 허용=장비 전반
+- AR-S0135-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6241: ID=ESUF-023; 접미어=- 현명; 등급=희귀; 효과=지능 +8%; 허용=장비 전반
+- AR-S0135-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6242: ID=ESUF-024; 접미어=- 대현자; 등급=영웅; 효과=지능 +12%; 허용=장비 전반
+- AR-S0135-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6243: ID=ESUF-025; 접미어=- 전지; 등급=전설; 효과=지능 +18%; 허용=장비 전반
+- AR-S0135-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6244: ID=ESUF-026; 접미어=- 의지; 등급=일반; 효과=의지 +3%; 허용=장비 전반
+- AR-S0135-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6245: ID=ESUF-027; 접미어=- 정신; 등급=고급; 효과=의지 +5%; 허용=장비 전반
+- AR-S0135-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6246: ID=ESUF-028; 접미어=- 굳센마음; 등급=희귀; 효과=의지 +8%; 허용=장비 전반
+- AR-S0135-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6247: ID=ESUF-029; 접미어=- 불굴정신; 등급=영웅; 효과=의지 +12%; 허용=장비 전반
+- AR-S0135-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6248: ID=ESUF-030; 접미어=- 초월의지; 등급=전설; 효과=의지 +18%; 허용=장비 전반
+- AR-S0135-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6249: ID=ESUF-031; 접미어=- 감각; 등급=일반; 효과=감각 +3%; 허용=장비 전반
+- AR-S0135-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6250: ID=ESUF-032; 접미어=- 직감; 등급=고급; 효과=감각 +5%; 허용=장비 전반
+- AR-S0135-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6251: ID=ESUF-033; 접미어=- 통찰; 등급=희귀; 효과=감각 +8%; 허용=장비 전반
+- AR-S0135-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6252: ID=ESUF-034; 접미어=- 천리안; 등급=영웅; 효과=감각 +12%; 허용=장비 전반
+- AR-S0135-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6253: ID=ESUF-035; 접미어=- 전감; 등급=전설; 효과=감각 +18%; 허용=장비 전반
+- AR-S0135-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6254: ID=ESUF-036; 접미어=- 흡혈; 등급=일반; 효과=피해 흡혈 +3%; 허용=장비 전반
+- AR-S0135-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6255: ID=ESUF-037; 접미어=- 포식; 등급=고급; 효과=피해 흡혈 +5%; 허용=장비 전반
+- AR-S0135-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6256: ID=ESUF-038; 접미어=- 혈귀; 등급=희귀; 효과=피해 흡혈 +8%; 허용=장비 전반
+- AR-S0135-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6257: ID=ESUF-039; 접미어=- 생명포식; 등급=영웅; 효과=피해 흡혈 +12%; 허용=장비 전반
+- AR-S0135-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6258: ID=ESUF-040; 접미어=- 적혈왕; 등급=전설; 효과=피해 흡혈 +18%; 허용=장비 전반
+- AR-S0135-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6259: ID=ESUF-041; 접미어=- 마력흡수; 등급=일반; 효과=마력 흡수 +3%; 허용=장비 전반
+- AR-S0135-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6260: ID=ESUF-042; 접미어=- 주문흡수; 등급=고급; 효과=마력 흡수 +5%; 허용=장비 전반
+- AR-S0135-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6261: ID=ESUF-043; 접미어=- 마나포식; 등급=희귀; 효과=마력 흡수 +8%; 허용=장비 전반
+- AR-S0135-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6262: ID=ESUF-044; 접미어=- 마력갈취; 등급=영웅; 효과=마력 흡수 +12%; 허용=장비 전반
+- AR-S0135-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6263: ID=ESUF-045; 접미어=- 무한흡수; 등급=전설; 효과=마력 흡수 +18%; 허용=장비 전반
+- AR-S0135-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6264: ID=ESUF-046; 접미어=- 관통; 등급=일반; 효과=방어 관통 +3%; 허용=장비 전반
+- AR-S0135-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6265: ID=ESUF-047; 접미어=- 꿰뚫음; 등급=고급; 효과=방어 관통 +5%; 허용=장비 전반
+- AR-S0135-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6266: ID=ESUF-048; 접미어=- 철갑관통; 등급=희귀; 효과=방어 관통 +8%; 허용=장비 전반
+- AR-S0135-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6267: ID=ESUF-049; 접미어=- 방어무시; 등급=영웅; 효과=방어 관통 +12%; 허용=장비 전반
+- AR-S0135-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6268: ID=ESUF-050; 접미어=- 절대관통; 등급=전설; 효과=방어 관통 +18%; 허용=장비 전반
+- AR-S0135-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6269: ID=ESUF-051; 접미어=- 방벽; 등급=일반; 효과=받는 피해 감소 +3%; 허용=장비 전반
+- AR-S0135-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6270: ID=ESUF-052; 접미어=- 보호; 등급=고급; 효과=받는 피해 감소 +5%; 허용=장비 전반
+- AR-S0135-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6271: ID=ESUF-053; 접미어=- 수호; 등급=희귀; 효과=받는 피해 감소 +8%; 허용=장비 전반
+- AR-S0135-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6272: ID=ESUF-054; 접미어=- 절대방벽; 등급=영웅; 효과=받는 피해 감소 +12%; 허용=장비 전반
+- AR-S0135-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6273: ID=ESUF-055; 접미어=- 무적수호; 등급=전설; 효과=받는 피해 감소 +18%; 허용=장비 전반
+- AR-S0135-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6274: ID=ESUF-056; 접미어=- 반격; 등급=일반; 효과=반격 피해 +3%; 허용=장비 전반
+- AR-S0135-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6275: ID=ESUF-057; 접미어=- 역습; 등급=고급; 효과=반격 피해 +5%; 허용=장비 전반
+- AR-S0135-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6276: ID=ESUF-058; 접미어=- 응징; 등급=희귀; 효과=반격 피해 +8%; 허용=장비 전반
+- AR-S0135-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6277: ID=ESUF-059; 접미어=- 복수; 등급=영웅; 효과=반격 피해 +12%; 허용=장비 전반
+- AR-S0135-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6278: ID=ESUF-060; 접미어=- 천벌반격; 등급=전설; 효과=반격 피해 +18%; 허용=장비 전반
+- AR-S0135-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6279: ID=ESUF-061; 접미어=- 출혈; 등급=일반; 효과=출혈 피해 +3%; 허용=장비 전반
+- AR-S0135-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6280: ID=ESUF-062; 접미어=- 과다출혈; 등급=고급; 효과=출혈 피해 +5%; 허용=장비 전반
+- AR-S0135-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6281: ID=ESUF-063; 접미어=- 혈흔; 등급=희귀; 효과=출혈 피해 +8%; 허용=장비 전반
+- AR-S0135-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6282: ID=ESUF-064; 접미어=- 혈폭; 등급=영웅; 효과=출혈 피해 +12%; 허용=장비 전반
+- AR-S0135-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6283: ID=ESUF-065; 접미어=- 혈재; 등급=전설; 효과=출혈 피해 +18%; 허용=장비 전반
+- AR-S0135-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6284: ID=ESUF-066; 접미어=- 화상; 등급=일반; 효과=화상 피해 +3%; 허용=장비 전반
+- AR-S0135-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6285: ID=ESUF-067; 접미어=- 연소; 등급=고급; 효과=화상 피해 +5%; 허용=장비 전반
+- AR-S0135-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6286: ID=ESUF-068; 접미어=- 맹화; 등급=희귀; 효과=화상 피해 +8%; 허용=장비 전반
+- AR-S0135-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6287: ID=ESUF-069; 접미어=- 업화; 등급=영웅; 효과=화상 피해 +12%; 허용=장비 전반
+- AR-S0135-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6288: ID=ESUF-070; 접미어=- 태양화상; 등급=전설; 효과=화상 피해 +18%; 허용=장비 전반
+- AR-S0135-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6289: ID=ESUF-071; 접미어=- 동상; 등급=일반; 효과=빙결 효과 +3%; 허용=장비 전반
+- AR-S0135-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6290: ID=ESUF-072; 접미어=- 빙결; 등급=고급; 효과=빙결 효과 +5%; 허용=장비 전반
+- AR-S0135-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6291: ID=ESUF-073; 접미어=- 서리감옥; 등급=희귀; 효과=빙결 효과 +8%; 허용=장비 전반
+- AR-S0135-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6292: ID=ESUF-074; 접미어=- 극한빙결; 등급=영웅; 효과=빙결 효과 +12%; 허용=장비 전반
+- AR-S0135-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6293: ID=ESUF-075; 접미어=- 절대동결; 등급=전설; 효과=빙결 효과 +18%; 허용=장비 전반
+- AR-S0135-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6294: ID=ESUF-076; 접미어=- 감전; 등급=일반; 효과=감전 효과 +3%; 허용=장비 전반
+- AR-S0135-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6295: ID=ESUF-077; 접미어=- 전류; 등급=고급; 효과=감전 효과 +5%; 허용=장비 전반
+- AR-S0135-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6296: ID=ESUF-078; 접미어=- 뇌격; 등급=희귀; 효과=감전 효과 +8%; 허용=장비 전반
+- AR-S0135-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6297: ID=ESUF-079; 접미어=- 연쇄뇌격; 등급=영웅; 효과=감전 효과 +12%; 허용=장비 전반
+- AR-S0135-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6298: ID=ESUF-080; 접미어=- 천뢰; 등급=전설; 효과=감전 효과 +18%; 허용=장비 전반
+- AR-S0135-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6299: ID=ESUF-081; 접미어=- 기절; 등급=일반; 효과=기절 확률 +3%; 허용=장비 전반
+- AR-S0135-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6300: ID=ESUF-082; 접미어=- 충격; 등급=고급; 효과=기절 확률 +5%; 허용=장비 전반
+- AR-S0135-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6301: ID=ESUF-083; 접미어=- 혼절; 등급=희귀; 효과=기절 확률 +8%; 허용=장비 전반
+- AR-S0135-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6302: ID=ESUF-084; 접미어=- 분쇄; 등급=영웅; 효과=기절 확률 +12%; 허용=장비 전반
+- AR-S0135-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6303: ID=ESUF-085; 접미어=- 대지충격; 등급=전설; 효과=기절 확률 +18%; 허용=장비 전반
+- AR-S0135-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6304: ID=ESUF-086; 접미어=- 침묵; 등급=일반; 효과=침묵 확률 +3%; 허용=장비 전반
+- AR-S0135-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6305: ID=ESUF-087; 접미어=- 봉마; 등급=고급; 효과=침묵 확률 +5%; 허용=장비 전반
+- AR-S0135-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6306: ID=ESUF-088; 접미어=- 마력봉쇄; 등급=희귀; 효과=침묵 확률 +8%; 허용=장비 전반
+- AR-S0135-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6307: ID=ESUF-089; 접미어=- 대봉마; 등급=영웅; 효과=침묵 확률 +12%; 허용=장비 전반
+- AR-S0135-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6308: ID=ESUF-090; 접미어=- 절대침묵; 등급=전설; 효과=침묵 확률 +18%; 허용=장비 전반
+- AR-S0135-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6309: ID=ESUF-091; 접미어=- 공포; 등급=일반; 효과=공포 효과 +3%; 허용=장비 전반
+- AR-S0135-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6310: ID=ESUF-092; 접미어=- 위압; 등급=고급; 효과=공포 효과 +5%; 허용=장비 전반
+- AR-S0135-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6311: ID=ESUF-093; 접미어=- 공황; 등급=희귀; 효과=공포 효과 +8%; 허용=장비 전반
+- AR-S0135-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6312: ID=ESUF-094; 접미어=- 악몽; 등급=영웅; 효과=공포 효과 +12%; 허용=장비 전반
+- AR-S0135-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6313: ID=ESUF-095; 접미어=- 절망; 등급=전설; 효과=공포 효과 +18%; 허용=장비 전반
+- AR-S0135-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6314: ID=ESUF-096; 접미어=- 정화; 등급=일반; 효과=상태이상 저항 +3%; 허용=장비 전반
+- AR-S0135-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6315: ID=ESUF-097; 접미어=- 해독; 등급=고급; 효과=상태이상 저항 +5%; 허용=장비 전반
+- AR-S0135-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6316: ID=ESUF-098; 접미어=- 성결; 등급=희귀; 효과=상태이상 저항 +8%; 허용=장비 전반
+- AR-S0135-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6317: ID=ESUF-099; 접미어=- 완전정화; 등급=영웅; 효과=상태이상 저항 +12%; 허용=장비 전반
+- AR-S0135-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6318: ID=ESUF-100; 접미어=- 신성정화; 등급=전설; 효과=상태이상 저항 +18%; 허용=장비 전반
+- AR-S0135-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6319: ID=ESUF-101; 접미어=- 탐욕; 등급=일반; 효과=전리품 발견 +3%; 허용=장비 전반
+- AR-S0135-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6320: ID=ESUF-102; 접미어=- 행운; 등급=고급; 효과=전리품 발견 +5%; 허용=장비 전반
+- AR-S0135-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6321: ID=ESUF-103; 접미어=- 보물추적; 등급=희귀; 효과=전리품 발견 +8%; 허용=장비 전반
+- AR-S0135-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6322: ID=ESUF-104; 접미어=- 황금손; 등급=영웅; 효과=전리품 발견 +12%; 허용=장비 전반
+- AR-S0135-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6323: ID=ESUF-105; 접미어=- 왕의보물; 등급=전설; 효과=전리품 발견 +18%; 허용=장비 전반
+- AR-S0135-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6324: ID=ESUF-106; 접미어=- 경험; 등급=일반; 효과=경험치 획득 +3%; 허용=장비 전반
+- AR-S0135-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6325: ID=ESUF-107; 접미어=- 숙련; 등급=고급; 효과=경험치 획득 +5%; 허용=장비 전반
+- AR-S0135-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6326: ID=ESUF-108; 접미어=- 성장; 등급=희귀; 효과=경험치 획득 +8%; 허용=장비 전반
+- AR-S0135-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6327: ID=ESUF-109; 접미어=- 영웅성장; 등급=영웅; 효과=경험치 획득 +12%; 허용=장비 전반
+- AR-S0135-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6328: ID=ESUF-110; 접미어=- 초월성장; 등급=전설; 효과=경험치 획득 +18%; 허용=장비 전반
+- AR-S0135-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6329: ID=ESUF-111; 접미어=- 절약; 등급=일반; 효과=자원 소비 감소 +3%; 허용=장비 전반
+- AR-S0135-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6330: ID=ESUF-112; 접미어=- 효율; 등급=고급; 효과=자원 소비 감소 +5%; 허용=장비 전반
+- AR-S0135-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6331: ID=ESUF-113; 접미어=- 순환; 등급=희귀; 효과=자원 소비 감소 +8%; 허용=장비 전반
+- AR-S0135-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6332: ID=ESUF-114; 접미어=- 무소모; 등급=영웅; 효과=자원 소비 감소 +12%; 허용=장비 전반
+- AR-S0135-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6333: ID=ESUF-115; 접미어=- 영구순환; 등급=전설; 효과=자원 소비 감소 +18%; 허용=장비 전반
+- AR-S0135-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6334: ID=ESUF-116; 접미어=- 가속; 등급=일반; 효과=재사용 대기시간 감소 +3%; 허용=장비 전반
+- AR-S0135-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6335: ID=ESUF-117; 접미어=- 신속; 등급=고급; 효과=재사용 대기시간 감소 +5%; 허용=장비 전반
+- AR-S0135-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6336: ID=ESUF-118; 접미어=- 연속; 등급=희귀; 효과=재사용 대기시간 감소 +8%; 허용=장비 전반
+- AR-S0135-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6337: ID=ESUF-119; 접미어=- 초가속; 등급=영웅; 효과=재사용 대기시간 감소 +12%; 허용=장비 전반
+- AR-S0135-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0135` §135 장비 접미어 실제 데이터 120종 L6338: ID=ESUF-120; 접미어=- 시간왜곡; 등급=전설; 효과=재사용 대기시간 감소 +18%; 허용=장비 전반
+- AR-S0136-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6344: ID=MPRE-001; 접두어=큰; 등급=일반; 주 효과=생명력 증가, 속도 감소; 위협 보정=위협도 ×1.08
+- AR-S0136-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6345: ID=MPRE-002; 접두어=거대한; 등급=고급; 주 효과=생명력 증가, 속도 감소; 위협 보정=위협도 ×1.15
+- AR-S0136-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6346: ID=MPRE-003; 접두어=거구의; 등급=희귀; 주 효과=생명력 증가, 속도 감소; 위협 보정=위협도 ×1.25
+- AR-S0136-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6347: ID=MPRE-004; 접두어=산맥같은; 등급=영웅; 주 효과=생명력 증가, 속도 감소; 위협 보정=위협도 ×1.40
+- AR-S0136-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6348: ID=MPRE-005; 접두어=초거대; 등급=전설; 주 효과=생명력 증가, 속도 감소; 위협 보정=위협도 ×1.65
+- AR-S0136-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6349: ID=MPRE-006; 접두어=빠른; 등급=일반; 주 효과=행동속도·회피 증가; 위협 보정=위협도 ×1.08
+- AR-S0136-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6350: ID=MPRE-007; 접두어=민첩한; 등급=고급; 주 효과=행동속도·회피 증가; 위협 보정=위협도 ×1.15
+- AR-S0136-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6351: ID=MPRE-008; 접두어=질풍의; 등급=희귀; 주 효과=행동속도·회피 증가; 위협 보정=위협도 ×1.25
+- AR-S0136-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6352: ID=MPRE-009; 접두어=번개같은; 등급=영웅; 주 효과=행동속도·회피 증가; 위협 보정=위협도 ×1.40
+- AR-S0136-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6353: ID=MPRE-010; 접두어=무영의; 등급=전설; 주 효과=행동속도·회피 증가; 위협 보정=위협도 ×1.65
+- AR-S0136-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6354: ID=MPRE-011; 접두어=강한; 등급=일반; 주 효과=공격력 증가; 위협 보정=위협도 ×1.08
+- AR-S0136-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6355: ID=MPRE-012; 접두어=흉포한; 등급=고급; 주 효과=공격력 증가; 위협 보정=위협도 ×1.15
+- AR-S0136-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6356: ID=MPRE-013; 접두어=광폭한; 등급=희귀; 주 효과=공격력 증가; 위협 보정=위협도 ×1.25
+- AR-S0136-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6357: ID=MPRE-014; 접두어=파괴적인; 등급=영웅; 주 효과=공격력 증가; 위협 보정=위협도 ×1.40
+- AR-S0136-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6358: ID=MPRE-015; 접두어=멸절의; 등급=전설; 주 효과=공격력 증가; 위협 보정=위협도 ×1.65
+- AR-S0136-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6359: ID=MPRE-016; 접두어=단단한; 등급=일반; 주 효과=물리 방어 증가; 위협 보정=위협도 ×1.08
+- AR-S0136-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6360: ID=MPRE-017; 접두어=갑주의; 등급=고급; 주 효과=물리 방어 증가; 위협 보정=위협도 ×1.15
+- AR-S0136-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6361: ID=MPRE-018; 접두어=철갑의; 등급=희귀; 주 효과=물리 방어 증가; 위협 보정=위협도 ×1.25
+- AR-S0136-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6362: ID=MPRE-019; 접두어=금강의; 등급=영웅; 주 효과=물리 방어 증가; 위협 보정=위협도 ×1.40
+- AR-S0136-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6363: ID=MPRE-020; 접두어=불괴의; 등급=전설; 주 효과=물리 방어 증가; 위협 보정=위협도 ×1.65
+- AR-S0136-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6364: ID=MPRE-021; 접두어=마력이 깃든; 등급=일반; 주 효과=마법 위력·마력 증가; 위협 보정=위협도 ×1.08
+- AR-S0136-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6365: ID=MPRE-022; 접두어=마력에 물든; 등급=고급; 주 효과=마법 위력·마력 증가; 위협 보정=위협도 ×1.15
+- AR-S0136-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6366: ID=MPRE-023; 접두어=마력폭주의; 등급=희귀; 주 효과=마법 위력·마력 증가; 위협 보정=위협도 ×1.25
+- AR-S0136-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6367: ID=MPRE-024; 접두어=대마력의; 등급=영웅; 주 효과=마법 위력·마력 증가; 위협 보정=위협도 ×1.40
+- AR-S0136-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6368: ID=MPRE-025; 접두어=마나재앙의; 등급=전설; 주 효과=마법 위력·마력 증가; 위협 보정=위협도 ×1.65
+- AR-S0136-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6369: ID=MPRE-026; 접두어=불붙은; 등급=일반; 주 효과=화염 공격·화염 저항; 위협 보정=위협도 ×1.08
+- AR-S0136-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6370: ID=MPRE-027; 접두어=불타는; 등급=고급; 주 효과=화염 공격·화염 저항; 위협 보정=위협도 ×1.15
+- AR-S0136-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6371: ID=MPRE-028; 접두어=화염의; 등급=희귀; 주 효과=화염 공격·화염 저항; 위협 보정=위협도 ×1.25
+- AR-S0136-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6372: ID=MPRE-029; 접두어=업화의; 등급=영웅; 주 효과=화염 공격·화염 저항; 위협 보정=위협도 ×1.40
+- AR-S0136-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6373: ID=MPRE-030; 접두어=태양화염의; 등급=전설; 주 효과=화염 공격·화염 저항; 위협 보정=위협도 ×1.65
+- AR-S0136-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6374: ID=MPRE-031; 접두어=서리낀; 등급=일반; 주 효과=냉기 공격·둔화; 위협 보정=위협도 ×1.08
+- AR-S0136-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6375: ID=MPRE-032; 접두어=얼어붙은; 등급=고급; 주 효과=냉기 공격·둔화; 위협 보정=위협도 ×1.15
+- AR-S0136-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6376: ID=MPRE-033; 접두어=빙결의; 등급=희귀; 주 효과=냉기 공격·둔화; 위협 보정=위협도 ×1.25
+- AR-S0136-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6377: ID=MPRE-034; 접두어=빙하의; 등급=영웅; 주 효과=냉기 공격·둔화; 위협 보정=위협도 ×1.40
+- AR-S0136-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6378: ID=MPRE-035; 접두어=절대영도의; 등급=전설; 주 효과=냉기 공격·둔화; 위협 보정=위협도 ×1.65
+- AR-S0136-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6379: ID=MPRE-036; 접두어=전기를 띤; 등급=일반; 주 효과=번개 공격·감전; 위협 보정=위협도 ×1.08
+- AR-S0136-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6380: ID=MPRE-037; 접두어=번개를 두른; 등급=고급; 주 효과=번개 공격·감전; 위협 보정=위협도 ×1.15
+- AR-S0136-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6381: ID=MPRE-038; 접두어=뇌광의; 등급=희귀; 주 효과=번개 공격·감전; 위협 보정=위협도 ×1.25
+- AR-S0136-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6382: ID=MPRE-039; 접두어=폭풍뇌의; 등급=영웅; 주 효과=번개 공격·감전; 위협 보정=위협도 ×1.40
+- AR-S0136-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6383: ID=MPRE-040; 접두어=천뢰의; 등급=전설; 주 효과=번개 공격·감전; 위협 보정=위협도 ×1.65
+- AR-S0136-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6384: ID=MPRE-041; 접두어=독을 품은; 등급=일반; 주 효과=독 공격; 위협 보정=위협도 ×1.08
+- AR-S0136-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6385: ID=MPRE-042; 접두어=맹독의; 등급=고급; 주 효과=독 공격; 위협 보정=위협도 ×1.15
+- AR-S0136-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6386: ID=MPRE-043; 접두어=독안개의; 등급=희귀; 주 효과=독 공격; 위협 보정=위협도 ×1.25
+- AR-S0136-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6387: ID=MPRE-044; 접두어=부패독의; 등급=영웅; 주 효과=독 공격; 위협 보정=위협도 ×1.40
+- AR-S0136-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6388: ID=MPRE-045; 접두어=절독의; 등급=전설; 주 효과=독 공격; 위협 보정=위협도 ×1.65
+- AR-S0136-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6389: ID=MPRE-046; 접두어=피에 굶주린; 등급=일반; 주 효과=흡혈·공격성; 위협 보정=위협도 ×1.08
+- AR-S0136-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6390: ID=MPRE-047; 접두어=혈향의; 등급=고급; 주 효과=흡혈·공격성; 위협 보정=위협도 ×1.15
+- AR-S0136-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6391: ID=MPRE-048; 접두어=혈귀의; 등급=희귀; 주 효과=흡혈·공격성; 위협 보정=위협도 ×1.25
+- AR-S0136-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6392: ID=MPRE-049; 접두어=적혈의; 등급=영웅; 주 효과=흡혈·공격성; 위협 보정=위협도 ×1.40
+- AR-S0136-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6393: ID=MPRE-050; 접두어=혈재의; 등급=전설; 주 효과=흡혈·공격성; 위협 보정=위협도 ×1.65
+- AR-S0136-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6394: ID=MPRE-051; 접두어=빛나는; 등급=일반; 주 효과=신성 피해·저항; 위협 보정=위협도 ×1.08
+- AR-S0136-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6395: ID=MPRE-052; 접두어=성광의; 등급=고급; 주 효과=신성 피해·저항; 위협 보정=위협도 ×1.15
+- AR-S0136-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6396: ID=MPRE-053; 접두어=축복받은; 등급=희귀; 주 효과=신성 피해·저항; 위협 보정=위협도 ×1.25
+- AR-S0136-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6397: ID=MPRE-054; 접두어=성역의; 등급=영웅; 주 효과=신성 피해·저항; 위협 보정=위협도 ×1.40
+- AR-S0136-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6398: ID=MPRE-055; 접두어=신성한; 등급=전설; 주 효과=신성 피해·저항; 위협 보정=위협도 ×1.65
+- AR-S0136-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6399: ID=MPRE-056; 접두어=그늘진; 등급=일반; 주 효과=암흑 피해·저항; 위협 보정=위협도 ×1.08
+- AR-S0136-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6400: ID=MPRE-057; 접두어=암흑의; 등급=고급; 주 효과=암흑 피해·저항; 위협 보정=위협도 ×1.15
+- AR-S0136-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6401: ID=MPRE-058; 접두어=심연의; 등급=희귀; 주 효과=암흑 피해·저항; 위협 보정=위협도 ×1.25
+- AR-S0136-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6402: ID=MPRE-059; 접두어=공허의; 등급=영웅; 주 효과=암흑 피해·저항; 위협 보정=위협도 ×1.40
+- AR-S0136-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6403: ID=MPRE-060; 접두어=흑성의; 등급=전설; 주 효과=암흑 피해·저항; 위협 보정=위협도 ×1.65
+- AR-S0136-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6404: ID=MPRE-061; 접두어=늙은; 등급=일반; 주 효과=레벨·저항·드롭 증가; 위협 보정=위협도 ×1.08
+- AR-S0136-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6405: ID=MPRE-062; 접두어=고령의; 등급=고급; 주 효과=레벨·저항·드롭 증가; 위협 보정=위협도 ×1.15
+- AR-S0136-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6406: ID=MPRE-063; 접두어=고대의; 등급=희귀; 주 효과=레벨·저항·드롭 증가; 위협 보정=위협도 ×1.25
+- AR-S0136-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6407: ID=MPRE-064; 접두어=태고의; 등급=영웅; 주 효과=레벨·저항·드롭 증가; 위협 보정=위협도 ×1.40
+- AR-S0136-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6408: ID=MPRE-065; 접두어=원초의; 등급=전설; 주 효과=레벨·저항·드롭 증가; 위협 보정=위협도 ×1.65
+- AR-S0136-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6409: ID=MPRE-066; 접두어=변이된; 등급=일반; 주 효과=무작위 특수능력; 위협 보정=위협도 ×1.08
+- AR-S0136-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6410: ID=MPRE-067; 접두어=뒤틀린; 등급=고급; 주 효과=무작위 특수능력; 위협 보정=위협도 ×1.15
+- AR-S0136-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6411: ID=MPRE-068; 접두어=기형의; 등급=희귀; 주 효과=무작위 특수능력; 위협 보정=위협도 ×1.25
+- AR-S0136-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6412: ID=MPRE-069; 접두어=악몽의; 등급=영웅; 주 효과=무작위 특수능력; 위협 보정=위협도 ×1.40
+- AR-S0136-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6413: ID=MPRE-070; 접두어=불경한; 등급=전설; 주 효과=무작위 특수능력; 위협 보정=위협도 ×1.65
+- AR-S0136-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6414: ID=MPRE-071; 접두어=영리한; 등급=일반; 주 효과=AI 판단·후열 공격 강화; 위협 보정=위협도 ×1.08
+- AR-S0136-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6415: ID=MPRE-072; 접두어=교활한; 등급=고급; 주 효과=AI 판단·후열 공격 강화; 위협 보정=위협도 ×1.15
+- AR-S0136-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6416: ID=MPRE-073; 접두어=책략가의; 등급=희귀; 주 효과=AI 판단·후열 공격 강화; 위협 보정=위협도 ×1.25
+- AR-S0136-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6417: ID=MPRE-074; 접두어=사냥꾼의; 등급=영웅; 주 효과=AI 판단·후열 공격 강화; 위협 보정=위협도 ×1.40
+- AR-S0136-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6418: ID=MPRE-075; 접두어=천재적인; 등급=전설; 주 효과=AI 판단·후열 공격 강화; 위협 보정=위협도 ×1.65
+- AR-S0136-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6419: ID=MPRE-076; 접두어=수호하는; 등급=일반; 주 효과=피해감소·보호; 위협 보정=위협도 ×1.08
+- AR-S0136-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6420: ID=MPRE-077; 접두어=방벽의; 등급=고급; 주 효과=피해감소·보호; 위협 보정=위협도 ×1.15
+- AR-S0136-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6421: ID=MPRE-078; 접두어=수호자의; 등급=희귀; 주 효과=피해감소·보호; 위협 보정=위협도 ×1.25
+- AR-S0136-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6422: ID=MPRE-079; 접두어=철벽의; 등급=영웅; 주 효과=피해감소·보호; 위협 보정=위협도 ×1.40
+- AR-S0136-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6423: ID=MPRE-080; 접두어=절대수호의; 등급=전설; 주 효과=피해감소·보호; 위협 보정=위협도 ×1.65
+- AR-S0136-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6424: ID=MPRE-081; 접두어=굶주린; 등급=일반; 주 효과=처치 시 회복·강화; 위협 보정=위협도 ×1.08
+- AR-S0136-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6425: ID=MPRE-082; 접두어=포식하는; 등급=고급; 주 효과=처치 시 회복·강화; 위협 보정=위협도 ×1.15
+- AR-S0136-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6426: ID=MPRE-083; 접두어=폭식의; 등급=희귀; 주 효과=처치 시 회복·강화; 위협 보정=위협도 ×1.25
+- AR-S0136-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6427: ID=MPRE-084; 접두어=탐식의; 등급=영웅; 주 효과=처치 시 회복·강화; 위협 보정=위협도 ×1.40
+- AR-S0136-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6428: ID=MPRE-085; 접두어=만물포식의; 등급=전설; 주 효과=처치 시 회복·강화; 위협 보정=위협도 ×1.65
+- AR-S0136-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6429: ID=MPRE-086; 접두어=저주받은; 등급=일반; 주 효과=저주·약화 효과; 위협 보정=위협도 ×1.08
+- AR-S0136-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6430: ID=MPRE-087; 접두어=악령의; 등급=고급; 주 효과=저주·약화 효과; 위협 보정=위협도 ×1.15
+- AR-S0136-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6431: ID=MPRE-088; 접두어=재앙의; 등급=희귀; 주 효과=저주·약화 효과; 위협 보정=위협도 ×1.25
+- AR-S0136-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6432: ID=MPRE-089; 접두어=파멸의; 등급=영웅; 주 효과=저주·약화 효과; 위협 보정=위협도 ×1.40
+- AR-S0136-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6433: ID=MPRE-090; 접두어=종말저주의; 등급=전설; 주 효과=저주·약화 효과; 위협 보정=위협도 ×1.65
+- AR-S0136-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6434: ID=MPRE-091; 접두어=왕실의; 등급=일반; 주 효과=전반 능력·부하 강화; 위협 보정=위협도 ×1.08
+- AR-S0136-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6435: ID=MPRE-092; 접두어=귀족의; 등급=고급; 주 효과=전반 능력·부하 강화; 위협 보정=위협도 ×1.15
+- AR-S0136-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6436: ID=MPRE-093; 접두어=군주의; 등급=희귀; 주 효과=전반 능력·부하 강화; 위협 보정=위협도 ×1.25
+- AR-S0136-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6437: ID=MPRE-094; 접두어=황제의; 등급=영웅; 주 효과=전반 능력·부하 강화; 위협 보정=위협도 ×1.40
+- AR-S0136-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6438: ID=MPRE-095; 접두어=패왕의; 등급=전설; 주 효과=전반 능력·부하 강화; 위협 보정=위협도 ×1.65
+- AR-S0136-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6439: ID=MPRE-096; 접두어=은신한; 등급=일반; 주 효과=은신·기습 강화; 위협 보정=위협도 ×1.08
+- AR-S0136-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6440: ID=MPRE-097; 접두어=그림자숨은; 등급=고급; 주 효과=은신·기습 강화; 위협 보정=위협도 ×1.15
+- AR-S0136-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6441: ID=MPRE-098; 접두어=암살자의; 등급=희귀; 주 효과=은신·기습 강화; 위협 보정=위협도 ×1.25
+- AR-S0136-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6442: ID=MPRE-099; 접두어=야행의; 등급=영웅; 주 효과=은신·기습 강화; 위협 보정=위협도 ×1.40
+- AR-S0136-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6443: ID=MPRE-100; 접두어=무형의; 등급=전설; 주 효과=은신·기습 강화; 위협 보정=위협도 ×1.65
+- AR-S0136-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6444: ID=MPRE-101; 접두어=재생하는; 등급=일반; 주 효과=재생 증가; 위협 보정=위협도 ×1.08
+- AR-S0136-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6445: ID=MPRE-102; 접두어=회복하는; 등급=고급; 주 효과=재생 증가; 위협 보정=위협도 ×1.15
+- AR-S0136-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6446: ID=MPRE-103; 접두어=고속재생의; 등급=희귀; 주 효과=재생 증가; 위협 보정=위협도 ×1.25
+- AR-S0136-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6447: ID=MPRE-104; 접두어=불사성의; 등급=영웅; 주 효과=재생 증가; 위협 보정=위협도 ×1.40
+- AR-S0136-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6448: ID=MPRE-105; 접두어=영생의; 등급=전설; 주 효과=재생 증가; 위협 보정=위협도 ×1.65
+- AR-S0136-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6449: ID=MPRE-106; 접두어=분노한; 등급=일반; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.08
+- AR-S0136-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6450: ID=MPRE-107; 접두어=격노한; 등급=고급; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.15
+- AR-S0136-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6451: ID=MPRE-108; 접두어=광기의; 등급=희귀; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.25
+- AR-S0136-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6452: ID=MPRE-109; 접두어=폭주의; 등급=영웅; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.40
+- AR-S0136-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6453: ID=MPRE-110; 접두어=대격노의; 등급=전설; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.65
+- AR-S0136-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6454: ID=MPRE-111; 접두어=봉인된; 등급=일반; 주 효과=단계별 전투력 상승; 위협 보정=위협도 ×1.08
+- AR-S0136-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6455: ID=MPRE-112; 접두어=잠든; 등급=고급; 주 효과=단계별 전투력 상승; 위협 보정=위협도 ×1.15
+- AR-S0136-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6456: ID=MPRE-113; 접두어=각성한; 등급=희귀; 주 효과=단계별 전투력 상승; 위협 보정=위협도 ×1.25
+- AR-S0136-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6457: ID=MPRE-114; 접두어=해방된; 등급=영웅; 주 효과=단계별 전투력 상승; 위협 보정=위협도 ×1.40
+- AR-S0136-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6458: ID=MPRE-115; 접두어=완전각성의; 등급=전설; 주 효과=단계별 전투력 상승; 위협 보정=위협도 ×1.65
+- AR-S0136-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6459: ID=MPRE-116; 접두어=균열의; 등급=일반; 주 효과=공간/시간 특수능력; 위협 보정=위협도 ×1.08
+- AR-S0136-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6460: ID=MPRE-117; 접두어=차원오염의; 등급=고급; 주 효과=공간/시간 특수능력; 위협 보정=위협도 ×1.15
+- AR-S0136-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6461: ID=MPRE-118; 접두어=공간왜곡의; 등급=희귀; 주 효과=공간/시간 특수능력; 위협 보정=위협도 ×1.25
+- AR-S0136-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6462: ID=MPRE-119; 접두어=시간뒤틀린; 등급=영웅; 주 효과=공간/시간 특수능력; 위협 보정=위협도 ×1.40
+- AR-S0136-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0136` §136 몬스터 접두어 실제 데이터 120종 L6463: ID=MPRE-120; 접두어=세계붕괴의; 등급=전설; 주 효과=공간/시간 특수능력; 위협 보정=위협도 ×1.65
+- AR-S0137-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6469: ID=MSUF-001; 접미어=- 재생; 등급=일반; 주 효과=주기적 생명력 회복; 위협 보정=위협도 ×1.07
+- AR-S0137-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6470: ID=MSUF-002; 접미어=- 고속재생; 등급=고급; 주 효과=주기적 생명력 회복; 위협 보정=위협도 ×1.14
+- AR-S0137-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6471: ID=MSUF-003; 접미어=- 초재생; 등급=희귀; 주 효과=주기적 생명력 회복; 위협 보정=위협도 ×1.23
+- AR-S0137-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6472: ID=MSUF-004; 접미어=- 불사성; 등급=영웅; 주 효과=주기적 생명력 회복; 위협 보정=위협도 ×1.38
+- AR-S0137-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6473: ID=MSUF-005; 접미어=- 영생; 등급=전설; 주 효과=주기적 생명력 회복; 위협 보정=위협도 ×1.60
+- AR-S0137-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6474: ID=MSUF-006; 접미어=- 분열; 등급=일반; 주 효과=생명력 조건에 따라 개체 증가; 위협 보정=위협도 ×1.07
+- AR-S0137-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6475: ID=MSUF-007; 접미어=- 증식; 등급=고급; 주 효과=생명력 조건에 따라 개체 증가; 위협 보정=위협도 ×1.14
+- AR-S0137-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6476: ID=MSUF-008; 접미어=- 군체화; 등급=희귀; 주 효과=생명력 조건에 따라 개체 증가; 위협 보정=위협도 ×1.23
+- AR-S0137-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6477: ID=MSUF-009; 접미어=- 폭증식; 등급=영웅; 주 효과=생명력 조건에 따라 개체 증가; 위협 보정=위협도 ×1.38
+- AR-S0137-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6478: ID=MSUF-010; 접미어=- 무한분열; 등급=전설; 주 효과=생명력 조건에 따라 개체 증가; 위협 보정=위협도 ×1.60
+- AR-S0137-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6479: ID=MSUF-011; 접미어=- 폭발; 등급=일반; 주 효과=사망 또는 조건부 광역 폭발; 위협 보정=위협도 ×1.07
+- AR-S0137-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6480: ID=MSUF-012; 접미어=- 화염폭발; 등급=고급; 주 효과=사망 또는 조건부 광역 폭발; 위협 보정=위협도 ×1.14
+- AR-S0137-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6481: ID=MSUF-013; 접미어=- 연쇄폭발; 등급=희귀; 주 효과=사망 또는 조건부 광역 폭발; 위협 보정=위협도 ×1.23
+- AR-S0137-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6482: ID=MSUF-014; 접미어=- 대폭발; 등급=영웅; 주 효과=사망 또는 조건부 광역 폭발; 위협 보정=위협도 ×1.38
+- AR-S0137-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6483: ID=MSUF-015; 접미어=- 종말폭발; 등급=전설; 주 효과=사망 또는 조건부 광역 폭발; 위협 보정=위협도 ×1.60
+- AR-S0137-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6484: ID=MSUF-016; 접미어=- 흡혈; 등급=일반; 주 효과=피해 일부 생명력 회복; 위협 보정=위협도 ×1.07
+- AR-S0137-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6485: ID=MSUF-017; 접미어=- 생명흡수; 등급=고급; 주 효과=피해 일부 생명력 회복; 위협 보정=위협도 ×1.14
+- AR-S0137-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6486: ID=MSUF-018; 접미어=- 혈귀; 등급=희귀; 주 효과=피해 일부 생명력 회복; 위협 보정=위협도 ×1.23
+- AR-S0137-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6487: ID=MSUF-019; 접미어=- 생명포식; 등급=영웅; 주 효과=피해 일부 생명력 회복; 위협 보정=위협도 ×1.38
+- AR-S0137-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6488: ID=MSUF-020; 접미어=- 생명강탈; 등급=전설; 주 효과=피해 일부 생명력 회복; 위협 보정=위협도 ×1.60
+- AR-S0137-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6489: ID=MSUF-021; 접미어=- 반격; 등급=일반; 주 효과=피격 시 반격; 위협 보정=위협도 ×1.07
+- AR-S0137-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6490: ID=MSUF-022; 접미어=- 역습; 등급=고급; 주 효과=피격 시 반격; 위협 보정=위협도 ×1.14
+- AR-S0137-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6491: ID=MSUF-023; 접미어=- 응징; 등급=희귀; 주 효과=피격 시 반격; 위협 보정=위협도 ×1.23
+- AR-S0137-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6492: ID=MSUF-024; 접미어=- 복수; 등급=영웅; 주 효과=피격 시 반격; 위협 보정=위협도 ×1.38
+- AR-S0137-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6493: ID=MSUF-025; 접미어=- 천벌; 등급=전설; 주 효과=피격 시 반격; 위협 보정=위협도 ×1.60
+- AR-S0137-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6494: ID=MSUF-026; 접미어=- 광기; 등급=일반; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.07
+- AR-S0137-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6495: ID=MSUF-027; 접미어=- 격노; 등급=고급; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.14
+- AR-S0137-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6496: ID=MSUF-028; 접미어=- 폭주; 등급=희귀; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.23
+- AR-S0137-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6497: ID=MSUF-029; 접미어=- 광폭화; 등급=영웅; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.38
+- AR-S0137-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6498: ID=MSUF-030; 접미어=- 대광란; 등급=전설; 주 효과=생명력 감소 시 공격 강화; 위협 보정=위협도 ×1.60
+- AR-S0137-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6499: ID=MSUF-031; 접미어=- 독무; 등급=일반; 주 효과=주변 지속 독 피해; 위협 보정=위협도 ×1.07
+- AR-S0137-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6500: ID=MSUF-032; 접미어=- 독안개; 등급=고급; 주 효과=주변 지속 독 피해; 위협 보정=위협도 ×1.14
+- AR-S0137-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6501: ID=MSUF-033; 접미어=- 맹독구름; 등급=희귀; 주 효과=주변 지속 독 피해; 위협 보정=위협도 ×1.23
+- AR-S0137-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6502: ID=MSUF-034; 접미어=- 부패안개; 등급=영웅; 주 효과=주변 지속 독 피해; 위협 보정=위협도 ×1.38
+- AR-S0137-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6503: ID=MSUF-035; 접미어=- 절독장; 등급=전설; 주 효과=주변 지속 독 피해; 위협 보정=위협도 ×1.60
+- AR-S0137-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6504: ID=MSUF-036; 접미어=- 순간이동; 등급=일반; 주 효과=위치 강제 변경; 위협 보정=위협도 ×1.07
+- AR-S0137-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6505: ID=MSUF-037; 접미어=- 점멸; 등급=고급; 주 효과=위치 강제 변경; 위협 보정=위협도 ×1.14
+- AR-S0137-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6506: ID=MSUF-038; 접미어=- 공간도약; 등급=희귀; 주 효과=위치 강제 변경; 위협 보정=위협도 ×1.23
+- AR-S0137-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6507: ID=MSUF-039; 접미어=- 차원이동; 등급=영웅; 주 효과=위치 강제 변경; 위협 보정=위협도 ×1.38
+- AR-S0137-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6508: ID=MSUF-040; 접미어=- 공간지배; 등급=전설; 주 효과=위치 강제 변경; 위협 보정=위협도 ×1.60
+- AR-S0137-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6509: ID=MSUF-041; 접미어=- 마력흡수; 등급=일반; 주 효과=마법 피해 흡수/약화; 위협 보정=위협도 ×1.07
+- AR-S0137-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6510: ID=MSUF-042; 접미어=- 주문포식; 등급=고급; 주 효과=마법 피해 흡수/약화; 위협 보정=위협도 ×1.14
+- AR-S0137-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6511: ID=MSUF-043; 접미어=- 마나강탈; 등급=희귀; 주 효과=마법 피해 흡수/약화; 위협 보정=위협도 ×1.23
+- AR-S0137-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6512: ID=MSUF-044; 접미어=- 마법무효; 등급=영웅; 주 효과=마법 피해 흡수/약화; 위협 보정=위협도 ×1.38
+- AR-S0137-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6513: ID=MSUF-045; 접미어=- 마력지배; 등급=전설; 주 효과=마법 피해 흡수/약화; 위협 보정=위협도 ×1.60
+- AR-S0137-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6514: ID=MSUF-046; 접미어=- 자폭; 등급=일반; 주 효과=사망 시 강한 피해; 위협 보정=위협도 ×1.07
+- AR-S0137-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6515: ID=MSUF-047; 접미어=- 최후폭발; 등급=고급; 주 효과=사망 시 강한 피해; 위협 보정=위협도 ×1.14
+- AR-S0137-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6516: ID=MSUF-048; 접미어=- 피의폭발; 등급=희귀; 주 효과=사망 시 강한 피해; 위협 보정=위협도 ×1.23
+- AR-S0137-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6517: ID=MSUF-049; 접미어=- 영혼폭발; 등급=영웅; 주 효과=사망 시 강한 피해; 위협 보정=위협도 ×1.38
+- AR-S0137-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6518: ID=MSUF-050; 접미어=- 핵폭발; 등급=전설; 주 효과=사망 시 강한 피해; 위협 보정=위협도 ×1.60
+- AR-S0137-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6519: ID=MSUF-051; 접미어=- 부활; 등급=일반; 주 효과=사망 후 재전투; 위협 보정=위협도 ×1.07
+- AR-S0137-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6520: ID=MSUF-052; 접미어=- 재기; 등급=고급; 주 효과=사망 후 재전투; 위협 보정=위협도 ×1.14
+- AR-S0137-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6521: ID=MSUF-053; 접미어=- 두번째생명; 등급=희귀; 주 효과=사망 후 재전투; 위협 보정=위협도 ×1.23
+- AR-S0137-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6522: ID=MSUF-054; 접미어=- 불사; 등급=영웅; 주 효과=사망 후 재전투; 위협 보정=위협도 ×1.38
+- AR-S0137-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6523: ID=MSUF-055; 접미어=- 무한부활; 등급=전설; 주 효과=사망 후 재전투; 위협 보정=위협도 ×1.60
+- AR-S0137-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6524: ID=MSUF-056; 접미어=- 소환; 등급=일반; 주 효과=추가 몬스터 호출; 위협 보정=위협도 ×1.07
+- AR-S0137-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6525: ID=MSUF-057; 접미어=- 부하소환; 등급=고급; 주 효과=추가 몬스터 호출; 위협 보정=위협도 ×1.14
+- AR-S0137-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6526: ID=MSUF-058; 접미어=- 군단소환; 등급=희귀; 주 효과=추가 몬스터 호출; 위협 보정=위협도 ×1.23
+- AR-S0137-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6527: ID=MSUF-059; 접미어=- 악마소환; 등급=영웅; 주 효과=추가 몬스터 호출; 위협 보정=위협도 ×1.38
+- AR-S0137-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6528: ID=MSUF-060; 접미어=- 무한군세; 등급=전설; 주 효과=추가 몬스터 호출; 위협 보정=위협도 ×1.60
+- AR-S0137-061 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6529: ID=MSUF-061; 접미어=- 보호막; 등급=일반; 주 효과=주기적 보호막; 위협 보정=위협도 ×1.07
+- AR-S0137-062 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6530: ID=MSUF-062; 접미어=- 방벽; 등급=고급; 주 효과=주기적 보호막; 위협 보정=위협도 ×1.14
+- AR-S0137-063 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6531: ID=MSUF-063; 접미어=- 마력장벽; 등급=희귀; 주 효과=주기적 보호막; 위협 보정=위협도 ×1.23
+- AR-S0137-064 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6532: ID=MSUF-064; 접미어=- 절대방벽; 등급=영웅; 주 효과=주기적 보호막; 위협 보정=위협도 ×1.38
+- AR-S0137-065 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6533: ID=MSUF-065; 접미어=- 무적장; 등급=전설; 주 효과=주기적 보호막; 위협 보정=위협도 ×1.60
+- AR-S0137-066 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6534: ID=MSUF-066; 접미어=- 광역화; 등급=일반; 주 효과=공격 범위 증가; 위협 보정=위협도 ×1.07
+- AR-S0137-067 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6535: ID=MSUF-067; 접미어=- 파동; 등급=고급; 주 효과=공격 범위 증가; 위협 보정=위협도 ×1.14
+- AR-S0137-068 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6536: ID=MSUF-068; 접미어=- 대범위; 등급=희귀; 주 효과=공격 범위 증가; 위협 보정=위협도 ×1.23
+- AR-S0137-069 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6537: ID=MSUF-069; 접미어=- 전장지배; 등급=영웅; 주 효과=공격 범위 증가; 위협 보정=위협도 ×1.38
+- AR-S0137-070 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6538: ID=MSUF-070; 접미어=- 전역타격; 등급=전설; 주 효과=공격 범위 증가; 위협 보정=위협도 ×1.60
+- AR-S0137-071 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6539: ID=MSUF-071; 접미어=- 연쇄; 등급=일반; 주 효과=공격이 추가 대상에게 전파; 위협 보정=위협도 ×1.07
+- AR-S0137-072 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6540: ID=MSUF-072; 접미어=- 도약; 등급=고급; 주 효과=공격이 추가 대상에게 전파; 위협 보정=위협도 ×1.14
+- AR-S0137-073 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6541: ID=MSUF-073; 접미어=- 연쇄타격; 등급=희귀; 주 효과=공격이 추가 대상에게 전파; 위협 보정=위협도 ×1.23
+- AR-S0137-074 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6542: ID=MSUF-074; 접미어=- 천쇄; 등급=영웅; 주 효과=공격이 추가 대상에게 전파; 위협 보정=위협도 ×1.38
+- AR-S0137-075 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6543: ID=MSUF-075; 접미어=- 무한연쇄; 등급=전설; 주 효과=공격이 추가 대상에게 전파; 위협 보정=위협도 ×1.60
+- AR-S0137-076 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6544: ID=MSUF-076; 접미어=- 처형; 등급=일반; 주 효과=저생명력 대상 추가 피해; 위협 보정=위협도 ×1.07
+- AR-S0137-077 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6545: ID=MSUF-077; 접미어=- 마무리; 등급=고급; 주 효과=저생명력 대상 추가 피해; 위협 보정=위협도 ×1.14
+- AR-S0137-078 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6546: ID=MSUF-078; 접미어=- 사형; 등급=희귀; 주 효과=저생명력 대상 추가 피해; 위협 보정=위협도 ×1.23
+- AR-S0137-079 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6547: ID=MSUF-079; 접미어=- 즉결; 등급=영웅; 주 효과=저생명력 대상 추가 피해; 위협 보정=위협도 ×1.38
+- AR-S0137-080 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6548: ID=MSUF-080; 접미어=- 절명; 등급=전설; 주 효과=저생명력 대상 추가 피해; 위협 보정=위협도 ×1.60
+- AR-S0137-081 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6549: ID=MSUF-081; 접미어=- 저주; 등급=일반; 주 효과=스탯/저항 약화; 위협 보정=위협도 ×1.07
+- AR-S0137-082 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6550: ID=MSUF-082; 접미어=- 약화; 등급=고급; 주 효과=스탯/저항 약화; 위협 보정=위협도 ×1.14
+- AR-S0137-083 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6551: ID=MSUF-083; 접미어=- 쇠약; 등급=희귀; 주 효과=스탯/저항 약화; 위협 보정=위협도 ×1.23
+- AR-S0137-084 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6552: ID=MSUF-084; 접미어=- 파멸저주; 등급=영웅; 주 효과=스탯/저항 약화; 위협 보정=위협도 ×1.38
+- AR-S0137-085 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6553: ID=MSUF-085; 접미어=- 영구저주; 등급=전설; 주 효과=스탯/저항 약화; 위협 보정=위협도 ×1.60
+- AR-S0137-086 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6554: ID=MSUF-086; 접미어=- 침묵; 등급=일반; 주 효과=마법 사용 방해; 위협 보정=위협도 ×1.07
+- AR-S0137-087 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6555: ID=MSUF-087; 접미어=- 봉마; 등급=고급; 주 효과=마법 사용 방해; 위협 보정=위협도 ×1.14
+- AR-S0137-088 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6556: ID=MSUF-088; 접미어=- 주문봉쇄; 등급=희귀; 주 효과=마법 사용 방해; 위협 보정=위협도 ×1.23
+- AR-S0137-089 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6557: ID=MSUF-089; 접미어=- 대봉마; 등급=영웅; 주 효과=마법 사용 방해; 위협 보정=위협도 ×1.38
+- AR-S0137-090 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6558: ID=MSUF-090; 접미어=- 절대침묵; 등급=전설; 주 효과=마법 사용 방해; 위협 보정=위협도 ×1.60
+- AR-S0137-091 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6559: ID=MSUF-091; 접미어=- 공포; 등급=일반; 주 효과=사기·행동 방해; 위협 보정=위협도 ×1.07
+- AR-S0137-092 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6560: ID=MSUF-092; 접미어=- 위압; 등급=고급; 주 효과=사기·행동 방해; 위협 보정=위협도 ×1.14
+- AR-S0137-093 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6561: ID=MSUF-093; 접미어=- 악몽; 등급=희귀; 주 효과=사기·행동 방해; 위협 보정=위협도 ×1.23
+- AR-S0137-094 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6562: ID=MSUF-094; 접미어=- 절망; 등급=영웅; 주 효과=사기·행동 방해; 위협 보정=위협도 ×1.38
+- AR-S0137-095 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6563: ID=MSUF-095; 접미어=- 혼절공포; 등급=전설; 주 효과=사기·행동 방해; 위협 보정=위협도 ×1.60
+- AR-S0137-096 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6564: ID=MSUF-096; 접미어=- 포식; 등급=일반; 주 효과=적 처치 시 능력 상승; 위협 보정=위협도 ×1.07
+- AR-S0137-097 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6565: ID=MSUF-097; 접미어=- 먹어치움; 등급=고급; 주 효과=적 처치 시 능력 상승; 위협 보정=위협도 ×1.14
+- AR-S0137-098 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6566: ID=MSUF-098; 접미어=- 포식성장; 등급=희귀; 주 효과=적 처치 시 능력 상승; 위협 보정=위협도 ×1.23
+- AR-S0137-099 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6567: ID=MSUF-099; 접미어=- 폭식; 등급=영웅; 주 효과=적 처치 시 능력 상승; 위협 보정=위협도 ×1.38
+- AR-S0137-100 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6568: ID=MSUF-100; 접미어=- 만물포식; 등급=전설; 주 효과=적 처치 시 능력 상승; 위협 보정=위협도 ×1.60
+- AR-S0137-101 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6569: ID=MSUF-101; 접미어=- 추적; 등급=일반; 주 효과=도주한 파티 추적; 위협 보정=위협도 ×1.07
+- AR-S0137-102 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6570: ID=MSUF-102; 접미어=- 사냥; 등급=고급; 주 효과=도주한 파티 추적; 위협 보정=위협도 ×1.14
+- AR-S0137-103 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6571: ID=MSUF-103; 접미어=- 집요함; 등급=희귀; 주 효과=도주한 파티 추적; 위협 보정=위협도 ×1.23
+- AR-S0137-104 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6572: ID=MSUF-104; 접미어=- 끈질김; 등급=영웅; 주 효과=도주한 파티 추적; 위협 보정=위협도 ×1.38
+- AR-S0137-105 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6573: ID=MSUF-105; 접미어=- 절대추적; 등급=전설; 주 효과=도주한 파티 추적; 위협 보정=위협도 ×1.60
+- AR-S0137-106 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6574: ID=MSUF-106; 접미어=- 기습; 등급=일반; 주 효과=전투 시작 보너스; 위협 보정=위협도 ×1.07
+- AR-S0137-107 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6575: ID=MSUF-107; 접미어=- 매복; 등급=고급; 주 효과=전투 시작 보너스; 위협 보정=위협도 ×1.14
+- AR-S0137-108 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6576: ID=MSUF-108; 접미어=- 암살; 등급=희귀; 주 효과=전투 시작 보너스; 위협 보정=위협도 ×1.23
+- AR-S0137-109 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6577: ID=MSUF-109; 접미어=- 그림자습격; 등급=영웅; 주 효과=전투 시작 보너스; 위협 보정=위협도 ×1.38
+- AR-S0137-110 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6578: ID=MSUF-110; 접미어=- 절대기습; 등급=전설; 주 효과=전투 시작 보너스; 위협 보정=위협도 ×1.60
+- AR-S0137-111 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6579: ID=MSUF-111; 접미어=- 시간왜곡; 등급=일반; 주 효과=행동 순서/쿨다운 조작; 위협 보정=위협도 ×1.07
+- AR-S0137-112 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6580: ID=MSUF-112; 접미어=- 지연; 등급=고급; 주 효과=행동 순서/쿨다운 조작; 위협 보정=위협도 ×1.14
+- AR-S0137-113 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6581: ID=MSUF-113; 접미어=- 가속; 등급=희귀; 주 효과=행동 순서/쿨다운 조작; 위협 보정=위협도 ×1.23
+- AR-S0137-114 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6582: ID=MSUF-114; 접미어=- 시간역행; 등급=영웅; 주 효과=행동 순서/쿨다운 조작; 위협 보정=위협도 ×1.38
+- AR-S0137-115 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6583: ID=MSUF-115; 접미어=- 시간지배; 등급=전설; 주 효과=행동 순서/쿨다운 조작; 위협 보정=위협도 ×1.60
+- AR-S0137-116 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6584: ID=MSUF-116; 접미어=- 공간왜곡; 등급=일반; 주 효과=진형·위치 제어; 위협 보정=위협도 ×1.07
+- AR-S0137-117 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6585: ID=MSUF-117; 접미어=- 끌어당김; 등급=고급; 주 효과=진형·위치 제어; 위협 보정=위협도 ×1.14
+- AR-S0137-118 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6586: ID=MSUF-118; 접미어=- 밀어냄; 등급=희귀; 주 효과=진형·위치 제어; 위협 보정=위협도 ×1.23
+- AR-S0137-119 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6587: ID=MSUF-119; 접미어=- 진형붕괴; 등급=영웅; 주 효과=진형·위치 제어; 위협 보정=위협도 ×1.38
+- AR-S0137-120 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0137` §137 몬스터 접미어 실제 데이터 120종 L6588: ID=MSUF-120; 접미어=- 공간지배; 등급=전설; 주 효과=진형·위치 제어; 위협 보정=위협도 ×1.60
+- AR-S0138-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6594: ID=SET-001; 세트명=몰락한 왕실기사 세트; 등급=희귀; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6595: ID=SET-002; 세트명=은빛수호대 세트; 등급=희귀; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6596: ID=SET-003; 세트명=붉은사자 용병단 세트; 등급=희귀; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6597: ID=SET-004; 세트명=검은늑대 추적대 세트; 등급=희귀; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6598: ID=SET-005; 세트명=설원기사단 세트; 등급=희귀; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6599: ID=SET-006; 세트명=사막유목왕 세트; 등급=희귀; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6600: ID=SET-007; 세트명=늪지사냥꾼 세트; 등급=희귀; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6601: ID=SET-008; 세트명=심해수호자 세트; 등급=희귀; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6602: ID=SET-009; 세트명=화염술사 세트; 등급=희귀; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6603: ID=SET-010; 세트명=빙결술사 세트; 등급=희귀; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-011 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6604: ID=SET-011; 세트명=폭풍술사 세트; 등급=희귀; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-012 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6605: ID=SET-012; 세트명=대지술사 세트; 등급=희귀; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-013 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6606: ID=SET-013; 세트명=성광사제 세트; 등급=희귀; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-014 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6607: ID=SET-014; 세트명=암영암살자 세트; 등급=희귀; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-015 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6608: ID=SET-015; 세트명=고대수호자 세트; 등급=희귀; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-016 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6609: ID=SET-016; 세트명=미스릴기사 세트; 등급=특급; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-017 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6610: ID=SET-017; 세트명=흑철투사 세트; 등급=특급; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-018 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6611: ID=SET-018; 세트명=용린전사 세트; 등급=특급; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-019 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6612: ID=SET-019; 세트명=와이번사냥꾼 세트; 등급=특급; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-020 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6613: ID=SET-020; 세트명=거인학살자 세트; 등급=특급; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-021 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6614: ID=SET-021; 세트명=악마사냥꾼 세트; 등급=특급; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-022 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6615: ID=SET-022; 세트명=언데드정화자 세트; 등급=특급; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-023 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6616: ID=SET-023; 세트명=균열감시자 세트; 등급=특급; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-024 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6617: ID=SET-024; 세트명=심연원정대 세트; 등급=특급; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-025 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6618: ID=SET-025; 세트명=황혼기사 세트; 등급=특급; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-026 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6619: ID=SET-026; 세트명=새벽기사 세트; 등급=특급; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-027 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6620: ID=SET-027; 세트명=월광궁수 세트; 등급=특급; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-028 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6621: ID=SET-028; 세트명=별빛마도사 세트; 등급=특급; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-029 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6622: ID=SET-029; 세트명=붉은달광전사 세트; 등급=특급; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-030 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6623: ID=SET-030; 세트명=검은달도적 세트; 등급=특급; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-031 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6624: ID=SET-031; 세트명=왕국근위대 세트; 등급=영웅; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-032 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6625: ID=SET-032; 세트명=자유용병왕 세트; 등급=영웅; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-033 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6626: ID=SET-033; 세트명=대현자 세트; 등급=영웅; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-034 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6627: ID=SET-034; 세트명=성역수호자 세트; 등급=영웅; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-035 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6628: ID=SET-035; 세트명=파멸예언자 세트; 등급=영웅; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-036 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6629: ID=SET-036; 세트명=불사조 세트; 등급=영웅; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-037 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6630: ID=SET-037; 세트명=빙룡 세트; 등급=영웅; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-038 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6631: ID=SET-038; 세트명=폭풍룡 세트; 등급=영웅; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-039 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6632: ID=SET-039; 세트명=대지룡 세트; 등급=영웅; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-040 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6633: ID=SET-040; 세트명=암흑룡 세트; 등급=영웅; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-041 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6634: ID=SET-041; 세트명=성광룡 세트; 등급=영웅; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-042 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6635: ID=SET-042; 세트명=세계수 세트; 등급=영웅; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-043 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6636: ID=SET-043; 세트명=공허추적자 세트; 등급=영웅; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-044 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6637: ID=SET-044; 세트명=시간여행자 세트; 등급=영웅; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-045 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6638: ID=SET-045; 세트명=차원보행자 세트; 등급=영웅; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-046 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6639: ID=SET-046; 세트명=균열봉인자 세트; 등급=전설; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-047 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6640: ID=SET-047; 세트명=정복자 세트; 등급=전설; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-048 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6641: ID=SET-048; 세트명=수호성 세트; 등급=전설; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-049 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6642: ID=SET-049; 세트명=전설영웅 세트; 등급=전설; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-050 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6643: ID=SET-050; 세트명=왕의유산 세트; 등급=전설; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-051 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6644: ID=SET-051; 세트명=여왕의유산 세트; 등급=전설; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-052 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6645: ID=SET-052; 세트명=황제의유산 세트; 등급=전설; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-053 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6646: ID=SET-053; 세트명=고대문명 세트; 등급=전설; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-054 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6647: ID=SET-054; 세트명=잊힌신전 세트; 등급=전설; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-055 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6648: ID=SET-055; 세트명=천공성 세트; 등급=전설; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0138-056 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6649: ID=SET-056; 세트명=지하왕국 세트; 등급=유물; 2세트=공격력 +8%; 3세트=최대 마력 +12%; 4세트=치명타 시 기력 회복; 5세트=보스 대상 피해 20% 증가
+- AR-S0138-057 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6650: ID=SET-057; 세트명=악마공작 세트; 등급=유물; 2세트=마법 위력 +8%; 3세트=최대 기력 +12%; 4세트=마법 사용 시 마력 순환; 5세트=스킬 재사용 대기시간 15% 감소
+- AR-S0138-058 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6651: ID=SET-058; 세트명=악마군주 세트; 등급=유물; 2세트=행동속도 +6%; 3세트=치명타율 +5%; 4세트=적 처치 시 10초 강화; 5세트=전투 시작 15초간 전능 +15%
+- AR-S0138-059 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6652: ID=SET-059; 세트명=마지막용사 세트; 등급=유물; 2세트=상태이상 저항 +10%; 3세트=탐색력 +15%; 4세트=상태이상 대상 추가 피해; 5세트=치명타 시 확률적으로 스킬 즉시 재사용
+- AR-S0138-060 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0138` §138 세트 장비 실제 데이터 60세트 L6653: ID=SET-060; 세트명=귀환자 세트; 등급=신화; 2세트=방어력 +8%; 3세트=최대 생명력 +12%; 4세트=피격 시 보호막; 5세트=생명력 30% 이하 피해 35% 감소
+- AR-S0140-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6763: 데이터=무기; 실제 수록 수량=420
+- AR-S0140-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6764: 데이터=방어구/방패; 실제 수록 수량=480
+- AR-S0140-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6765: 데이터=장신구; 실제 수록 수량=420
+- AR-S0140-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6766: 데이터=소모품/재료; 실제 수록 수량=180
+- AR-S0140-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6767: 데이터=몬스터; 실제 수록 수량=300
+- AR-S0140-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6768: 데이터=장비 접두어; 실제 수록 수량=120
+- AR-S0140-007 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6769: 데이터=장비 접미어; 실제 수록 수량=120
+- AR-S0140-008 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6770: 데이터=몬스터 접두어; 실제 수록 수량=120
+- AR-S0140-009 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6771: 데이터=몬스터 접미어; 실제 수록 수량=120
+- AR-S0140-010 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S0140` §140 카탈로그 수량 요약 L6772: 데이터=세트; 실제 수록 수량=60
+
+## Command/Event 계약
+
+| `FUNC-P1-001` 정적 카탈로그 스키마와 ID 보존 | `tool` | content build 산출물만 | live save.db와 command receipt를 사용하지 않음 |
+
+## 권위 문서
+
+- [Phase 상세](../02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md)
+- [Atomic Assertions](../82_원자_요구사항_및_Assertion_추적표.md)
+- [Command/Event](../84_전체_Command_Event_계약서.md)
+- [Data Dictionary](../81_전체_데이터사전.md)

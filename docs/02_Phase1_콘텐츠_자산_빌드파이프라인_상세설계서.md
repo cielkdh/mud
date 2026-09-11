@@ -1,1570 +1,348 @@
 # Phase 1. 콘텐츠 · 자산 · 빌드파이프라인 상세 설계서
 
-> 버전 v31.1 · 기준원문 v30 · 작성일 2026-09-09
-> 상태: **설계 검토 초안 / 구현 NOT_STARTED / Test NOT_RUN**  
-> 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
+> 상태: 아키텍처/개발 리뷰 반영 기준선 · 구현/테스트 `NOT_STARTED / NOT_RUN`
+> 우선순위: 충돌 시 `84_전체_Command_Event_계약서.md`, 이 문서 1~15절, 관리데이터, 16절 원문 부록 순으로 적용한다.
 
 ## 1. 문서 개요
-원문 카탈로그를 손실 없이 형식화하고 로컬 자산을 검증·배포한다. 기능 설명에서 불명확했던 구현 책임, 입출력, 정합성, 실패 경계, 검증 방법과 인계 조건을 구체화한다. 본문에는 해당 Phase 에 필요한 공통 계약, 메소드, DDL, Task, Test 를 포함한다. 부록에는 담당 원문 108 개 절을 원문 그대로 수록했다.
 
-구현 범위는 아래 4 개 기능 및 담당 원문의 하위 규칙과 카탈로그이다. 다른 Phase 의 핵심 알고리즘 구현, 서버/멀티플레이, 현실시간 기반 방치 진행, 원문에 없는 게임 규칙의 무단 추가는 제외한다. 원문에서 선택 확장으로 제시한 기능도 요구대장에서 유지하며, 활성화 또는 유예 결정과 별개로 연계 설계를 보존한다.
-
-기존 소스가 제공되지 않아 실제 구조에 대한 영향은 확정하지 않았다. 신규 클래스와 테이블은 구현 제안이며, 기존 코드가 확인되면 공통 Interface, DAO, SQL 재사용을 우선한다.
+| 항목 | 내용 |
+|---|---|
+| 목적 | 원문 카탈로그를 검증 가능한 정형 소스로 변환하고, 결정론적 `content.db`와 로컬 자산 manifest를 생성하며, Android에는 읽기 전용 조회·이미지 표시 계약만 제공한다. |
+| 범위 | `FUNC-P1-001`~`FUNC-P1-004`, `P1-TASK-001`~`P1-TASK-021`, `P1-*` Test 27개 |
+| 비범위 | 게임 권위 상태 변경, `WorldSession` 명령, `SavePort`, receipt/event/RNG 기록, 실제 save migration, 편집 가능한 콘텐츠 관리 UI |
+| 소유 산출물 | canonical content source, `content.db`, `content-bundle-manifest.json`, `asset-manifest.json`, machine-readable validation JSON, Markdown summary, 정적 `asset-preview.html` |
+| 다음 Phase 인계 | P3의 `:core:data` 논리 package가 Android read-only `ContentRepository` adapter를 구현하고 P3/P25가 `BindingPlan`을 승인된 migration command로 적용한다. P22는 이미지 Loading/semantics를 소유한다. P1은 save를 쓰지 않는다. |
 
 ## 2. Phase 목표
-완료 후 상태: **원문 ID 수량 일치·필수 참조 0 건 오류·자산 검증 리포트**. 후속 Phase 에는 검증된 DTO/port, 실제 도메인 결과, 세이브 codec/DDL 변경, fixture 와 기준선을 전달한다. 기능 이름만 등록하거나 Fake 성공 응답만 반환하는 상태는 완료로 보지 않는다.
 
-## 3. 선행 조건
-| 선행 Phase | Gate | 전달받는 기능 | 미충족시 차단 Task |
-|---|---|---|---|
-| [Phase 0](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md) | P0-TASK-021 | 원문 우선순위·타입 계약·모듈 경계·빌드 및 최소 테스트를 고정한다. | 미충족이면본 Phase 모든계약 Task 의실제 adapter 통합및제품활성화불가. 검토/Mock UI 는별도표시로가능. |
+1. 현재 원문 추출 카탈로그를 한 번만 검수해 `content/source/catalog-manifest.json` 기반 canonical source로 승격한다.
+2. 입력 순서와 머신에 무관한 검증 결과와 `logicalContentHash`를 만든다.
+3. 한 번의 빌드에 한 콘텐츠 버전만 담긴 새 `content.db`를 staging에서 만든 뒤 원자 발행한다.
+4. 자산 경로·해시·권리정보를 검증하고 Android 런타임에는 로컬 읽기 전용 resolver와 디자이너 검수용 정적 preview만 제공한다.
+5. 구버전 ID 호환은 순수 `BindingPlan`으로 계산하고 적용 책임을 P3/P25에 남긴다.
 
-설정: versioned content/balance/engine-order/visibility/limits profile. DB: 선행 schema 및해당 Phase 신규 codec 이필요하다. 외부시스템: 필수없음. 실제이미지/미완성콘텐츠는검증 fixture 로임시대체가능하나 Full 출시검수와구분한다. 미승인규칙을임의0 값으로채운성공 Fixture 는허용하지않는다.
+## 3. 선행 조건과 착수 Gate
 
-| 결정 ID | 검토 주제 | 상태 | 적용/차단 내용 |
-|---|---|---|---|
-| C09 | PERMANENT 초상 풀까지 전부소진 | 승인·기준선 반영 | 보호키 탈취 금지·일반 공유 후 최후 generic key 명시 배정; 이름 동명이인 허용. |
-| C10 | 퍼센트/%p 및 불완전 효과 데이터 | 승인·기준선 반영 | `RATIO/BASIS_POINT/FLAT` typed effect AST; description-only effect는 임의 수치로 출시하지 않는다. |
-| C13 | 한글 FTS 부분검색/tokenizer | 승인·기준선 반영 | NFC·대소문자·공백 정규화와 결정적 2-gram shadow token table을 기본으로 한다. |
-| C18 | 미제공 이미지·콘텐츠 정의 및수량 | 승인·실물 검증 NOT_RUN | M/W 각 5,000장의 512×640 WebP 고정 풀과 install-time `portraits_v1` pack을 사용한다. 실제 파일/manifest 검수 전 Full·RC는 `BLOCKED_ASSET`이다. |
+- Phase0 Gate 8개 PASS와 독립 리뷰가 완료되어 `P0-TASK-021=DONE`이다. 코드 revision은 `714941d`, 승인·증거 record는 `dacb508`, 재검증 근거는 [`2026-09-11_Phase0_Cancellation_Gate_재검증.md`](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md)다.
+- `FUNC-P1-001`~`FUNC-P1-004`는 `phases.json.active_function_ids`에 등록됐다. 이에 따라 네 기능의 계약 Task만 착수 가능하며 후속 Task는 각 기능의 REQUIRED/DATA 승인 Gate를 별도로 통과해야 한다.
+- 각 `계약` Task는 해당 기능의 REQUIRED/DATA Atomic Assertion을 검토·승인한다. 그 다음 Task는 미승인 REQUIRED/DATA가 0건일 때만 시작한다.
+- 현재 `catalog_rows.json`은 원문 추적용 bootstrap이며 canonical source가 아니다. `P1-TASK-003`에서 검수·변환 후 source manifest가 유일한 빌드 입력이 된다.
+- 실제 10,000개 초상이 없으면 `BLOCKED_ASSET`이다. 소수의 라이선스 명확한 fixture로 `PROTOTYPE_ACCEPTED`까지는 가능하지만 `FULL_CONTENT_READY`나 출시 승인을 주장하지 않는다.
 
-### C18 승인 자산 기준선
+### C18 자산 준비 상태
 
-- 빌드 입력은 `NPC-M-00001..05000.webp`, `NPC-W-00001..05000.webp`의 실제 파일 10,000장이다. 런타임 조합 생성으로 수량을 대체하지 않는다.
-- 파일은 512×640 px, opaque sRGB, 단일 WebP 형식이다. `portraitImageKey`와 pool version이 정체성이며 화면별 crop 파생 파일을 만들지 않는다.
-- 배포는 실행코드가 없는 install-time Play Asset Delivery pack `portraits_v1` 하나를 사용한다. fast-follow/on-demand는 오프라인 첫 실행 계약 때문에 사용하지 않는다.
-- pack 압축 크기 512 MiB 이하, 전체 install-time 압축 크기 768 MiB 이하를 `bundletool`/Play Console 추정치로 검증한다.
-- Full 활성 콘텐츠는 `UNDEFINED_EFFECT`, 깨진 ID/FK/asset 참조, 출처·배포권 미확인 자산이 0건이어야 한다. 미완성 행은 삭제하거나 0으로 채우지 않고 비활성 상태로 남긴다.
-- 실물 파일이 없는 현재 상태는 결정 미완료가 아니라 실행 증거 `NOT_RUN`이다. P1은 resolver/fallback/validator를 구현할 수 있지만 P23 Full 검수와 P25 RC는 통과할 수 없다.
+| 상태 | 의미 | 허용 |
+|---|---|---|
+| `NOT_PROVIDED` | 실물 자산 없음 | 경로/schema 설계만 |
+| `BLOCKED_ASSET` | fixture 검증 가능, 목표 실물 미충족 | Prototype Gate |
+| `PROTOTYPE_ACCEPTED` | fixture의 모든 요청 usage가 exact 또는 승인 fallback으로 resolve되고 unresolved 0, resolver·패키징·메모리·preview 검증 통과 | 기능 개발 |
+| `FULL_CONTENT_READY` | 실물 10,000개와 권리·해시·패키징 검수, entity kind×usage별 unresolved 0 및 승인된 fallback coverage 완료 | P23/P25 Full Gate |
 
-## 4. 기능 범위 및 요구 연결
-| 기능 ID | 기능명 | 중요도 | 선행 기능/Phase | 원문요구/공통근거 |
+## 4. 기능 범위와 권한 분류
+
+| 기능 | kind | 주요 계약 | durable output | 금지 |
 |---|---|---|---|---|
-| FUNC-P1-001 | 정적 카탈로그 스키마와 ID 보존 | 필수핵심 또는 원문 선택 확장 명시검토 | P0 | [§51](#src-0051), [§56](#src-0056), [§118](#src-0118), [§119](#src-0119), [§120](#src-0120), [§128](#src-0128), [§129](#src-0129), [§130](#src-0130) 외 9 개 |
-| FUNC-P1-002 | 콘텐츠 검증·사전 DB 빌드 | 필수핵심 또는 원문 선택 확장 명시검토 | P0 | [§3049](#src-3049), [§3051](#src-3051), [§3076](#src-3076), [§3077](#src-3077), [§3078](#src-3078), [§3117](#src-3117) |
-| FUNC-P1-003 | 로컬 이미지·AssetResolver·크롭 | 필수핵심 또는 원문 선택 확장 명시검토 | P0 | [§2709](#src-2709), [§2710](#src-2710), [§2711](#src-2711), [§2712](#src-2712), [§2713](#src-2713), [§2714](#src-2714), [§2715](#src-2715), [§2716](#src-2716) 외 73 개 |
-| FUNC-P1-004 | 콘텐츠·이미지 버전 교체와 호환 | 필수핵심 또는 원문 선택 확장 명시검토 | P0 | [§2782](#src-2782), [§2783](#src-2783), [§2790](#src-2790), [§2791](#src-2791) |
+| `FUNC-P1-001` | `tool` | `CatalogImporter.import(source, version) -> CatalogDraft` | 없음 | live DB/save 쓰기 |
+| `FUNC-P1-002` | `tool` | `ContentBuilder.build(draft, rules) -> ContentBundle` | build artifact | WorldCommand/receipt/RNG/event |
+| `FUNC-P1-003` | `read` + build tool | `AssetCatalogCompiler.compile(...)` / `ContentRepository` / `AssetResolver.resolve(request)` | content/asset build artifact·정적 preview | 네트워크 URI, key 변경, live write |
+| `FUNC-P1-004` | `compute` | `ContentBinding.resolve(saved, installed) -> BindingPlan` | 없음 | migration 적용, save 수정 |
 
-## 5. 기능별 상세 설계
+P1 전체에는 `CommandEnvelope`, `WorldSession`, `SaveCoordinator`, `DomainEvent`, command receipt, RNG stream이 없다. 임시 build 디렉터리의 파일/SQLite 쓰기는 게임 권위 mutation이 아니라 build artifact 생성이다. `FUNC-P1-004`의 결과를 실제 save에 적용하는 명령은 P3/P25가 소유한다.
 
-### 공통 계약의 적용 범위
-이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
+## 5. 물리 모듈과 Gradle Build Manifest
 
-`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
+`P0-TASK-021=DONE` 뒤 아래 그래프로 한 번에 확장한다. module을 만들기 전에 root의 `verifyPhase0Architecture`를 Phase1 허용 그래프로 갱신해 새 module이 검증을 우회하지 못하게 한다.
 
-게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
+| 모듈 | plugin/책임 | 허용 의존 | 금지 |
+|---|---|---|---|
+| `:core:content` | Kotlin/JVM; ID, AST, validator, `ContentRepository` read contract, `BindingPlan` | Kotlin/JDK 표준 기능 | Android, Room, Coil, 네트워크 |
+| `:tools:content-builder` | Kotlin/JVM application; source 변환, SQLite staging build, report/manifest | `:core:content`, C14에 고정한 bundled SQLite driver | app, simulation, save |
+| `:core:image` | Android library; local resolver와 crop request | `:core:content`, Coil 3.5 local decode | HTTP client, save write |
+| `:core:simulation` | 기존 순수 Kotlin simulation; session용 immutable content snapshot 소비 | `:core:content` | Android, Room, Coil, 네트워크 |
+| `:app` | fixture gallery/smoke entry만 조립 | `:core:image`, `:core:content`, 기존 `:core:simulation` | content 관리 UI, DAO 직접 접근 |
+
+의존 방향은 `:app -> :core:image -> :core:content`, `:app -> :core:simulation -> :core:content`, `:app -> :core:content`, `:tools:content-builder -> :core:content`만 허용한다. 앱의 background session bootstrap이 검증된 `ContentRepository` 조회 결과를 `:core:content`의 immutable `ContentSnapshot`으로 조립해 `WorldSession` 생성자에 한 번 전달하며 simulation은 SQLite·repository·asset을 직접 열지 않는다. 실제 자산이 오기 전 빈 `:asset-pack` module은 만들지 않는다. Play Asset Delivery module/plugin은 실물 pack spike가 시작될 때 C18 증거와 함께 추가한다.
+
+P1에는 Android SQLite adapter용 새 Gradle module을 만들지 않는다. `ContentRepository` interface와 query DTO는 `:core:content`가 소유하고, P1의 Android fixture는 builder가 만든 manifest/index를 읽는다. 실제 `content.db` Android adapter는 P3의 기존 `:core:data` 논리 package가 `:core:save` 안에서 구현하며 독립 build 필요가 입증될 때만 물리 module로 분리한다.
+
+Phase1 Build Spike는 Gradle resolve, Kotlin/JVM compile, Android library compile, content builder 실행, SQLite FK/integrity/semantic audit·sealing·read-only 재오픈과 `CDB-Q01..Q06` query plan, fixture gallery app debug assemble, unit test, release compile을 통과하고 lockfile/명령/출력을 증거로 남긴다.
+
+## 6. 기능 상세 계약
 
 <a id="func-p1-001"></a>
-### 5.1. FUNC-P1-001 — 정적 카탈로그 스키마와 ID 보존
+### 6.1. FUNC-P1-001 — 정적 카탈로그 스키마와 ID 보존
 
-| 항목 | 설계 |
-|---|---|
-| 기능 목적 | 정적 카탈로그 스키마와 ID 보존을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
-| 관련 요구사항 | [§51](#src-0051), [§56](#src-0056), [§118](#src-0118), [§119](#src-0119), [§120](#src-0120), [§128](#src-0128), [§129](#src-0129), [§130](#src-0130), [§131](#src-0131), [§132](#src-0132), [§133](#src-0133), [§134](#src-0134), [§135](#src-0135), [§136](#src-0136), [§137](#src-0137) 외 2 개 |
-| 기능 요구사항 | 1. 원문 카탈로그 ID·한글명·등급·태그·수치·단위를 원본 필드로 유지한다<br>2. 무기420/방어구480/장신구420/아이템180/몬스터300 과 별도 스킬·보스·이벤트 카탈로그를 검증한다<br>3. 설명만 있는 효과는 미정 필드로 기록하고 임의 수치를 실제 원문 값처럼 채우지 않는다<br>4. 잘못된 조사/표기 교정은 displayName override 와 원문명 이력을 별도 관리한다 |
-| 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
-| 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `CatalogImporter.import(source: ContentSource, version: ContentVersion) -> CatalogDraft` |
-| 입력 필드/값 | sourceFile, contentVersion, sourceHash, encoding=UTF-8; 구체적값: WPN-0001 물리19 레벨1 |
-| 반환값 | draftRows[], errors{line,column,id}[]; 정상결과: 원문 ID 와 수치가 content_template 에 일치 |
-| 입력 검증 | 같은 ID 두 행, 서로 다른 효과 → 중복 오류와 두 원문 행번호 반환; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | 참조되지 않는 MON ID 가 loot 에 있음 → 정적 번들 발행 차단; typed DomainError 로상위호출에전달 |
-| Transaction | WorldEngine 의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고, SaveCoordinator 의 단일 write transaction 으로 확정한 뒤 게시한다. 원자적 효과의 중간 성공은 허용하지 않는다. |
-| 상태 변화 | RAW → PARSED → VALIDATED → PUBLISHED |
-| 소유 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
-| 관련 Task | [P1-TASK-001](#p1-task-001) · [P1-TASK-002](#p1-task-002) · [P1-TASK-003](#p1-task-003) · [P1-TASK-004](#p1-task-004) · [P1-TASK-005](#p1-task-005) |
-| 관련 Test | [P1-UT-001](#p1-ut-001) · [P1-BT-001](#p1-bt-001) · [P1-FT-001](#p1-ft-001) · [P1-CT-001](#p1-ct-001) · [P1-IT-001](#p1-it-001) |
-
-#### 처리 순서 및 데이터 흐름
-1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. 원문 카탈로그 ID·한글명·등급·태그·수치·단위를 원본 필드로 유지한다
-3. 무기420/방어구480/장신구420/아이템180/몬스터300 과 별도 스킬·보스·이벤트 카탈로그를 검증한다
-4. 설명만 있는 효과는 미정 필드로 기록하고 임의 수치를 실제 원문 값처럼 채우지 않는다
-5. 잘못된 조사/표기 교정은 displayName override 와 원문명 이력을 별도 관리한다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
-
-입력 `sourceFile, contentVersion, sourceHash, encoding=UTF-8` → `CatalogImporter.import` → 검증된 `draftRows[], errors{line,column,id}[]` → SavePort/영속세대 → PublicProjection/후속 handler.
-
-#### Use Case와 실패 범위
-| 상황 | 처리 |
-|---|---|
-| 정상 | WPN-0001 물리19 레벨1 → 원문 ID 와 수치가 content_template 에 일치 |
-| 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
-| 일부 실패 | 정적 번들 발행 차단 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
-| 비정상 데이터 | 중복 오류와 두 원문 행번호 반환; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
-| 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
-
-#### 객체 및 메소드 책임 분리
-| 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
-|---|---|---|---|
-| CatalogImporter | 신규/기존 adapter | 정적 카탈로그 스키마와 ID 보존 규칙조정자 | CatalogImporter.import(source: ContentSource, version: ContentVersion) -> CatalogDraft |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+- 입력은 manifest에 열거된 UTF-8 canonical source뿐이다. 디렉터리 glob 순서는 사용하지 않는다.
+- `ContentId`는 trim·대소문자 보정 없이 원문 `sourceId`와 byte-for-byte 같은 non-blank NFC 문자열이며 `content_template.id`에 한 번만 저장한다. 진단용 `sourceFile/row`는 source locator이고 런타임 ID나 DB 컬럼이 아니다. 원문 `sourceDisplayName`, 등급, 태그, 수치, 단위를 보존하며 표기 교정은 nullable `displayNameOverride`, effective `displayName`은 `override ?: sourceDisplayName`이다.
+- `ContentKind.v1` 직렬화 코드는 `ACC, ARM, BOS, CHAIN, CTR, DNG-EVT, EPRE, ESUF, EVT, ITM, LEG, MON, MPRE, MSUF, REL, SET, SKL, SPRE, SSUF, WPN`으로 닫는다. `EntityKind.v1`은 runtime fallback 문맥의 `MERCENARY, MONSTER, DUNGEON, ROOM, ITEM, FACILITY`로 닫고 `ContentKind`와 혼용하지 않는다. 코드 추가·이름 변경은 `schemaVersion` 상승과 migration/compatibility fixture 없이는 허용하지 않는다.
+- 설명만 있고 수치가 없는 효과는 `UNRESOLVED`로 남겨 출시 profile에서 거절한다.
+- 중복 ID는 두 source locator를 모두 가진 `DuplicateContentId`로 거절한다.
+- importer는 메모리 `CatalogDraft`와 diagnostics만 반환한다. DB/파일을 발행하지 않는다.
 
 <a id="func-p1-002"></a>
-### 5.2. FUNC-P1-002 — 콘텐츠 검증·사전 DB 빌드
+### 6.2. FUNC-P1-002 — 콘텐츠 검증·사전 DB 빌드
 
-| 항목 | 설계 |
-|---|---|
-| 기능 목적 | 콘텐츠 검증·사전 DB 빌드을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
-| 관련 요구사항 | [§3049](#src-3049), [§3051](#src-3051), [§3076](#src-3076), [§3077](#src-3077), [§3078](#src-3078), [§3117](#src-3117) |
-| 기능 요구사항 | 1. schema/type/range/reference/태그 충돌/레시피 순환을 검사한다<br>2. validation report 에 ERROR/WARN 과 영향 ID 를 남긴다<br>3. content.db 는 임시 디렉터리에서 생성·무결성 검사 후 manifest 와 함께 발행한다<br>4. Prototype/Alpha/Full 은 데이터 profile 만 다르며 최종 Full 목표를 삭제하지 않는다 |
-| 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
-| 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `ContentBuilder.build(draft: CatalogDraft, rules: BuildRules) -> ContentBundle` |
-| 입력 필드/값 | catalogDraft, profile, schemaVersion, balanceVersion; 구체적값: 두 번 동일 소스를 빌드 |
-| 반환값 | content.db, manifest.json, validation-report.json; 정상결과: canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외 |
-| 입력 검증 | 태그 허용과 금지 동시 지정 → ERROR; 합리화하여 자동 수정하지 않음; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | DB 빌드 중 I/O 실패 → 직전 승인 bundle 유지; 절반짜리 bundle 비활성; typed DomainError 로상위호출에전달 |
-| Transaction | WorldEngine 의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고, SaveCoordinator 의 단일 write transaction 으로 확정한 뒤 게시한다. 원자적 효과의 중간 성공은 허용하지 않는다. |
-| 상태 변화 | DRAFT → CHECKED → STAGED → ACTIVE |
-| 소유 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
-| 관련 Task | [P1-TASK-006](#p1-task-006) · [P1-TASK-007](#p1-task-007) · [P1-TASK-008](#p1-task-008) · [P1-TASK-009](#p1-task-009) · [P1-TASK-010](#p1-task-010) |
-| 관련 Test | [P1-UT-002](#p1-ut-002) · [P1-BT-002](#p1-bt-002) · [P1-FT-002](#p1-ft-002) · [P1-CT-002](#p1-ct-002) · [P1-IT-002](#p1-it-002) |
-
-#### 처리 순서 및 데이터 흐름
-1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. schema/type/range/reference/태그 충돌/레시피 순환을 검사한다
-3. validation report 에 ERROR/WARN 과 영향 ID 를 남긴다
-4. content.db 는 임시 디렉터리에서 생성·무결성 검사 후 manifest 와 함께 발행한다
-5. Prototype/Alpha/Full 은 데이터 profile 만 다르며 최종 Full 목표를 삭제하지 않는다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
-
-입력 `catalogDraft, profile, schemaVersion, balanceVersion` → `ContentBuilder.build` → 검증된 `content.db, manifest.json, validation-report.json` → SavePort/영속세대 → PublicProjection/후속 handler.
-
-#### Use Case와 실패 범위
-| 상황 | 처리 |
-|---|---|
-| 정상 | 두 번 동일 소스를 빌드 → canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외 |
-| 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
-| 일부 실패 | 직전 승인 bundle 유지; 절반짜리 bundle 비활성 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
-| 비정상 데이터 | ERROR; 합리화하여 자동 수정하지 않음; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
-| 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
-
-#### 객체 및 메소드 책임 분리
-| 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
-|---|---|---|---|
-| ContentBuilder | 신규/기존 adapter | 콘텐츠 검증·사전 DB 빌드 규칙조정자 | ContentBuilder.build(draft: CatalogDraft, rules: BuildRules) -> ContentBundle |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+- 검사 순서는 schema/type/range/ID/reference/tag/recipe cycle/AST/profile이며 diagnostics는 `severity, code, sourceId, sourceFile, row, field` 순으로 정렬한다.
+- ERROR가 하나라도 있으면 DB 발행을 시작하지 않는다. WARN은 report에 남고 profile별 허용 목록만 통과한다.
+- validation JSON의 각 diagnostic은 `severity, code, messageKey, sourceId, sourceFile, row, column, field, expected, actual`을 가지며 안정 정렬한다. Markdown summary와 `asset-preview.html`은 같은 JSON만 읽어 생성하고 별도 판정 로직을 두지 않는다.
+- `content.db`는 version별 새 파일로 만든다. 기존 `content.db`에 N→N+1 migration을 적용하지 않는다.
+- staging target은 존재하지 않는 새 파일이어야 한다. 파일이나 schema object가 이미 있으면 `STAGING_NOT_EMPTY`로 실패하며 기존 객체를 재사용하지 않는다.
+- staging에 DB와 validation report를 쓰고 FK/integrity/semantic audit, DELETE journal, 전체 resource close, SQLite sidecar 0개와 read-only 재오픈을 통과한 뒤 DB hash를 계산한다. 그 hash로 외부 bundle manifest를 확정·fsync한 다음 staging directory를 immutable `bundles/<bundleId>/`로 옮긴다. 마지막 활성화 지점은 작은 `current.json` 포인터의 atomic replace 한 번이다.
+- 재빌드는 source와 규칙이 같으면 `logicalContentHash`와 정렬된 row 집합이 같아야 한다. wall-clock과 절대경로는 hash에서 제외한다.
 
 <a id="func-p1-003"></a>
-### 5.3. FUNC-P1-003 — 로컬 이미지·AssetResolver·크롭
+### 6.3. FUNC-P1-003 — 정적 콘텐츠 조회·로컬 AssetResolver·크롭
 
-| 항목 | 설계 |
-|---|---|
-| 기능 목적 | 로컬 이미지·AssetResolver·크롭을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
-| 관련 요구사항 | [§2709](#src-2709), [§2710](#src-2710), [§2711](#src-2711), [§2712](#src-2712), [§2713](#src-2713), [§2714](#src-2714), [§2715](#src-2715), [§2716](#src-2716), [§2717](#src-2717), [§2718](#src-2718), [§2719](#src-2719), [§2720](#src-2720), [§2721](#src-2721), [§2722](#src-2722), [§2723](#src-2723) 외 66 개 |
-| 기능 요구사항 | 1. 원문 10,000 장 NPC 파일명과 단일 portraitKey 사용을 유지한다<br>2. domain 에는 Key 만 저장하며 Android URI 조합은 core:image 에서 수행한다<br>3. 사용처별 crop profile 을 적용하고 fallback 이 발생해도 저장된 원래 key 를 바꾸지 않는다<br>4. 네트워크 URI·경로 탈출·임의 파일 접근은 거부하고 실제 자산 미제공 상태는 NOT_PROVIDED 로 기록한다 |
-| 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
-| 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `AssetResolver.resolve(key: AssetKey, usage: ImageUsage) -> LocalAssetRef` |
-| 입력 필드/값 | assetKey, usageType, cropProfile, screenSizePx; 구체적값: NPC-W-03147, BATTLE_TOKEN |
-| 반환값 | localUri, crop, fallbackReason; 원래 key 유지; 정상결과: 동일 파일의 1:1 crop 과 원래 key 유지 |
-| 입력 검증 | 해당 파일 없음 → 여성 generic fallback 표시; NPC identity 불변; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | ../../save.db 를 asset key 로 입력 → InvalidAssetKey; 파일 읽지 않음; typed DomainError 로상위호출에전달 |
-| Transaction | WorldEngine 의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고, SaveCoordinator 의 단일 write transaction 으로 확정한 뒤 게시한다. 원자적 효과의 중간 성공은 허용하지 않는다. |
-| 상태 변화 | RESOLVE → LOCAL/OVERRIDE/FALLBACK |
-| 소유 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
-| 관련 Task | [P1-TASK-011](#p1-task-011) · [P1-TASK-012](#p1-task-012) · [P1-TASK-013](#p1-task-013) · [P1-TASK-014](#p1-task-014) · [P1-TASK-015](#p1-task-015) |
-| 관련 Test | [P1-UT-003](#p1-ut-003) · [P1-BT-003](#p1-bt-003) · [P1-FT-003](#p1-ft-003) · [P1-CT-003](#p1-ct-003) · [P1-IT-003](#p1-it-003) |
-
-#### 처리 순서 및 데이터 흐름
-1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. 원문 10,000 장 NPC 파일명과 단일 portraitKey 사용을 유지한다
-3. domain 에는 Key 만 저장하며 Android URI 조합은 core:image 에서 수행한다
-4. 사용처별 crop profile 을 적용하고 fallback 이 발생해도 저장된 원래 key 를 바꾸지 않는다
-5. 네트워크 URI·경로 탈출·임의 파일 접근은 거부하고 실제 자산 미제공 상태는 NOT_PROVIDED 로 기록한다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
-
-입력 `assetKey, usageType, cropProfile, screenSizePx` → `AssetResolver.resolve` → 검증된 `localUri, crop, fallbackReason; 원래key 유지` → SavePort/영속세대 → PublicProjection/후속 handler.
-
-#### Use Case와 실패 범위
-| 상황 | 처리 |
-|---|---|
-| 정상 | NPC-W-03147, BATTLE_TOKEN → 동일 파일의 1:1 crop 과 원래 key 유지 |
-| 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
-| 일부 실패 | InvalidAssetKey; 파일 읽지 않음 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
-| 비정상 데이터 | 여성 generic fallback 표시; NPC identity 불변; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
-| 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
-
-#### 객체 및 메소드 책임 분리
-| 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
-|---|---|---|---|
-| AssetResolver | 신규/기존 adapter | 로컬 이미지·AssetResolver·크롭 규칙조정자 | AssetResolver.resolve(key: AssetKey, usage: ImageUsage) -> LocalAssetRef |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+- build tool은 `asset-manifest.json`과 파일을 검증해 `asset_image`, `asset_binding`, `asset_fallback` row를 만든다.
+- runtime resolver는 `AssetResolveRequest(bundleId, templateId?, exactAssetKeys, entityKind, usage, fallbackContext, targetPx, qualityMode)`를 받아 `ResolvedAsset.Exact`, `ResolvedAsset.Fallback(reason)`, `ResolvedAsset.SkippedByQualityMode` 또는 typed failure를 반환할 뿐 저장된 portrait key를 바꾸지 않는다. `templateId`가 있으면 resolver가 `findAssetBindings(templateId, usage)`를 호출하고, 없으면 binding 조회를 생략한다. 후보는 호출자가 준 instance override/default `exactAssetKeys` 뒤에 template binding을 priority 순으로 붙여 첫 등장 assetId만 유지한다. `category`와 `cropProfile`은 `ImageUsage`에서 유일하게 파생하며 request/source/`asset_binding`/`asset_fallback`에 중복 저장하지 않는다. `exactAssetKeys`는 override부터 기본 key까지 순서가 고정된 중복 없는 목록이며, 대화는 `[moodOverride?, portraitImageKey]`, 전투는 `[battleOverride?, portraitImageKey]`, 그 외 용병 화면은 `[portraitImageKey]`를 사용한다. fallback context는 공개 가능한 sex/class/family/region/roomTheme/itemType/facilityCategory만 허용하며 잠재력·숨은 stat은 금지한다.
+- `ContentRepository`는 정적 콘텐츠와 자산에 실제 필요한 blocking read 6개만 제공한다: `findTemplate(templateId: ContentId): ContentTemplate?`, `listTemplates(kind: ContentKind): List<ContentTemplate>`, `findAlias(oldId: ContentId): ContentAlias?`, `findAssetBindings(templateId: ContentId, usage: ImageUsage): List<AssetBinding>`, `findAsset(assetId: AssetId): AssetImage?`, `listAssetFallbacks(usage: ImageUsage): List<AssetFallback>`. template 목록은 `id`, binding은 unique priority, fallback은 이 문서의 entity kind/usage별 matcher 순위 뒤 unique priority로 안정 정렬한다. alias는 terminal 한 hop/TOMBSTONE 한 건만 반환하고 재귀 조회하지 않는다. 미존재는 단건 null/목록 empty이며 지원하지 않는 `definitionVersion`, JSON decode 실패, DB·manifest 손상과 bundle 불일치는 `IncompatibleContent`다.
+- repository instance는 검증된 `InstalledBundle` 하나에 고정된 `AutoCloseable`이다. session owner 하나가 background에서 열고 공유하며, child job 취소·join 뒤 정확히 한 번 close한다. OPEN 동안 동시 read는 허용하고 각 호출은 자체 cursor/statement를 사용한다. `close()`는 idempotent이고 owner 규칙을 어긴 read/close 경합은 새 read를 거절한 뒤 이미 시작한 read가 끝날 때까지 기다리며, close 완료 뒤 조회는 `IncompatibleContent(ContentRepositoryClosed)`다. 이 blocking read는 Main thread에서 호출할 수 없고 범용 CRUD·live write API는 만들지 않는다.
+- Android URI 조합과 Coil request는 `:core:image`에만 있다. decode/file I/O는 Main thread 밖에서 수행하고 호출 scope 취소를 따른다. 별도 cache 구현은 만들지 않고 bounded Coil memory cache를 사용한다.
+- build-time required binding/file 누락은 발행을 차단한다. 발행 후 파일 누락·decode 손상은 fallback과 WARN으로 격리해 게임 진행을 막지 않는다. `content.db`/manifest 무결성 실패만 `INCOMPATIBLE_CONTENT`로 Blocked 처리한다. 네트워크 URI와 root 밖 경로는 항상 `InvalidAssetPath`다.
+- P1 결과에는 사람용 label을 넣지 않는다. P22가 공개된 이름/상태로 `contentDescription`을 생성하며 파일명·assetId는 읽지 않는다. 로딩 중 placeholder는 P22 UI 상태이고 P1 fallback과 구분한다.
 
 <a id="func-p1-004"></a>
-### 5.4. FUNC-P1-004 — 콘텐츠·이미지 버전 교체와 호환
+### 6.4. FUNC-P1-004 — 콘텐츠·이미지 버전 교체와 호환
 
-| 항목 | 설계 |
-|---|---|
-| 기능 목적 | 콘텐츠·이미지 버전 교체와 호환을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
-| 관련 요구사항 | [§2782](#src-2782), [§2783](#src-2783), [§2790](#src-2790), [§2791](#src-2791) |
-| 기능 요구사항 | 1. save contentVersion 과 생성기/밸런스/RNG 버전을 별도로 저장한다<br>2. 삭제 ID 는 alias 또는 legacy snapshot 으로 복구하며 의미가 다른 템플릿으로 자동 치환하지 않는다<br>3. 자산팩 변경은 파일 checksum 만 새로 계산하고 NPC 의 portrait key 는 그대로 유지한다<br>4. 선택 자산팩/표정 variant 는 선택 범위로 추적하되 기본 오프라인 플레이를 막지 않는다 |
-| 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
-| 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `ContentBinding.resolve(saved: ContentBinding, installed: ContentBundle) -> BindingPlan` |
-| 입력 필드/값 | saveContentVersion, installedManifest, aliasMap, legacyTemplates; 구체적값: 옛 ID alias OLD-WPN→WPN-0001 |
-| 반환값 | BoundContent 또는 IncompatibleContent{missingIds}; 정상결과: 변환 이력과 이전 ID 보존 |
-| 입력 검증 | 선택 이미지 팩 비활성 → 기본 portrait/fallback 으로 정상 표시; required ID/enum/범위/상태/version 은변경 전에검사 |
-| 예외 계약 | 필수 스킬 ID 에 alias/legacy 없음 → 로드 차단·원본 세이브 보존; typed DomainError 로상위호출에전달 |
-| Transaction | WorldEngine 의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고, SaveCoordinator 의 단일 write transaction 으로 확정한 뒤 게시한다. 원자적 효과의 중간 성공은 허용하지 않는다. |
-| 상태 변화 | BOUND → COMPATIBLE/MIGRATION_REQUIRED/UNSUPPORTED |
-| 소유 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
-| 관련 Task | [P1-TASK-016](#p1-task-016) · [P1-TASK-017](#p1-task-017) · [P1-TASK-018](#p1-task-018) · [P1-TASK-019](#p1-task-019) · [P1-TASK-020](#p1-task-020) |
-| 관련 Test | [P1-UT-004](#p1-ut-004) · [P1-BT-004](#p1-bt-004) · [P1-FT-004](#p1-ft-004) · [P1-CT-004](#p1-ct-004) · [P1-IT-004](#p1-it-004) |
+- 입력: save의 `contentVersion, balanceVersion, logicalContentHash, generatorVersion, rngVersion`, 설치 bundle manifest, alias map, legacy snapshot index.
+- 출력: `Compatible`, `MigrationRequired(steps)`, `Unsupported(missingIds)` 중 하나인 immutable `BindingPlan`.
+- resolver는 순수 계산이다. 파일·DB·save를 쓰지 않고 같은 입력에 같은 plan을 반환한다.
+- save 호환성의 콘텐츠 identity는 `logicalContentHash`다. 자산만 바뀌어 `bundleId`/`assetManifestSha256`가 달라도 logical hash가 같으면 `Compatible`이며, logical hash가 다를 때만 ID/alias/legacy 검사를 수행한다. `artifactFileSha256`와 `bundleId`는 설치 무결성 값이지 save 호환성 값이 아니다.
+- P3 `content_binding.logical_content_hash`가 이 값을 저장한다. 과거 모호한 `source_bundle_hash` 이름은 사용하지 않는다.
+- 의미가 다른 template으로 자동 대체하지 않는다. 필수 ID가 alias/legacy에 없으면 `Unsupported`이며 원본 save는 그대로 둔다.
+- P3/P25의 별도 승인 command만 plan을 적용하고 migration history를 기록한다.
 
-#### 처리 순서 및 데이터 흐름
-1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. save contentVersion 과 생성기/밸런스/RNG 버전을 별도로 저장한다
-3. 삭제 ID 는 alias 또는 legacy snapshot 으로 복구하며 의미가 다른 템플릿으로 자동 치환하지 않는다
-4. 자산팩 변경은 파일 checksum 만 새로 계산하고 NPC 의 portrait key 는 그대로 유지한다
-5. 선택 자산팩/표정 variant 는 선택 범위로 추적하되 기본 오프라인 플레이를 막지 않는다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
+## 7. Canonical source·hash·버전 계약
 
-입력 `saveContentVersion, installedManifest, aliasMap, legacyTemplates` → `ContentBinding.resolve` → 검증된 `BoundContent 또는 IncompatibleContent{missingIds}` → SavePort/영속세대 → PublicProjection/후속 handler.
+### 7.1. source layout
 
-#### Use Case와 실패 범위
-| 상황 | 처리 |
-|---|---|
-| 정상 | 옛 ID alias OLD-WPN→WPN-0001 → 변환 이력과 이전 ID 보존 |
-| 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
-| 일부 실패 | 로드 차단·원본 세이브 보존 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
-| 비정상 데이터 | 기본 portrait/fallback 으로 정상 표시; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
-| 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
+`content/source/catalog-manifest.json`이 파일 목록과 순서를 소유한다. 각 entry는 `path, kind, schemaVersion, exactFileSha256, rowCount`를 가진다. 데이터 파일은 UTF-8/NFC CSV 또는 versioned JSON AST이며 manifest에 없는 파일은 빌드 입력이 아니다. 절대경로, 수정시각, OS directory order는 결과에 영향을 주지 않는다. build input 상한은 파일당 64MiB·100,000행, 전체 1,000,000행이며 읽기 전에 크기를, parse 중 행 수를 검사해 `SOURCE_INVALID`로 중단한다.
 
-#### 객체 및 메소드 책임 분리
-| 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
-|---|---|---|---|
-| ContentBinding | 신규/기존 adapter | 콘텐츠·이미지 버전 교체와 호환 규칙조정자 | ContentBinding.resolve(saved: ContentBinding, installed: ContentBundle) -> BindingPlan |
-| 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+`CSV dialect v1`은 UTF-8 BOM 선택 허용, comma delimiter, RFC 4180 double-quote escape, CRLF/LF 허용, header 이름·순서 schema 고정, 빈 unquoted field=`null`, quoted empty=`""`, field 외곽 공백 보존, 10진 정수 ASCII 표기만 허용으로 고정한다. 중복/미지 header, 열 수 불일치, locale 숫자, 잘못 닫힌 quote는 오류다. JSON v1은 duplicate key·미지 field·NaN/Infinity를 거절하고 key 순서는 의미에 영향을 주지 않는다. dialect 변경은 `schemaVersion`을 올린다.
 
+### 7.2. 세 종류의 hash
 
-### Phase 특화 알고리즘·수치·판단
-
-각기능의처리순서와입출력계약을기준으로구현한다. 자세한유형별원문정의/수치/카탈로그는문서끝에모두수록했다. 이 Phase 에서새로제안한정책은결정대장의승인상태를따른다.
-
-## 6. DB 상세 설계
-
-다음은 **신규 제안 스키마**다. 실제 기존 DB 가 제공되지 않아 기존 컬럼 변경 사실을 가정하지 않는다. 실제 구현에서는 Room Entity/DAO 와 export 된 schema 를 기준으로 N→N+1 migration 을 작성한다. 아래 CREATE 예시는 **완성 스키마 계약**이며 기존 DB migration 을 IF NOT EXISTS 로 대체하지 않는다.
-
-| 논리/물리 객체 | 저장영역 | 최초 계약 Phase | 접근 | PK/유일조건 | 조회 Index |
-|---|---|---|---|---|---|
-| asset_binding | content.db(빌드후읽기전용) | P1 | staging INSERT/검증; 활성 content.db 직접수정 금지 | entity_kind,template_id,usage_type,priority | asset_id |
-| asset_fallback | content.db(빌드후읽기전용) | P1 | staging INSERT/검증; 활성 content.db 직접수정 금지 | category,matcher,priority | asset_id |
-| asset_image | content.db(빌드후읽기전용) | P1 | staging INSERT/검증; 활성 content.db 직접수정 금지 | relative_path | category |
-| content_alias | content.db(빌드후읽기전용) | P1 | staging INSERT/검증; 활성 content.db 직접수정 금지 | old_id | PK/UNIQUE |
-| content_manifest | content.db(빌드후읽기전용) | P1 | staging INSERT/검증; 활성 content.db 직접수정 금지 | content_version | profile |
-| content_template | content.db(빌드후읽기전용) | P1 | staging INSERT/검증; 활성 content.db 직접수정 금지 | source_id | kind,grade, display_name |
-
-모든일반 SQL 테이블은 `id TEXT NOT NULL PRIMARY KEY`, `row_version INTEGER NOT NULL DEFAULT 0`을공통필드로갖는다. nullable 는 DDL 에 NOT NULL 없는필드만이다. 단위는 `_minute`게임분/`_ms`밀리초/`_bp`0.01%p/`_ppm`0.0001%p,금액/수량 Long 정수. ID 는재사용하지않는다.
-
-#### `asset_binding` 필드 및 관계
-
-| 필드/제약 | 용도 |
-|---|---|
-| entity_kind TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| template_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| usage_type TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| crop_profile TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| priority INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-#### `asset_fallback` 필드 및 관계
-
-| 필드/제약 | 용도 |
-|---|---|
-| category TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| matcher TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| priority INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-#### `asset_image` 필드 및 관계
-
-| 필드/제약 | 용도 |
-|---|---|
-| relative_path TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| category TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| width INTEGER NOT NULL CHECK(width>0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| height INTEGER NOT NULL CHECK(height>0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| byte_size INTEGER NOT NULL CHECK(byte_size>=0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| sha256 TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| pool_version TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-#### `content_alias` 필드 및 관계
-
-| 필드/제약 | 용도 |
-|---|---|
-| old_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| new_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| policy TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| reason TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-#### `content_manifest` 필드 및 관계
-
-| 필드/제약 | 용도 |
-|---|---|
-| content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| balance_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| schema_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| source_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| bundle_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| profile TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-#### `content_template` 필드 및 관계
-
-| 필드/제약 | 용도 |
-|---|---|
-| kind TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| source_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| display_name TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| grade TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| min_level INTEGER | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| tags_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| definition_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| definition_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-
-definition_json 은 아래 타입별 스키마를 통과한 AST. 미정 필드는 출시 활성화 불가.
-
-### FK·대량처리·Lock·Isolation
-권위관계는선언된 FK/UNIQUE 와명령불변식을함께사용한다. polymorphic owner/subject/contentId 는 cross-DB FK 를만들지않고 ReferenceValidator 로검사한다. 가족/역사/증표/유일물품은 ON DELETE RESTRICT/보존요약으로보호한다. FK 다형성검사를 DB 가자동보장한다고가정하지않는다.
-
-읽기는 WAL snapshot,쓰기는단일 writer 짧은 transaction 이다. SQLite 에 SELECT FOR UPDATE 를사용하지않는다. stale version 의 affectedRows=0 은 Conflict,SQLITE_BUSY 는제한재시도,손상/공간부족은안전정지다. 외부파일/콘텐츠다른 DB 접근은 transaction 전에끝낸다. 대량입출력은1batch 최대500 행/1 청크최대1MiB(보완설정)로시작하되 **한 의미적 작업을 원자적이지 않게 쪼개지 않는다**. 큰작업은 staging→검증→짧은 pointer 승격으로원자성을유지한다.
-
-Index 는조회조건/정렬을기준으로추가하고 EXPLAIN QUERY PLAN 과쓰기공수/파일크기를측정한다. 삭제는이 Phase 에서소유한종료/취소/GC 대상만가능하며전체테이블 DELETE 를일상정리로사용하지않는다.
-
-### 관련 DDL 계약
-content.db 와 save.db 는**별도로**생성하며 cross-DB JOIN/transaction 을하지않는다. 아래구문은각각해당 DB 에서실행한다. 부모 FK 테이블은선행 Phase 의완료스키마가제공해야한다. 전체초기 schema 는공통부록 SQL 에있다.
-
-**content.db**
-```sql
--- 제안 DDL; 실제 Room 생성 schema와 검토 후 동기화.
-PRAGMA foreign_keys=ON;
-
-CREATE TABLE IF NOT EXISTS asset_binding (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  entity_kind TEXT NOT NULL,
-  template_id TEXT NOT NULL,
-  usage_type TEXT NOT NULL,
-  asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT,
-  crop_profile TEXT NOT NULL,
-  priority INTEGER NOT NULL,
-  UNIQUE(entity_kind,template_id,usage_type,priority)
-);
-CREATE INDEX IF NOT EXISTS ix_asset_binding_1 ON asset_binding(asset_id);
-
-CREATE TABLE IF NOT EXISTS asset_fallback (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  category TEXT NOT NULL,
-  matcher TEXT NOT NULL,
-  asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT,
-  priority INTEGER NOT NULL,
-  UNIQUE(category,matcher,priority)
-);
-CREATE INDEX IF NOT EXISTS ix_asset_fallback_1 ON asset_fallback(asset_id);
-
-CREATE TABLE IF NOT EXISTS asset_image (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  relative_path TEXT NOT NULL,
-  category TEXT NOT NULL,
-  width INTEGER NOT NULL CHECK(width>0),
-  height INTEGER NOT NULL CHECK(height>0),
-  byte_size INTEGER NOT NULL CHECK(byte_size>=0),
-  sha256 TEXT NOT NULL,
-  pool_version TEXT,
-  UNIQUE(relative_path)
-);
-CREATE INDEX IF NOT EXISTS ix_asset_image_1 ON asset_image(category);
-
-CREATE TABLE IF NOT EXISTS content_alias (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  old_id TEXT NOT NULL,
-  new_id TEXT,
-  policy TEXT NOT NULL,
-  reason TEXT NOT NULL,
-  UNIQUE(old_id)
-);
-
-CREATE TABLE IF NOT EXISTS content_manifest (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  content_version TEXT NOT NULL,
-  balance_version TEXT NOT NULL,
-  schema_version INTEGER NOT NULL,
-  source_hash TEXT NOT NULL,
-  bundle_hash TEXT NOT NULL,
-  profile TEXT NOT NULL,
-  UNIQUE(content_version)
-);
-CREATE INDEX IF NOT EXISTS ix_content_manifest_1 ON content_manifest(profile);
-
-CREATE TABLE IF NOT EXISTS content_template (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  kind TEXT NOT NULL,
-  source_id TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  grade TEXT,
-  min_level INTEGER,
-  tags_json TEXT NOT NULL,
-  definition_json TEXT NOT NULL,
-  definition_version INTEGER NOT NULL,
-  UNIQUE(source_id)
-);
-CREATE INDEX IF NOT EXISTS ix_content_template_1 ON content_template(kind,grade);
-CREATE INDEX IF NOT EXISTS ix_content_template_2 ON content_template(display_name);
-```
-
-## 7. Transaction / 동시성 / Thread 설계
-
-| 관점 | 이 Phase 의 구현 기준 |
-|---|---|
-| Transaction 시작/종료 | WorldEngine/UseCase 가불변 Delta 계산완료 후 SaveCoordinator 진입. 실제 Roomwrite 시작→변경행/receipt/RNG/event/manifest→검증→commit. compute/read/tool 은 live transaction 해당없음. |
-| Rollback | 필수입력/FK/버전/금액/소유권/일정/메소드예외,affectedRows 예상불일치면해당 semantic 작업전부 rollback.이미게시된 UI 값으로 DB 복구하지않음. |
-| 부분 실패 | 하나의거래/강화/승계/보상은부분성공없음. 서로독립정비항목/검증 case/선택 background 활동만항목 receipt 로부분결과를허용. |
-| 동시 처리/중복 | UI 연속탭·시간경계·NPC 명령이같은 data 를건드려도단일 writer 로직렬화. epoch/version/unique receipt 로재기동중복차단. |
-| 여러 노드 | 오프라인싱글:해당없음. 분산 lock/서버 leader election/remoteDB 를신설하지않음. |
-| Thread 생성 주체 | Application 이인프라 scope, WorldSessionFactory 가세션 scope/전용직렬 dispatcher 를소유. CPU 계산 Default/전용 dispatcher, DB/파일 IO 는 IO/context 를사용. Main 은 UI 만. |
-| Daemon/Pool | 직접 Java daemon Thread 를게임수명보장으로사용하지않음. 고정·제한 dispatcher/pool 만허용. NPC/이벤트마다 Thread 생성금지. daemon 여부에무관하게구조화 scope 종료를검증. |
-| 생명주기/종료 | OPEN→PAUSING→PAUSED→CLOSING→CLOSED.새명령차단→안전경계→commit drain→child job 취소/join→connection/handle 닫기. 프로세스 kill 은콜백없음을가정. |
-| Exception 처리 | CancellationException 전파. 예상 DomainError 는 typed 결과,Invariant 오류는안전정지,장식/파생 consumer 오류는격리. 일반 catch 에서실패를성공으로변환하지않음. |
-| 메모리/누수 | Domain 에 Context/Bitmap/ViewModel 참조금지.세션폐기후 observer/job/callback/파일 FD 잔존0.캐시최대 size 와 in-flight 작업한도 profile 필수. |
-
-## 8. 예외 처리·장애 격리
-
-| 예외 상황 | 시스템 동작 | 로그 | 재시도 | 기존 기능 영향 |
-|---|---|---|---|---|
-| DB 조회/쓰기실패 | 권위명령 commit 중단·최신정상세대보존 | ERROR code/epoch/version/command | busy 만제한;IO/손상은복구 | 이미완료한진행보존·새권위변경정지 |
-| 대상없음/NULL | Empty/NotFound/InvalidInput;임의타깃대체없음 | INFO 또는 WARN·targetId | 사용자재선택 | 다른대상무변경 |
-| 잘못된 상태/version | Conflict/StateNotAllowed | WARN before/expected | 새 snapshot 으로재확인 | 중복소모0 |
-| Timeout/작업취소 | 미 commitdelta 폐기·불명확 commit 은 receipt 조회 | WARN timeout/cancel | 동일 ID 로결과확인 | 기존세대유지 |
-| dispatcher/pool 초기화실패 | 세션시작실패화면;새명령접수안함 | ERROR lifecycle | 환경복구후명시재시작 | 기존파일/세이브무손상 |
-| Runtime/불변식오류 | 핵심 상태안전정지·재현 snapshot | ERROR first failure seed/버전 | 자동무한재시도금지 | 손상확대방지 |
-| 중복명령 | 기존 receipt 반환/키재사용오류 | INFO duplicate key | 추가실행없음 | 정상결과보존 |
-| 부분 batch 실패 | 성공항목 receipt 유지·실패항목만재검토 | WARN item status 목록 | 정책상명시재시도 | 핵심원자작업분할금지 |
-| 프로세스종료 | 마지막 COMMITTED 전체 snapshot 복구 | 재실행 RECOVERY 이력 | 로드시 checksum 검증 | 시간/RNG 섞지않음 |
-| 이미지/뉴스/검색파생실패 | fallback/재구축/집계중표시 | WARN component 범위 | 제한재로딩 | 핵심전투/금화/저장흐름계속 |
-
-## 9. 세부 구현 Task
-
-각 Task 는작은 PR 를의도하지만코드확인 후3 집중인일을넘을것으로예상되면하위 Task 로분해한다.별도후속작업을숨겨완료로표시하지않는다.현재전 Task 는 NOT_STARTED 이며실제대상파일/PR/담당자는착수시입력한다.
-
-<a id="p1-task-001"></a>
-### P1-TASK-001 — 정적 카탈로그 스키마와 ID 보존 — 계약·Fixture
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-001 |
-| 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | CatalogImporter.import(source: ContentSource, version: ContentVersion) -> CatalogDraft 의 DTO/오류/불변식 정의. 입력 sourceFile, contentVersion, sourceHash, encoding=UTF-8. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P0-TASK-021 |
-| 후속 Task | P1-TASK-002, P1-TASK-003, P1-TASK-004 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-002"></a>
-### P1-TASK-002 — 정적 카탈로그 스키마와 ID 보존 — 핵심 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-002 |
-| 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 원문 카탈로그 ID·한글명·등급·태그·수치·단위를 원본 필드로 유지한다; 무기420/방어구480/장신구420/아이템180/몬스터300 과 별도 스킬·보스·이벤트 카탈로그를 검증한다; 설명만 있는 효과는 미정 필드로 기록하고 임의 수치를 실제 원문 값처럼 채우지 않는다; 잘못된 조사/표기 교정은 displayName override 와 원문명 이력을 별도 관리한다. 정해진 입력에서는 '원문 ID 와 수치가 content_template 에 일치'을 만족해야 한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-001 |
-| 후속 Task | P1-TASK-005 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
-| Test | P1-UT-001, P1-BT-001, P1-FT-001 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-003"></a>
-### P1-TASK-003 — 정적 카탈로그 스키마와 ID 보존 — 저장·연계
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-003 |
-| 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 content_manifest, content_template, content_alias. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-001 |
-| 후속 Task | P1-TASK-005 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P1-CT-001, P1-IT-001 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-004"></a>
-### P1-TASK-004 — 정적 카탈로그 스키마와 ID 보존 — UI·호출 경로
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-004 |
-| 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-001 |
-| 후속 Task | P1-TASK-005 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-CT-001, P1-IT-001 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-005"></a>
-### P1-TASK-005 — 정적 카탈로그 스키마와 ID 보존 — Test·리뷰
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-005 |
-| 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-002, P1-TASK-003, P1-TASK-004 |
-| 후속 Task | P1-TASK-021 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | QA/리뷰어 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 |
-| 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-006"></a>
-### P1-TASK-006 — 콘텐츠 검증·사전 DB 빌드 — 계약·Fixture
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-006 |
-| 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ContentBuilder.build(draft: CatalogDraft, rules: BuildRules) -> ContentBundle 의 DTO/오류/불변식 정의. 입력 catalogDraft, profile, schemaVersion, balanceVersion. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P0-TASK-021 |
-| 후속 Task | P1-TASK-007, P1-TASK-008, P1-TASK-009 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-007"></a>
-### P1-TASK-007 — 콘텐츠 검증·사전 DB 빌드 — 핵심 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-007 |
-| 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | schema/type/range/reference/태그 충돌/레시피 순환을 검사한다; validation report 에 ERROR/WARN 과 영향 ID 를 남긴다; content.db 는 임시 디렉터리에서 생성·무결성 검사 후 manifest 와 함께 발행한다; Prototype/Alpha/Full 은 데이터 profile 만 다르며 최종 Full 목표를 삭제하지 않는다. 정해진 입력에서는 'canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외'을 만족해야 한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-006 |
-| 후속 Task | P1-TASK-010 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
-| Test | P1-UT-002, P1-BT-002, P1-FT-002 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-008"></a>
-### P1-TASK-008 — 콘텐츠 검증·사전 DB 빌드 — 저장·연계
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-008 |
-| 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 content_manifest, content_template, content_alias. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-006 |
-| 후속 Task | P1-TASK-010 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P1-CT-002, P1-IT-002 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-009"></a>
-### P1-TASK-009 — 콘텐츠 검증·사전 DB 빌드 — UI·호출 경로
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-009 |
-| 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-006 |
-| 후속 Task | P1-TASK-010 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-CT-002, P1-IT-002 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-010"></a>
-### P1-TASK-010 — 콘텐츠 검증·사전 DB 빌드 — Test·리뷰
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-010 |
-| 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_template, content_alias; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-007, P1-TASK-008, P1-TASK-009 |
-| 후속 Task | P1-TASK-021 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | QA/리뷰어 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 |
-| 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-011"></a>
-### P1-TASK-011 — 로컬 이미지·AssetResolver·크롭 — 계약·Fixture
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-011 |
-| 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | AssetResolver.resolve(key: AssetKey, usage: ImageUsage) -> LocalAssetRef 의 DTO/오류/불변식 정의. 입력 assetKey, usageType, cropProfile, screenSizePx. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | asset_image, asset_binding, asset_fallback; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P0-TASK-021 |
-| 후속 Task | P1-TASK-012, P1-TASK-013, P1-TASK-014 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-012"></a>
-### P1-TASK-012 — 로컬 이미지·AssetResolver·크롭 — 핵심 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-012 |
-| 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 원문 10,000 장 NPC 파일명과 단일 portraitKey 사용을 유지한다; domain 에는 Key 만 저장하며 Android URI 조합은 core:image 에서 수행한다; 사용처별 crop profile 을 적용하고 fallback 이 발생해도 저장된 원래 key 를 바꾸지 않는다; 네트워크 URI·경로 탈출·임의 파일 접근은 거부하고 실제 자산 미제공 상태는 NOT_PROVIDED 로 기록한다. 정해진 입력에서는 '동일 파일의 1:1 crop 과 원래 key 유지'을 만족해야 한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | asset_image, asset_binding, asset_fallback; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-011 |
-| 후속 Task | P1-TASK-015 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
-| Test | P1-UT-003, P1-BT-003, P1-FT-003 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-013"></a>
-### P1-TASK-013 — 로컬 이미지·AssetResolver·크롭 — 저장·연계
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-013 |
-| 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 asset_image, asset_binding, asset_fallback. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | asset_image, asset_binding, asset_fallback; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-011 |
-| 후속 Task | P1-TASK-015 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P1-CT-003, P1-IT-003 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-014"></a>
-### P1-TASK-014 — 로컬 이미지·AssetResolver·크롭 — UI·호출 경로
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-014 |
-| 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | asset_image, asset_binding, asset_fallback; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-011 |
-| 후속 Task | P1-TASK-015 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-CT-003, P1-IT-003 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-015"></a>
-### P1-TASK-015 — 로컬 이미지·AssetResolver·크롭 — Test·리뷰
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-015 |
-| 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | asset_image, asset_binding, asset_fallback; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-012, P1-TASK-013, P1-TASK-014 |
-| 후속 Task | P1-TASK-021 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | QA/리뷰어 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 |
-| 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-016"></a>
-### P1-TASK-016 — 콘텐츠·이미지 버전 교체와 호환 — 계약·Fixture
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-016 |
-| 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ContentBinding.resolve(saved: ContentBinding, installed: ContentBundle) -> BindingPlan 의 DTO/오류/불변식 정의. 입력 saveContentVersion, installedManifest, aliasMap, legacyTemplates. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_alias, asset_image; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P0-TASK-021 |
-| 후속 Task | P1-TASK-017, P1-TASK-018, P1-TASK-019 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 |
-| 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-017"></a>
-### P1-TASK-017 — 콘텐츠·이미지 버전 교체와 호환 — 핵심 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-017 |
-| 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | save contentVersion 과 생성기/밸런스/RNG 버전을 별도로 저장한다; 삭제 ID 는 alias 또는 legacy snapshot 으로 복구하며 의미가 다른 템플릿으로 자동 치환하지 않는다; 자산팩 변경은 파일 checksum 만 새로 계산하고 NPC 의 portrait key 는 그대로 유지한다; 선택 자산팩/표정 variant 는 선택 범위로 추적하되 기본 오프라인 플레이를 막지 않는다. 정해진 입력에서는 '변환 이력과 이전 ID 보존'을 만족해야 한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_alias, asset_image; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-016 |
-| 후속 Task | P1-TASK-020 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
-| Test | P1-UT-004, P1-BT-004, P1-FT-004 |
-| 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-018"></a>
-### P1-TASK-018 — 콘텐츠·이미지 버전 교체와 호환 — 저장·연계
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-018 |
-| 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 content_manifest, content_alias, asset_image. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_alias, asset_image; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-016 |
-| 후속 Task | P1-TASK-020 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P1-CT-004, P1-IT-004 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-019"></a>
-### P1-TASK-019 — 콘텐츠·이미지 버전 교체와 호환 — UI·호출 경로
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-019 |
-| 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_alias, asset_image; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-016 |
-| 후속 Task | P1-TASK-020 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-CT-004, P1-IT-004 |
-| 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-020"></a>
-### P1-TASK-020 — 콘텐츠·이미지 버전 교체와 호환 — Test·리뷰
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-020 |
-| 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | content_manifest, content_alias, asset_image; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.func_p1_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-017, P1-TASK-018, P1-TASK-019 |
-| 후속 Task | P1-TASK-021 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | QA/리뷰어 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 |
-| 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-<a id="p1-task-021"></a>
-### P1-TASK-021 — Phase 1 통합 검증·인계 Gate
-
-| 항목 | 설계 |
-|---|---|
-| Task ID | P1-TASK-021 |
-| 목적 | Gate 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 원문 ID 수량 일치·필수 참조 0 건 오류·자산 검증 리포트; 기능별리뷰/예외/회귀/세이브호환/후속 port 확인. 미승인설계 보완안은해당기능구현활성화를차단하고상태를은폐하지않는다. |
-| 대상 모듈 | :core:content / :core:image / tools:content-builder |
-| 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
-| 설정 변경 | config.phase_1 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
-| 선행 Task | P1-TASK-005, P1-TASK-010, P1-TASK-015, P1-TASK-020 |
-| 후속 Task | P3-TASK-001, P3-TASK-006, P3-TASK-011, P3-TASK-016, P3-TASK-021, P3-TASK-026, P4-TASK-001, P4-TASK-006, P4-TASK-011, P4-TASK-016, P4-TASK-021, P5-TASK-001, P5-TASK-006, P5-TASK-011, P5-TASK-016, P7-TASK-001, P7-TASK-006, P7-TASK-011, P7-TASK-016, P8-TASK-001, P8-TASK-006, P8-TASK-011, P8-TASK-016, P23-TASK-109, P23-TASK-111 |
-| 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
-| 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C09, C10, C13, C18 |
-| 현재 차단/상태 | NOT_STARTED |
-| 담당 역할/담당자 | QA/리뷰어 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001, P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002, P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003, P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004, P1-RT-001, P1-CN-001, P1-REC-001, P1-PT-001, P1-OP-001, P1-ET-001, P1-IT-005 |
-| 완료 조건 | 필수 Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
-
-
-## 10. Phase 내부 Task Dependency
-
-```mermaid
-flowchart TB
- P1_TASK_001["P1-TASK-001"]
- P1_TASK_002["P1-TASK-002"]
- P1_TASK_003["P1-TASK-003"]
- P1_TASK_004["P1-TASK-004"]
- P1_TASK_005["P1-TASK-005"]
- P1_TASK_001 --> P1_TASK_002
- P1_TASK_001 --> P1_TASK_003
- P1_TASK_001 --> P1_TASK_004
- P1_TASK_002 --> P1_TASK_005
- P1_TASK_003 --> P1_TASK_005
- P1_TASK_004 --> P1_TASK_005
- P1_TASK_005 --> G["P1-TASK-021 Phase Gate"]
- P1_TASK_006["P1-TASK-006"]
- P1_TASK_007["P1-TASK-007"]
- P1_TASK_008["P1-TASK-008"]
- P1_TASK_009["P1-TASK-009"]
- P1_TASK_010["P1-TASK-010"]
- P1_TASK_006 --> P1_TASK_007
- P1_TASK_006 --> P1_TASK_008
- P1_TASK_006 --> P1_TASK_009
- P1_TASK_007 --> P1_TASK_010
- P1_TASK_008 --> P1_TASK_010
- P1_TASK_009 --> P1_TASK_010
- P1_TASK_010 --> G["P1-TASK-021 Phase Gate"]
- P1_TASK_011["P1-TASK-011"]
- P1_TASK_012["P1-TASK-012"]
- P1_TASK_013["P1-TASK-013"]
- P1_TASK_014["P1-TASK-014"]
- P1_TASK_015["P1-TASK-015"]
- P1_TASK_011 --> P1_TASK_012
- P1_TASK_011 --> P1_TASK_013
- P1_TASK_011 --> P1_TASK_014
- P1_TASK_012 --> P1_TASK_015
- P1_TASK_013 --> P1_TASK_015
- P1_TASK_014 --> P1_TASK_015
- P1_TASK_015 --> G["P1-TASK-021 Phase Gate"]
- P1_TASK_016["P1-TASK-016"]
- P1_TASK_017["P1-TASK-017"]
- P1_TASK_018["P1-TASK-018"]
- P1_TASK_019["P1-TASK-019"]
- P1_TASK_020["P1-TASK-020"]
- P1_TASK_016 --> P1_TASK_017
- P1_TASK_016 --> P1_TASK_018
- P1_TASK_016 --> P1_TASK_019
- P1_TASK_017 --> P1_TASK_020
- P1_TASK_018 --> P1_TASK_020
- P1_TASK_019 --> P1_TASK_020
- P1_TASK_020 --> G["P1-TASK-021 Phase Gate"]
-```
-
-반드시순차:선행 PhaseGate→계약/fixture→구현→통합/검증→본 PhaseGate. 병렬 가능:같은기능의계약고정후알고리즘/adapter/UI,서로독립된기능들. 같은 table migration 과 version catalog 편집은 schema owner 가직렬조정한다.선택 확장은활성화결정후관련 Task 를실행하며유예를 source 삭제로처리하지않는다.후속 codec/handler 는이문서의 handoff 규격에맞춰다음 Phase 에서연결한다.
-
-## 11. Phase별 Test 설계
-
-UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Concurrency,REC=Recovery,PT=Performance,OP=운영,ET=Exception 이다. 모든 case 는 실행 계획이며 현재 NOT_RUN 이다. 정상 예제에 사용한 fixture profile 수치를 제품 확정값으로 해석하지 않는다.
-
-<a id="p1-ut-001"></a>
-### P1-UT-001 — 정적 카탈로그 스키마와 ID 보존 / 정상 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-UT-001 |
-| 테스트 종류 | UT |
-| 대상 기능 | FUNC-P1-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | WPN-0001 물리19 레벨1 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 원문 ID 와 수치가 content_template 에 일치 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-001, testId=P1-UT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 ID 와 수치가 content_template 에 일치 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-bt-001"></a>
-### P1-BT-001 — 정적 카탈로그 스키마와 ID 보존 / 경계·거절
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-BT-001 |
-| 테스트 종류 | BT |
-| 대상 기능 | FUNC-P1-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 같은 ID 두 행, 서로 다른 효과 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 중복 오류와 두 원문 행번호 반환 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-001, testId=P1-BT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 중복 오류와 두 원문 행번호 반환 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ft-001"></a>
-### P1-FT-001 — 정적 카탈로그 스키마와 ID 보존 / 실패·복구 방어
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-FT-001 |
-| 테스트 종류 | FT |
-| 대상 기능 | FUNC-P1-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 참조되지 않는 MON ID 가 loot 에 있음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 정적 번들 발행 차단 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-001, testId=P1-FT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 정적 번들 발행 차단 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ct-001"></a>
-### P1-CT-001 — 정적 카탈로그 스키마와 ID 보존 / 컴포넌트 계약·재호출
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-CT-001 |
-| 테스트 종류 | CT |
-| 대상 기능 | FUNC-P1-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | WPN-0001 물리19 레벨1; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 원문 ID 와 수치가 content_template 에 일치; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-001, testId=P1-CT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 ID 와 수치가 content_template 에 일치; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-it-001"></a>
-### P1-IT-001 — 정적 카탈로그 스키마와 ID 보존 / adapter·영속 경계
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-IT-001 |
-| 테스트 종류 | IT |
-| 대상 기능 | FUNC-P1-001 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | WPN-0001 물리19 레벨1; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 원문 ID 와 수치가 content_template 에 일치; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-001, testId=P1-IT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 ID 와 수치가 content_template 에 일치; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ut-002"></a>
-### P1-UT-002 — 콘텐츠 검증·사전 DB 빌드 / 정상 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-UT-002 |
-| 테스트 종류 | UT |
-| 대상 기능 | FUNC-P1-002 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 두 번 동일 소스를 빌드 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-002, testId=P1-UT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-bt-002"></a>
-### P1-BT-002 — 콘텐츠 검증·사전 DB 빌드 / 경계·거절
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-BT-002 |
-| 테스트 종류 | BT |
-| 대상 기능 | FUNC-P1-002 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 태그 허용과 금지 동시 지정 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | ERROR; 합리화하여 자동 수정하지 않음 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-002, testId=P1-BT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | ERROR; 합리화하여 자동 수정하지 않음 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ft-002"></a>
-### P1-FT-002 — 콘텐츠 검증·사전 DB 빌드 / 실패·복구 방어
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-FT-002 |
-| 테스트 종류 | FT |
-| 대상 기능 | FUNC-P1-002 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | DB 빌드 중 I/O 실패 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 직전 승인 bundle 유지; 절반짜리 bundle 비활성 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-002, testId=P1-FT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 직전 승인 bundle 유지; 절반짜리 bundle 비활성 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ct-002"></a>
-### P1-CT-002 — 콘텐츠 검증·사전 DB 빌드 / 컴포넌트 계약·재호출
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-CT-002 |
-| 테스트 종류 | CT |
-| 대상 기능 | FUNC-P1-002 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 두 번 동일 소스를 빌드; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-002, testId=P1-CT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-it-002"></a>
-### P1-IT-002 — 콘텐츠 검증·사전 DB 빌드 / adapter·영속 경계
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-IT-002 |
-| 테스트 종류 | IT |
-| 대상 기능 | FUNC-P1-002 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 두 번 동일 소스를 빌드; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-002, testId=P1-IT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | canonical 콘텐츠 hash 동일, wall-clock metadata 는 hash 제외; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ut-003"></a>
-### P1-UT-003 — 로컬 이미지·AssetResolver·크롭 / 정상 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-UT-003 |
-| 테스트 종류 | UT |
-| 대상 기능 | FUNC-P1-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | NPC-W-03147, BATTLE_TOKEN |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 동일 파일의 1:1 crop 과 원래 key 유지 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-003, testId=P1-UT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 동일 파일의 1:1 crop 과 원래 key 유지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-bt-003"></a>
-### P1-BT-003 — 로컬 이미지·AssetResolver·크롭 / 경계·거절
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-BT-003 |
-| 테스트 종류 | BT |
-| 대상 기능 | FUNC-P1-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 해당 파일 없음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 여성 generic fallback 표시; NPC identity 불변 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-003, testId=P1-BT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 여성 generic fallback 표시; NPC identity 불변 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ft-003"></a>
-### P1-FT-003 — 로컬 이미지·AssetResolver·크롭 / 실패·복구 방어
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-FT-003 |
-| 테스트 종류 | FT |
-| 대상 기능 | FUNC-P1-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | ../../save.db 를 asset key 로 입력 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | InvalidAssetKey; 파일 읽지 않음 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-003, testId=P1-FT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | InvalidAssetKey; 파일 읽지 않음 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ct-003"></a>
-### P1-CT-003 — 로컬 이미지·AssetResolver·크롭 / 컴포넌트 계약·재호출
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-CT-003 |
-| 테스트 종류 | CT |
-| 대상 기능 | FUNC-P1-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | NPC-W-03147, BATTLE_TOKEN; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 동일 파일의 1:1 crop 과 원래 key 유지; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-003, testId=P1-CT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 동일 파일의 1:1 crop 과 원래 key 유지; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-it-003"></a>
-### P1-IT-003 — 로컬 이미지·AssetResolver·크롭 / adapter·영속 경계
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-IT-003 |
-| 테스트 종류 | IT |
-| 대상 기능 | FUNC-P1-003 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | NPC-W-03147, BATTLE_TOKEN; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 동일 파일의 1:1 crop 과 원래 key 유지; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-003, testId=P1-IT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 동일 파일의 1:1 crop 과 원래 key 유지; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ut-004"></a>
-### P1-UT-004 — 콘텐츠·이미지 버전 교체와 호환 / 정상 규칙
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-UT-004 |
-| 테스트 종류 | UT |
-| 대상 기능 | FUNC-P1-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 옛 ID alias OLD-WPN→WPN-0001 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 변환 이력과 이전 ID 보존 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-004, testId=P1-UT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 변환 이력과 이전 ID 보존 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-bt-004"></a>
-### P1-BT-004 — 콘텐츠·이미지 버전 교체와 호환 / 경계·거절
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-BT-004 |
-| 테스트 종류 | BT |
-| 대상 기능 | FUNC-P1-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 선택 이미지 팩 비활성 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 기본 portrait/fallback 으로 정상 표시 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-004, testId=P1-BT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 기본 portrait/fallback 으로 정상 표시 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ft-004"></a>
-### P1-FT-004 — 콘텐츠·이미지 버전 교체와 호환 / 실패·복구 방어
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-FT-004 |
-| 테스트 종류 | FT |
-| 대상 기능 | FUNC-P1-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 필수 스킬 ID 에 alias/legacy 없음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 로드 차단·원본 세이브 보존 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-004, testId=P1-FT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 로드 차단·원본 세이브 보존 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-ct-004"></a>
-### P1-CT-004 — 콘텐츠·이미지 버전 교체와 호환 / 컴포넌트 계약·재호출
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-CT-004 |
-| 테스트 종류 | CT |
-| 대상 기능 | FUNC-P1-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 옛 ID alias OLD-WPN→WPN-0001; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 변환 이력과 이전 ID 보존; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-004, testId=P1-CT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 변환 이력과 이전 ID 보존; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-it-004"></a>
-### P1-IT-004 — 콘텐츠·이미지 버전 교체와 호환 / adapter·영속 경계
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-IT-004 |
-| 테스트 종류 | IT |
-| 대상 기능 | FUNC-P1-004 |
-| 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 옛 ID alias OLD-WPN→WPN-0001; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 변환 이력과 이전 ID 보존; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P1-004, testId=P1-IT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 변환 이력과 이전 ID 보존; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-rt-001"></a>
-### P1-RT-001 — 기존 정상 흐름 보존
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-RT-001 |
-| 테스트 종류 | RT |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | WPN-0001 물리19 레벨1; 선행 Phase 의승인 fixture 전체 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 원문 ID 와 수치가 content_template 에 일치; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-RT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 ID 와 수치가 content_template 에 일치; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-cn-001"></a>
-### P1-CN-001 — 동시 요청·세션 격리
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-CN-001 |
-| 테스트 종류 | CN |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | WPN-0001 물리19 레벨1; 요청2 개동시에제출/이전 epoch 응답지연 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-CN-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-rec-001"></a>
-### P1-REC-001 — 종료 후 복구
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-REC-001 |
-| 테스트 종류 | REC |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 참조되지 않는 MON ID 가 loot 에 있음; 정상요청직전/커밋직전/직후 kill |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-REC-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-pt-001"></a>
-### P1-PT-001 — 규모·호출량·상한
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-PT-001 |
-| 테스트 종류 | PT |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | WPN-0001 물리19 레벨1; seed0..99 를반복하고대표최대 fixture 사용 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 결과와 bounded 종료확인; latency/PSS/DB bytes 실측기록. 성능목표는 P24 표/본 Phase 특화 fixture 에대조하며미측정 PASS 금지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-op-001"></a>
-### P1-OP-001 — 오프라인 운영 시나리오
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-OP-001 |
-| 테스트 종류 | OP |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 옛 ID alias OLD-WPN→WPN-0001; 네트워크차단·앱재실행/도구재실행 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 변환 이력과 이전 ID 보존; 필수 네트워크요청0·게임현실시간 catchup0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-OP-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 변환 이력과 이전 ID 보존; 필수 네트워크요청0·게임현실시간 catchup0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-et-001"></a>
-### P1-ET-001 — 오류 분류·장애 전파
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-ET-001 |
-| 테스트 종류 | ET |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 필수 스킬 ID 에 alias/legacy 없음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 로드 차단·원본 세이브 보존; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-ET-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 로드 차단·원본 세이브 보존; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-<a id="p1-it-005"></a>
-### P1-IT-005 — Phase 통합 인계
-
-| 항목 | 설계 |
-|---|---|
-| Test ID | P1-IT-005 |
-| 테스트 종류 | IT |
-| 대상 기능 | PHASE-1 |
-| 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | WPN-0001 물리19 레벨1→옛 ID alias OLD-WPN→WPN-0001 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 원문 ID 와 수치가 content_template 에 일치 및 변환 이력과 이전 ID 보존; 선행 port/DTO/version 인계완료 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-1, testId=P1-IT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 ID 와 수치가 content_template 에 일치 및 변환 이력과 이전 ID 보존; 선행 port/DTO/version 인계완료 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
-
-
-## 12. Phase별 Regression Test
-
-| 기존 기능 | 영향 원인 | 영향 가능성 | Regression Test/검증 |
-|---|---|---|---|
-| 선행 정상플레이/읽기 | 공통 DTO/이벤트/조건식확장 | 중간 | P1-RT-001;선행 golden fixture 전체 |
-| 기존 DB/소유권/저장 | 새행/인덱스/코덱/참조추가 | 높음 | P1-RT-001;구 fixture roundtrip·원래 ID/금/시간동일 |
-| 기존 모니터링/뉴스/기록 | event payload/visibility 변경 | 중간 | P1-RT-001;필드호환·중복원본0·숨은값0 |
-| 기존 Thread/Coroutine | scope/observer/비동기 adapter | 높음 | P1-RT-001;슬롯전환/취소후작업0 |
-| 기존 Transaction | 새로직의의미적원자범위확장 | 높음 | P1-RT-001;각 write cut old/new 전체일치 |
-| 기존 장애처리 | 새 fallback/catch 추가 | 높음 | P1-RT-001;expected failure 코드유지·핵심오류무시금지 |
-
-## 13. Phase 완료 기준 / 다음 단계 허용
-
-| 분류 | 조건 | 미충족시 |
+| 이름 | 계산 | 용도 |
 |---|---|---|
-| 필수 | 본문/원문하위규칙·결정대장·실제 코드일치·독립리뷰승인 | Gate 불가 |
-| 필수 | 모든필수 Task 구현·Unit/Component/Integration/Boundary/Exception/Failure/Regression PASS | Gate 불가 |
-| 필수 | DB/소유권/시간/RNG/세이브/가문중관련불변식·crash 복구 | 후속제품활성화불가 |
-| 필수 | 다음 Phase input DTO/codec/schema/fixture 와오류계약검증 | 다음 Phase 통합불가 |
-| 병렬착수허용 | 공개 interface 고정상태에서후속 UIprototype/fixture 작성 | Mock/IN_PROGRESS 표시;완료주장금지 |
-| 조건부이월 | 문구/선택표정/비필수장식/원문 선택 확장 | 담당자/대체동작/목표 Phase/승인기록필수 |
-| 이월불가 | 저장손상·중복자원·숨은정보노출·핵심소프트락·미지원 schema 파괴 | 출시및관련후속 Gate 차단 |
+| `exactFileSha256` | source/asset 파일의 실제 bytes | provenance·변조 탐지 |
+| `logicalContentHash` | 파싱된 record를 `kind, sourceId` 순으로 정렬하고 NFC 문자열·10진 정수·key 정렬 canonical JSON으로 직렬화한 bytes | 콘텐츠 의미 동일성 |
+| `artifactFileSha256` | 완성된 `content.db` 실제 bytes | 배포 파일 무결성 |
 
-Phase Gate Task 는 **P1-TASK-021**, 결과상태는 DESIGN_REVIEW→IMPLEMENTED→TESTED→REVIEWED→ACCEPTED 로분리한다.현재는설계초안만작성된상태다.
+`content_manifest.source_hash`는 source manifest와 모든 `exactFileSha256`를 canonical 정렬해 계산한 hash다. `content_manifest.bundle_hash`는 `logicalContentHash`다. `artifactFileSha256`는 DB 자기참조를 피하기 위해 외부 `content-bundle-manifest.json`에만 둔다.
 
-## 14. Phase 리스크 관리
+`assetManifestSha256`는 단순 manifest 파일 hash가 아니다. asset entry와 그 entry가 참조하는 `license-registry.json`의 registry entry를 각각 canonical 정렬한 JSON 객체 `{"assets":[...],"licenses":[...]}`의 UTF-8 bytes를 SHA-256한다. 따라서 승인 상태·source·license·distribution scope 변경도 bundle identity를 바꾸며 미참조 registry row는 결과에 영향을 주지 않는다.
 
-| Risk ID | 내용 | 발생가능성 | 영향도 | 대응/책임 | 회귀근거 |
-|---|---|---|---|---|---|
-| R-P1-01 | 실제 이미지 미첨부 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P1-TASK-021 에서증거심의 | P1-RT-001 |
-| R-P1-02 | 미정 효과 수치 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P1-TASK-021 에서증거심의 | P1-RT-001 |
-| R-P1-03 | 콘텐츠 ID 충돌 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P1-TASK-021 에서증거심의 | P1-RT-001 |
+### 7.3. bundle manifest
 
-## 15. Phase 간 연계 및 인계 계약
+필수 필드: `manifestVersion, bundleId, contentVersion, balanceVersion, schemaVersion, profile, sourceHash, logicalContentHash, artifactFileSha256, assetManifestSha256, generatedByVersion`. `bundleId`는 ASCII 문자열 `v1:<manifestVersion>:<generatedByVersion>:<artifactFileSha256>:<assetManifestSha256>`의 SHA-256 lower-case hex다. 따라서 DB bytes·자산 집합·manifest/tool identity 중 하나가 바뀌면 immutable 경로가 충돌하지 않는다. 동일 입력·규칙·tool로 같은 `bundleId` target이 이미 있으면 target manifest와 모든 파일 hash를 재검증해 완전히 같을 때만 idempotent success로 staging을 폐기하고 pointer를 유지/교체한다. 하나라도 다르면 `INTEGRITY_FAILED`이며 기존 target/pointer를 건드리지 않는다. `generatedAt`과 build machine 정보는 선택 진단값이며 어떤 canonical hash에도 포함하지 않는다. `current.json`은 `bundleId, contentVersion`만 가진 **build output 전용** 활성 포인터이며 bundle 내부나 canonical hash 입력에 포함하지 않는다.
 
-| 구분 | 전달항목 | version/유효성 | 수신/검증 |
+Gradle packaging은 `current.json`이 가리키는 immutable bundle 하나만 선택해 `InstalledBundle(bundleId, manifestPath, contentDbPath, assetRoot)`로 패키징한다. Android runtime은 앱 시작 시 이 snapshot을 검증해 read-only로 열고 실행 중 hot swap하지 않는다. 설치·업데이트 교체와 rollback은 P25가 앱 재시작 경계에서 수행한다.
+
+## 8. content.db 물리 계약
+
+`docs/설계부록/02_제안_content_schema.sql`이 DDL 단일 원천이다. P1은 Room Entity/DAO와 save migration을 만들지 않는다. builder는 C14의 pinned bundled SQLite driver로 존재하지 않는 staging DB를 만들고 DDL 선두의 `PRAGMA foreign_keys=ON`, `PRAGMA journal_mode=DELETE`를 transaction 시작 전에 실행한 뒤 각각 `1`, `delete`인지 확인한다. 실제 Android 연결은 P3의 `:core:data` 논리 package가 `OPEN_READONLY`와 `PRAGMA query_only=ON`으로 구현하고 `ContentRepository` contract test를 통과해야 한다. app/feature가 SQLite/DAO를 직접 호출하지 않으며 content version 교체는 파일 교체다. immutable content row에는 갱신용 `row_version`을 저장하지 않는다.
+
+| 객체 | 불변식 |
+|---|---|
+| `content_manifest` | `id='CONTENT-MANIFEST'` 한 행만 허용; DB 하나에 content version 하나 |
+| `content_template` | PK `id`가 canonical `sourceId`; `ContentKind.v1` CHECK; `display_name=COALESCE(display_name_override,source_display_name)`; JSON/definition version post-build audit |
+| `content_alias` | `REMAP`은 terminal `new_id` 물리 FK 필수, `TOMBSTONE`은 null; self/cycle/chain 금지 |
+| `asset_image` | canonical relative path unique; `byte_size>0`; lower-case 64 hex SHA-256; width/height/size/file hash 일치; focal 좌표는 둘 다 null 또는 0..1,000,000 |
+| `asset_binding` | `template_id`/`asset_id` 물리 FK; usage code set 및 `template_id/usage/priority` unique; category/crop은 usage에서 파생 |
+| `asset_fallback` | usage와 matcher type/value 고정, priority 오름차순; usage/matcher/value/priority unique; terminal asset FK; category는 usage에서 파생 |
+
+content DB 내부 FK와 reference scan을 모두 통과해야 발행한다. 물리 FK는 alias/binding target 존재만 보장하고 alias same-kind/terminal 한 hop은 builder reference scan이 검증한다. DB writer와 독립된 post-build semantic audit가 모든 `content_template`을 다시 읽어 canonical ID/kind, effective 표시명, `tags_json`, `definition_json`, 지원 `definition_version`을 검사하고 모든 asset usage의 파생 category가 `asset_image.category`와 일치하는지와 manifest/file의 byte size·SHA-256을 대조한다. active bundle은 읽기 전용이며 런타임 UPDATE/DELETE가 0건이어야 한다.
+
+### 8.1. V1 SQL query inventory
+
+아래 6개만 런타임 SQL allowlist다. SQL 문장과 identifier는 checked-in adapter 코드에 고정하고 모든 값은 `PreparedStatement` parameter로 binding하며 source 문자열을 SQL에 연결하지 않는다.
+
+| Query | 조건·정렬 | 물리 근거 |
+|---|---|---|
+| `CDB-Q01 findTemplate` | `content_template.id=?` | PK lookup |
+| `CDB-Q02 listTemplates` | `content_template.kind=? ORDER BY id` | `ix_content_template_kind_id(kind,id)` |
+| `CDB-Q03 findAlias` | `content_alias.old_id=?` | `UNIQUE(old_id)` |
+| `CDB-Q04 findAssetBindings` | `template_id=? AND usage_type=? ORDER BY priority` | composite UNIQUE prefix; priority 동률 금지 |
+| `CDB-Q05 findAsset` | `asset_image.id=?` | PK lookup |
+| `CDB-Q06 listAssetFallbacks` | `usage_type=?`; matcher rank와 priority는 bounded 결과에서 적용 | `ux_asset_fallback_order` prefix |
+
+`display_name` 검색, grade filter, asset reverse lookup은 V1 runtime 요구가 없으므로 전용 index를 만들지 않는다. `listTemplates`는 FULL 최대 profile의 row 수·heap·latency를 `P1-PT-001`에서 측정한다. 이 fixture에서 bounded 기준을 넘기기 전에는 pagination API나 별도 검색 계층을 추가하지 않는다. 모든 Query는 대표 FULL fixture의 `EXPLAIN QUERY PLAN`에서 의도한 PK/UNIQUE/index를 사용해야 하며 허용되지 않은 full table scan은 Gate를 실패시킨다.
+
+## 9. 자산 경로·manifest·crop 계약
+
+### 9.1. 경로
+
+relative path는 NFC, `/` separator, root-relative만 허용한다. 빈 segment, `.`, `..`, 선행 `/`, drive letter, backslash, NUL/control, URI scheme, symlink root escape를 거절한다. Android packaging 충돌 방지를 위해 Unicode case-fold한 path가 중복되면 build ERROR다.
+
+### 9.2. asset manifest
+
+각 entry 필수 필드: `assetId, relativePath, exactFileSha256, mimeType, width, height, byteSize, alphaMode, colorSpace, category, poolVersion, licenseId, validationStatus`. 선택 필드 `focalXppm/focalYppm`은 반드시 함께 존재하며 각각 0..1,000,000이다. 허용값은 다음과 같다.
+
+- `mimeType`: `image/png`, `image/webp`
+- `alphaMode`: `OPAQUE`, `STRAIGHT`
+- `colorSpace`: `SRGB`
+- `category`: `PORTRAIT`, `BACKGROUND`, `ICON`, `EMBLEM`, `EVENT_ART`, `KEY_ART`
+- `validationStatus`: `VALID`, `NOT_PROVIDED`, `LICENSE_BLOCKED`, `INVALID`
+
+`content/source/license-registry.json`은 `licenseId, source, license, distributionScopes, approvalStatus`를 가진 checked-in 단일 원천이다. `licenseId` 미등록, `approvalStatus!=APPROVED`, 또는 `ANDROID_APP`/해당 시 `PLAY_ASSET_DELIVERY` scope 누락은 실물 pack 발행을 차단한다. `PROTOTYPE` fixture도 `PROJECT_OWNED_FIXTURE` 승인 entry를 사용하며 자유 문자열 license로 우회하지 않는다.
+manifest/registry를 검증한 뒤 참조된 license entry를 7.2의 `assetManifestSha256`에 포함한다. registry 승인만 바꾼 재빌드가 이전 bundleId를 재사용하면 실패다.
+
+compiler는 manifest 선언을 신뢰하지 않고 파일 header/decode metadata와 대조한다. decode 전 파일당 32MiB, width/height 각각 8,192px, `maxPixelCount=16,777,216`을 검사하고 한 파일씩 decode해 peak memory를 제한한다. magic bytes와 `mimeType`, 실제 byte size와 `exactFileSha256`, decoded width/height, 단일 frame, EXIF orientation 없음 또는 1, embedded color profile 없음 또는 sRGB, 실제 alpha 유무와 `alphaMode`가 모두 일치해야 한다. 상한 초과, animated/multi-frame WebP, 회전 metadata, wide-gamut/미지원 ICC, 선언과 다른 alpha는 `VALIDATION_FAILED` build ERROR이며 Android runtime에서 보정하지 않는다.
+
+### 9.3. usage와 crop
+
+| ImageUsage | CropProfile | geometry | 최대 decode long-edge |
+|---|---|---|---:|
+| `LIST_FACE` | `SQUARE_FACE` | 1:1 Crop, focal 또는 상단 35% 얼굴 중심 | 256px |
+| `DETAIL_PORTRAIT`, `DIALOG_PORTRAIT` | `PORTRAIT_3_4` | 3:4 Crop, focal 또는 중앙 상반신 | 1024px |
+| `BATTLE_TOKEN`, `CHRONICLE_THUMB`, `ICON`, `EMBLEM` | `SQUARE_CENTER` | 1:1 Crop, focal 또는 중앙 | 256px |
+| `ROOM_BACKGROUND`, `EVENT_ART` | `LANDSCAPE_16_9` | 16:9 Crop, focal 또는 중앙 | 1920px |
+| `KEY_ART` | `FIT_INSIDE` | 원본 비율 Fit, 중앙 | 1920px |
+
+`ImageUsage`는 위 표의 `CropProfile`과 다음 `AssetCategory`를 유일하게 결정한다: 얼굴/초상/token/연대기=`PORTRAIT`, 방=`BACKGROUND`, icon=`ICON`, emblem=`EMBLEM`, event=`EVENT_ART`, key art=`KEY_ART`. source·request·DB가 별도 category/crop을 받지 않으므로 불일치 조합은 표현할 수 없다.
+
+`computeCropRect`는 정수만 사용한다. `FIT_INSIDE`는 `(0,0,width,height)`이고, 나머지는 target `width:height`를 각각 `1:1`, `3:4`, `16:9`로 둔다. source가 더 넓으면 `cropHeight=sourceHeight`, `cropWidth=floor(sourceHeight*targetWidth/targetHeight)`, 아니면 `cropWidth=sourceWidth`, `cropHeight=floor(sourceWidth*targetHeight/targetWidth)`이며 각 값은 최소 1이다. center는 focal이 있으면 `floor(sourceSize*focalPpm/1,000,000)`, 없으면 `SQUARE_FACE=(50%,35%)`, 나머지는 `(50%,50%)`다. `left=clamp(centerX-floor(cropWidth/2),0,sourceWidth-cropWidth)`, `top`도 같은 방식이며 right/bottom은 각각 left/top에 size를 더한다. preview와 Android는 이 순수 함수를 공유하고 floor·clamp 순서를 바꾸지 않는다.
+
+`targetPx`는 실제 표시 px의 양수값이며 위 상한을 넘으면 상한으로 clamp한다. `LOW`는 각 상한의 1/2 bucket이다. `TEXT`의 허용 usage는 `LIST_FACE, DETAIL_PORTRAIT, DIALOG_PORTRAIT, BATTLE_TOKEN, CHRONICLE_THUMB, ICON, EMBLEM`이고, `ROOM_BACKGROUND, EVENT_ART, KEY_ART`는 `SkippedByQualityMode`로 반환하며 repository/file/decode를 호출하지 않는다. crop 계산은 source pixel을 직접 자르지 않고 normalized focal point와 target aspect로 결정해 기기 density에 독립적이어야 한다.
+
+과거 표기의 `FACE/LIST_THUMB→LIST_FACE`, `BUST/PORTRAIT/DETAIL_HEADER→DETAIL_PORTRAIT`, `BATTLE/TOKEN→BATTLE_TOKEN`, `ROOM_BG→ROOM_BACKGROUND`, `KEYART→KEY_ART`는 source 변환 시에만 허용한다. runtime은 canonical code만 받는다.
+
+resolve는 요청의 `exactAssetKeys`, nullable `templateId`의 `findAssetBindings` 결과를 순서대로 확인한 뒤 entity kind/usage별 아래 matcher를 적용한다. 먼저 등장한 assetId만 남기며 fallback은 표시 결과일 뿐 요청 key 목록이나 save identity를 변경하지 않는다.
+
+| entity kind/usage | matcher 순서 |
+|---|---|
+| 용병 목록·상세 | `SEX → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 용병 대화 | `SEX → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 용병 전투 | `CLASS → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 용병 연대기 | `CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 몬스터 | `MONSTER_FAMILY → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 던전 | `REGION → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 방 배경 | `ROOM_THEME → REGION → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 아이템·장비 | `ITEM_TYPE → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+| 시설 | `FACILITY_CATEGORY → CATEGORY_DEFAULT → GLOBAL_DEFAULT` |
+
+`asset_fallback.matcher_type`은 `SEX, ARCHETYPE, CLASS, MONSTER_FAMILY, REGION, ROOM_THEME, ITEM_TYPE, FACILITY_CATEGORY, CATEGORY_DEFAULT, GLOBAL_DEFAULT`만 허용한다. `ARCHETYPE`은 승인된 usage 순서가 생기기 전까지 Phase1 canonical fallback에 사용하지 않는다. default 두 종류는 `matcher_value=NULL`, 나머지는 non-blank canonical ID다. 작은 `priority`가 먼저이며 음수는 금지한다. 같은 단계에서 먼저 정렬되는 row 하나만 선택하고 동률은 UNIQUE 제약으로 거절한다.
+
+resolver는 exact와 fallback을 합친 유한한 후보 목록을 먼저 만들며 재귀 resolve를 호출하지 않는다. 후보 assetId는 한 번만 열고 누락·decode 실패 시 다음 후보로 진행한다. 모든 후보가 실패하면 `AssetUnavailable(attemptedCount, terminalReason)` typed failure로 종료하고 P22가 이미지 없는 텍스트/행동 레이아웃을 유지한다. 내부 WARN에는 bundle/asset/error code를 남길 수 있지만 UI semantics에는 asset ID나 파일명을 노출하지 않는다.
+
+### 9.4. UI 상태·cache·디자이너 preview
+
+- P1은 `ResolvedAsset.Exact/Fallback/SkippedByQualityMode`와 typed failure만 제공한다. P22는 `Loading placeholder → Content` 전이, crossfade, 재시도 버튼, semantics를 소유한다.
+- `memoryCacheKey`는 `bundleId|assetId|sha256|usage|targetBucket|qualityMode`다. custom cache는 만들지 않으며 Coil memory cache를 C19 범위로 제한한다. 패키지/PAD의 immutable 원본은 별도 disk cache에 복제하지 않는다.
+- `asset-preview.html`은 외부 서버·JavaScript build 없이 생성되는 정적 index다. 요약·필터·category link만 두고, 실제 thumbnail·모든 usage crop·exact/fallback 단계·reason·누락·중복·미사용·라이선스·entity kind×usage coverage는 `asset-preview/<category>-<page>.html`에 category별 정적 page, 페이지당 최대 500 asset으로 분할한다. 이미지는 고정 width/height와 `loading=lazy`를 사용해 10,000개를 한 DOM/bitmap set으로 열지 않는다.
+- preview renderer는 모든 source/diagnostic 문자열을 HTML text/attribute escape하고 검증된 relative asset path만 사용한다. 원문 문자열을 markup이나 script에 직접 연결하지 않으며 외부 URL을 생성하지 않는다.
+- preview의 alt text는 공개 fixture 이름에서 만들고 파일명/assetId/숨은 수치를 노출하지 않는다. 실제 앱 `contentDescription`은 P22가 같은 원칙으로 생성한다.
+
+## 10. alias·legacy 계약
+
+builder는 alias graph 전체를 검사한 뒤 다음 두 형태로만 발행한다.
+
+- `REMAP(oldId, terminalCurrentId)`: 같은 content kind, target 존재, 한 hop.
+- `TOMBSTONE(oldId)`: 삭제 사실만 보존하며 자동 대체 없음.
+
+self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. source에 chain이 있으면 builder가 terminal로 평탄화하되 원래 edge는 validation report에 provenance로 남긴다. runtime 조회는 최대 한 번이며 재귀 탐색하지 않는다.
+
+## 11. Transaction·Thread·장애 복구
+
+- build 단계의 유일한 write 경계는 전용 staging root다. live `save.db`와 설치된 active bundle은 열지 않는다.
+- 검증과 row 생성은 순수 Kotlin/JVM에서 수행한다. builder는 새 connection에서 transaction 전에 `foreign_keys=1`, `journal_mode=delete`를 확인하고 checked-in DDL과 `PreparedStatement` batch만 사용한다. DDL/table/column identifier를 source 값으로 만들지 않는다.
+- row transaction commit 뒤 같은 connection에서 `foreign_key_check` 0행, `integrity_check=ok`와 post-build semantic audit를 수행한다. 모든 ResultSet/Statement/connection을 닫고 `content.db-wal`, `content.db-shm`, `content.db-journal`이 없음을 확인한 다음 별도 read-only connection으로 manifest/FK/integrity/query contract를 재검증한다. read-only connection도 닫은 뒤에만 `artifactFileSha256`를 계산하고, 그 값으로 `content-bundle-manifest.json`을 확정해 파일과 staging directory를 fsync한다.
+- publish는 완전히 닫히고 검증된 staging을 같은 filesystem의 immutable `bundles/<bundleId>/`로 `ATOMIC_MOVE`한 뒤 build output의 `current.json.tmp`을 fsync하고 `current.json`으로 `ATOMIC_MOVE + REPLACE_EXISTING`한다. 기존 target은 7.3의 동일 bundle 검증에서만 idempotent success이며 overwrite하지 않는다. 플랫폼이 atomic move를 지원하지 않거나 열린 handle/sidecar가 남으면 `PUBLISH_ATOMIC_UNSUPPORTED` 또는 `INTEGRITY_FAILED`로 실패하고 기존 pointer를 유지한다. Android 설치 경로는 P1 publisher가 쓰지 않는다.
+- 같은 output root 동시 publish는 file lock으로 하나만 허용하고 다른 실행은 `PublishConflict`로 실패한다. 서로 다른 root는 병렬 실행할 수 있다.
+- Android resolver의 index/manifest load와 이미지 decode는 `Dispatchers.IO` 또는 호출자가 제공한 background dispatcher에서 실행한다. 전역 scope와 무제한 cache를 만들지 않는다. `InstalledBundle`은 앱 session 동안 immutable snapshot이다.
+- 오류 코드는 `SOURCE_INVALID, VALIDATION_FAILED, STAGING_NOT_EMPTY, BUILD_IO, INTEGRITY_FAILED, PUBLISH_CONFLICT, PUBLISH_ATOMIC_UNSUPPORTED, INVALID_ASSET_PATH, MISSING_REQUIRED_ASSET, ASSET_DECODE_FAILED, ASSET_UNAVAILABLE, INCOMPATIBLE_CONTENT`로 고정한다. `AssetUnavailable`의 외부 result code는 `ASSET_UNAVAILABLE`이다.
+
+## 12. 구현 Task
+
+| Task | 이름 | 모듈 | 완료 조건 |
 |---|---|---|---|
-| 이전 Phase 에서수신 | 공통 EntityId/Time/Money,CommandEnvelope,DomainEvent,SavePort,ReadView,Fixture | sourceHash/content/balance/engine/rng/schema 일치 | 선행 Gate 와메소드 input 검증 |
-| 이 Phase 에서생성 | 본 Phase 메소드의반환 DTO/불변 Delta/PublicView·새 codec·DDL/migration·fixture | schema export 와 contract hash 를 PR 에보관 | 다음 Phase 는직접 DB 우회대신 public port 사용 |
-| 후속 Phase 로전달 | 처리결과/권위 source event/확장 handler 등록지점/실패 TypedError | 미등록 handler 는 UnsupportedFeature·이벤트보존 | 후속: P3,P4,P5,P7,P8 |
-| Test Fixture | 본 Phase 정상/경계/실패·RNG golden vector·save snapshot | mutable live save 공유금지;명시 fixtureVersion | 후속 Regression 에본 Phase fixture 포함 |
-| 기존 코드연계 | 기존 module/DAO/SQL 발견시 adapter 와영향도 diff | 변경사유/호환성/rollback 검토 | 전면리팩토링은별도승인 |
+| <a id="p1-task-001"></a>`P1-TASK-001` | canonical source·Assertion 계약 | `:core:content / :tools:content-builder` | CSV/JSON dialect·diagnostic schema/fixture와 해당 REQUIRED/DATA 승인 |
+| <a id="p1-task-002"></a>`P1-TASK-002` | importer·ID/원문 필드 보존 | `:core:content` | dialect·중복/미정/effective display 결정론 검사 |
+| <a id="p1-task-003"></a>`P1-TASK-003` | bootstrap→canonical source 변환 | `:tools:content-builder / content/source` | manifest·provenance·roundtrip 검수 |
+| <a id="p1-task-004"></a>`P1-TASK-004` | Phase1 Gradle 경계 | `Gradle root` | 정확한 graph/plugin/import 검사와 Build Spike |
+| <a id="p1-task-005"></a>`P1-TASK-005` | importer 검증·리뷰 | 동일 | P1-001 Test 5개와 assertion coverage |
+| <a id="p1-task-006"></a>`P1-TASK-006` | bundle schema·hash 계약 | `:core:content / :tools:content-builder` | canonical ID/kind·fresh DDL/query inventory/journal·close·sidecar/idempotent publish fixture 승인 |
+| <a id="p1-task-007"></a>`P1-TASK-007` | validator·canonical hash | `:core:content` | 정렬 diagnostics·logical hash golden·독립 semantic audit |
+| <a id="p1-task-008"></a>`P1-TASK-008` | staging content.db writer | `:tools:content-builder` | prepared batch·fresh staging·FK/integrity/semantic audit·close/sidecar/hash·atomic build pointer |
+| <a id="p1-task-009"></a>`P1-TASK-009` | CLI·Gradle build entry | `:tools:content-builder / Gradle root` | JSON/Markdown/static preview와 headless exit code |
+| <a id="p1-task-010"></a>`P1-TASK-010` | builder 검증·리뷰 | 동일 | P1-002 Test 5개와 fresh DDL/prepared SQL/sealing/publish review |
+| <a id="p1-task-011"></a>`P1-TASK-011` | asset schema·path·crop 계약 | `:core:content / :core:image` | canonical type·파생 category/crop·6 read API·query plan·정수 crop/focal/fallback/TEXT/cache/UI fixture 승인 |
+| <a id="p1-task-012"></a>`P1-TASK-012` | asset validator/compiler | `:tools:content-builder` | path/hash/입력 상한/physical metadata/license registry/focal/coverage 검사 |
+| <a id="p1-task-013"></a>`P1-TASK-013` | asset row·manifest 산출 | `:tools:content-builder` | DB row·manifest·분할 asset-preview 일치 및 10,000개 bounded 생성 |
+| <a id="p1-task-014"></a>`P1-TASK-014` | Android 읽기 전용 resolver | `:core:image / :app` | 6 read method P3 adapter contract fixture, 동시 read/close lifecycle·유한 후보·crop/cache/Exact/Fallback/Loading/semantics smoke |
+| <a id="p1-task-015"></a>`P1-TASK-015` | asset 검증·리뷰 | 동일 | P1-003 Test 5개와 query plan/screenshot/memory/cache 증거 |
+| <a id="p1-task-016"></a>`P1-TASK-016` | BindingPlan·alias 계약 | `:core:content` | 결과 타입과 P3/P25 적용 경계 승인 |
+| <a id="p1-task-017"></a>`P1-TASK-017` | 순수 compatibility resolver | `:core:content` | 같은 입력/같은 plan, write 0 |
+| <a id="p1-task-018"></a>`P1-TASK-018` | alias flatten·legacy plan | `:core:content / :tools:content-builder` | cycle/kind/missing 거절, 한-hop 출력 |
+| <a id="p1-task-019"></a>`P1-TASK-019` | P3/P22/P25 계약 인계 | `:core:content / docs` | InstalledBundle·6-query content adapter·Loading/semantics·BindingPlan handoff |
+| <a id="p1-task-020"></a>`P1-TASK-020` | compatibility 검증·리뷰 | 동일 | P1-004 Test 5개와 save 불변 증거 |
+| <a id="p1-task-021"></a>`P1-TASK-021` | Phase1 통합 Gate | 전체 | 27 Test PASS, DB sealing/query plan/coverage unresolved 0, preview/Android UI 증거, Gate 상태 명시 |
+
+기존 의존 DAG는 유지한다. 각 기능의 계약 Task 뒤 3개 구현 Task를 병렬화하고, 기능별 검증 Task가 합류하며 `P1-TASK-021`이 네 검증 Task 뒤에 온다.
+
+## 13. Test 설계
+
+모든 P1 Test는 `live save.db hash 불변`을 공통 oracle로 사용한다. seed, commandId, receipt, WorldSession은 fixture에 넣지 않는다. 상태는 구현 전이므로 모두 `NOT_RUN`이다. 아래 표는 검토용 요약이며 실행 가능한 사전조건·절차·DB/로그 oracle의 단일 원천은 `관리데이터/tests.json`, 전역 목록은 `91_전체_Test_계획서.md`다.
+
+| Test | 핵심 입력 | 독립 oracle |
+|---|---|---|
+| <a id="p1-ut-001"></a>`P1-UT-001` | 원문 ID/이름/수치·V1 kind | `ContentId=sourceId`, closed kind code와 source locator 일치 |
+| <a id="p1-bt-001"></a>`P1-BT-001` | 같은 ID 두 source row | 두 locator를 가진 DuplicateContentId |
+| <a id="p1-ft-001"></a>`P1-FT-001` | dangling reference | build 진입 전 거절 |
+| <a id="p1-ct-001"></a>`P1-CT-001` | CSV/JSON dialect 경계 2회 | 허용 record/hash와 금지 diagnostic 동치 |
+| <a id="p1-it-001"></a>`P1-IT-001` | canonical dialect source set·크기/행 상한 | BOM/newline/null 포함 rowCount·ID roundtrip, 초과 입력 조기 거절 |
+| <a id="p1-ut-002"></a>`P1-UT-002` | 동일 draft 2회 | logical hash·정렬 row 동일 |
+| <a id="p1-bt-002"></a>`P1-BT-002` | tag 충돌·recipe cycle | 안정된 ERROR code/order |
+| <a id="p1-ft-002"></a>`P1-FT-002` | 기존 staging·WAL/열린 handle과 publish fault | STAGING_NOT_EMPTY 또는 안전 실패, sidecar/혼합 active 0 |
+| <a id="p1-ct-002"></a>`P1-CT-002` | validator→writer | report ERROR 0일 때만 writer 호출 |
+| <a id="p1-it-002"></a>`P1-IT-002` | SQL 경계 문자열·semantic corruption·동일/서로 다른 bundle | prepared roundtrip, FK/semantic/sealing/read-only reopen/hash·idempotent existing target PASS |
+| <a id="p1-ut-003"></a>`P1-UT-003` | 6 repository read와 category 없는 전체 `AssetResolveRequest` | canonical type·파생 category/crop·template/alias/binding/exact/focal/decode/cache identity 일치 |
+| <a id="p1-bt-003"></a>`P1-BT-003` | 화면별 missing/corrupt exact·fallback | usage별 승인 순서, assetId 1회, key 불변, 유한 종료 |
+| <a id="p1-ft-003"></a>`P1-FT-003` | 경로 공격·거짓/과대 physical metadata·미승인 licenseId | `INVALID_ASSET_PATH` 또는 build ERROR, root 밖/과대 decode 0 |
+| <a id="p1-ct-003"></a>`P1-CT-003` | legacy code·usage→category/crop·crop golden·TEXT/UI states | canonicalization·정수 floor/clamp·TEXT allow/skip·Loading/fallback 구분 |
+| <a id="p1-it-003"></a>`P1-IT-003` | 실제 PNG/WebP·6 DB read·모든 crop/UI states | 분할 preview/repository/gallery metadata·semantics·cache 일치 |
+| <a id="p1-ut-004"></a>`P1-UT-004` | terminal alias | `MigrationRequired` step과 old ID provenance |
+| <a id="p1-bt-004"></a>`P1-BT-004` | logical hash 동일·asset bundle만 변경 | Compatible/fallback, save 불변 |
+| <a id="p1-ft-004"></a>`P1-FT-004` | required ID/legacy 없음 | `Unsupported`, save 불변 |
+| <a id="p1-ct-004"></a>`P1-CT-004` | 동일 binding 입력 2회 | 동일 `BindingPlan`, I/O 0 |
+| <a id="p1-it-004"></a>`P1-IT-004` | version compatibility matrix | P3/P25 handoff DTO만 생성 |
+| <a id="p1-rt-001"></a>`P1-RT-001` | P0 graph+Phase1 graph | 기존 P0 경계와 새 정확 graph 모두 PASS |
+| <a id="p1-cn-001"></a>`P1-CN-001` | 같은 output root 동시 publish·repository read/close | publish 하나 성공/하나 PublishConflict, owner cancel→join→close와 close 뒤 read 거절 |
+| <a id="p1-rec-001"></a>`P1-REC-001` | DB close/seal·bundle move/pointer replace kill point | sidecar 0, current가 완전 이전 또는 완전 다음 bundle |
+| <a id="p1-pt-001"></a>`P1-PT-001` | 최대 profile·10,000 asset 분할 preview·6 query·quality/target/bundle switch | query plan/latency·build/preview/decode/PSS, bounded DOM/cache, stale asset 0 |
+| <a id="p1-op-001"></a>`P1-OP-001` | 네트워크 차단 | builder/resolver 필수 네트워크 요청 0 |
+| <a id="p1-et-001"></a>`P1-ET-001` | build/runtime 오류·전체 후보 손상 fixture | build 차단·runtime 유한 fallback WARN·terminal failure·Blocked 분리 |
+| <a id="p1-it-005"></a>`P1-IT-005` | source→sealed DB/preview→InstalledBundle→resolver→handoff | artifact/hash/query/coverage/UX/P3·P22·P25 인계 일치 |
+
+`P1-PT-001`은 현재 수치가 없는 지표를 PASS로 만들지 않는다. FULL fixture에서 `CDB-Q01..Q06`의 query plan과 p50/p95, builder wall/heap/DB size를 기록하고 Android 대표 단말의 자산 fixture는 85/C19의 정상 목표 512MiB, 저사양 상한 768MiB와 비교한다. resolver/decode p50/p95와 함께 baseline 값 자체를 P24에 인계한다. `TEXT`는 금지 usage의 repository/file/decode 0과 허용 usage의 정상 Exact/Fallback decode를 각각 측정하며 전체 decode 0을 요구하지 않는다.
+
+## 14. 완료 기준
+
+### PROTOTYPE_ACCEPTED
+
+- P0 Gate가 실제로 승인되고 Phase1 module graph/build spike가 PASS다.
+- 활성 기능의 REQUIRED/DATA Assertion 미승인이 0건이다.
+- canonical source/DDL/hash/path/alias 계약과 27개 P1 Test가 PASS이며 증거 링크가 있다.
+- build 결과는 canonical ID/kind와 DB manifest 1행, `foreign_keys=1`, `journal_mode=delete`, `foreign_key_check` 0행, `integrity_check=ok`, post-build semantic audit PASS, SQLite sidecar 0개, read-only 재오픈 결과와 외부 artifact hash·동일 bundle idempotent publish가 일치한다.
+- fixture의 요청 entity kind×usage가 exact 또는 승인 fallback으로 resolve되어 unresolved 0이고, 같은 JSON에서 만든 Markdown/`asset-preview.html`과 Android Exact/Fallback/Loading·semantics 증거가 있다.
+- runtime에서 network/save write/Main-thread I/O와 stale cache가 0건이고, 6 read method의 in-memory/SQLite contract 결과와 `CDB-Q01..Q06` query plan이 일치하며 repository owner lifecycle과 fallback 후보가 유한 종료하고 `BindingPlan` 적용 코드가 없다.
+- 실제 자산 부족은 `BLOCKED_ASSET`로 남아 있으며 fixture 범위가 증거에 명시된다.
+
+### FULL_CONTENT_READY
+
+P23/P25에서 목표 콘텐츠·실물 10,000개·라이선스·entity kind×usage exact/승인 fallback coverage unresolved 0·PAD 패키징·대표 단말 메모리/설치/오프라인 검증을 모두 통과해야 한다. Prototype 승인만으로 이 상태를 주장할 수 없다.
+
+## 15. 리스크·인계
+
+| Risk | 대응 | 차단 상태 |
+|---|---|---|
+| 실물 자산 미첨부 | fixture로 resolver 검증, 실물은 P23/P25 | `BLOCKED_ASSET` |
+| 미정 효과 수치 | `UNRESOLVED` 보존, Full profile 발행 차단 | `VALIDATION_FAILED` |
+| ID/alias 충돌 | source locator 오류, graph flatten/cycle 검사 | `VALIDATION_FAILED` |
+| DB 파일 손상/부분 발행 | DELETE journal + FK/integrity/semantic audit + resource close/sidecar 0 + read-only 재오픈 + immutable bundle/atomic pointer | `INTEGRITY_FAILED` |
+| Android 메모리 증가 | 크기별 fixture와 C19 PSS 측정 | Gate 미통과 |
+
+후속 Phase에는 `ContentVersion`, `ContentBundleManifest`, `InstalledBundle`, `ContentId`, `BindingPlan`, read-only content lookup, canonical fixtures를 전달한다. P3는 `ContentRepository` read adapter와 save schema/migration/apply transaction을, P22는 Loading/semantics를, P23은 Full 콘텐츠/실물 검수를, P25는 호환·배포 Gate를 소유한다. 원문 16절은 요구 근거이며 Task 실행 시 전체를 넣지 않고 `rebuild_status.py`가 만든 해당 Task Context Pack만 사용한다.
 ## 16. 원문 상세 규칙·카탈로그·화면 부록
 
 아래는 담당 원문을 **그대로 보존한 요구 근거**다. 상충하는 초기예시까지숨기지않았다. 최종적용우선순위는본문/결정대장을따른다. 원문의 `권장`, `예`, `선택` 표현은확정수치와다르다. 코드/데이터반영시각절의하위조건을assertion manifest에연결한다. 원문부록 자체가구현/테스트실행증거는아니다.

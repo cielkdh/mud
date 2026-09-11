@@ -1,7 +1,9 @@
 # Phase0 cancellation Gate 재검증 — 2026-09-11
 
 - 승인 revision: `714941d` (`Fix WorldSession cancellation recovery`)
+- 승인·증거 record: `dacb508` (`Record Phase0 cancellation gate acceptance`)
 - 독립 리뷰: ACCEPT — P0-CN-001 취소/종료 계약 충족
+- 관리 생명주기: `P0-TASK-005`, `P0-TASK-010`, `P0-TASK-015`, `P0-TASK-020`, `P0-TASK-021`, Phase0 모두 `DONE`; Phase0 책임자는 사용자의 명시적 자기 지정에 따라 `사용자`, 독립 리뷰어는 `Codex`
 - 실행 환경: JDK 17, Gradle Wrapper 9.6.0, 저장소 `.android-sdk`, API 36 emulator `emulator-5554`
 
 ## 수정 범위

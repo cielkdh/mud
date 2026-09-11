@@ -7,22 +7,19 @@
       "schema_version INTEGER NOT NULL",
       "source_hash TEXT NOT NULL",
       "bundle_hash TEXT NOT NULL",
-      "profile TEXT NOT NULL"
+      "profile TEXT NOT NULL CHECK(profile IN ('PROTOTYPE','ALPHA','FULL'))"
     ],
-    "unique": [
-      "content_version"
-    ],
-    "indexes": [
-      "profile"
-    ],
-    "note": "",
+    "unique": [],
+    "indexes": [],
+    "note": "content.db는 version별 신규 생성하며 id='CONTENT-MANIFEST' 한 행만 허용. source_hash는 exact source 집합, bundle_hash는 logicalContentHash이고 artifactFileSha256는 외부 manifest에만 기록.",
     "store": "content"
   },
   "content_template": {
     "name": "content_template",
     "fields": [
-      "kind TEXT NOT NULL",
-      "source_id TEXT NOT NULL",
+      "kind TEXT NOT NULL CHECK(kind IN ('ACC','ARM','BOS','CHAIN','CTR','DNG-EVT','EPRE','ESUF','EVT','ITM','LEG','MON','MPRE','MSUF','REL','SET','SKL','SPRE','SSUF','WPN'))",
+      "source_display_name TEXT NOT NULL",
+      "display_name_override TEXT",
       "display_name TEXT NOT NULL",
       "grade TEXT",
       "min_level INTEGER",
@@ -30,85 +27,79 @@
       "definition_json TEXT NOT NULL",
       "definition_version INTEGER NOT NULL"
     ],
-    "unique": [
-      "source_id"
-    ],
+    "unique": [],
     "indexes": [
-      "kind,grade",
-      "display_name"
+      "kind,id"
     ],
-    "note": "definition_json은 아래 타입별 스키마를 통과한 AST. 미정 필드는 출시 활성화 불가.",
+    "note": "PK id가 canonical sourceId이며 중복 source_id 컬럼은 두지 않는다. ContentKind.v1은 DDL CHECK로 닫는다. source_display_name은 원문, display_name_override는 검수된 표기 교정, display_name은 CHECK로 강제한 effective 값. findTemplate은 PK, listTemplates(kind) ORDER BY id는 kind,id index를 사용한다. tags_json/definition_json/definition_version은 writer와 독립된 post-build audit를 통과하며 미정 필드는 Full 활성화 불가.",
     "store": "content"
   },
   "content_alias": {
     "name": "content_alias",
     "fields": [
       "old_id TEXT NOT NULL",
-      "new_id TEXT",
-      "policy TEXT NOT NULL",
+      "new_id TEXT REFERENCES content_template(id) ON DELETE RESTRICT",
+      "policy TEXT NOT NULL CHECK(policy IN ('REMAP','TOMBSTONE'))",
       "reason TEXT NOT NULL"
     ],
     "unique": [
       "old_id"
     ],
     "indexes": [],
-    "note": "",
+    "note": "REMAP target 존재는 물리 FK가 보장하고 same-kind terminal 한 hop은 build validator가 보장한다. TOMBSTONE은 new_id NULL이며 self/cycle/chain/kind 변경은 build validator가 거절한다.",
     "store": "content"
   },
   "asset_image": {
     "name": "asset_image",
     "fields": [
       "relative_path TEXT NOT NULL",
-      "category TEXT NOT NULL",
+      "category TEXT NOT NULL CHECK(category IN ('PORTRAIT','BACKGROUND','ICON','EMBLEM','EVENT_ART','KEY_ART'))",
       "width INTEGER NOT NULL CHECK(width>0)",
       "height INTEGER NOT NULL CHECK(height>0)",
-      "byte_size INTEGER NOT NULL CHECK(byte_size>=0)",
-      "sha256 TEXT NOT NULL",
-      "pool_version TEXT"
+      "byte_size INTEGER NOT NULL CHECK(byte_size>0)",
+      "sha256 TEXT NOT NULL CHECK(length(sha256)=64 AND sha256 NOT GLOB '*[^0-9a-f]*')",
+      "pool_version TEXT",
+      "focal_x_ppm INTEGER CHECK(focal_x_ppm BETWEEN 0 AND 1000000)",
+      "focal_y_ppm INTEGER CHECK(focal_y_ppm BETWEEN 0 AND 1000000)",
+      "CHECK((focal_x_ppm IS NULL) = (focal_y_ppm IS NULL))"
     ],
     "unique": [
       "relative_path"
     ],
-    "indexes": [
-      "category"
-    ],
-    "note": "",
+    "indexes": [],
+    "note": "relative_path는 NFC POSIX root-relative. byte_size는 양수이고 sha256은 lower-case 64 hex다. focal_x_ppm/focal_y_ppm은 둘 다 NULL 또는 0..1,000,000. MIME/alpha/colorSpace/licenseId는 asset-manifest.json, source/license/distributionScopes/approvalStatus는 license-registry.json이 권위이며 DB row와 post-build audit에서 실제 파일과 대조.",
     "store": "content"
   },
   "asset_binding": {
     "name": "asset_binding",
     "fields": [
-      "entity_kind TEXT NOT NULL",
-      "template_id TEXT NOT NULL",
-      "usage_type TEXT NOT NULL",
+      "template_id TEXT NOT NULL REFERENCES content_template(id) ON DELETE RESTRICT",
+      "usage_type TEXT NOT NULL CHECK(usage_type IN ('LIST_FACE','DETAIL_PORTRAIT','DIALOG_PORTRAIT','BATTLE_TOKEN','CHRONICLE_THUMB','ROOM_BACKGROUND','KEY_ART','ICON','EMBLEM','EVENT_ART'))",
       "asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT",
-      "crop_profile TEXT NOT NULL",
-      "priority INTEGER NOT NULL"
+      "priority INTEGER NOT NULL CHECK(priority>=0)"
     ],
     "unique": [
-      "entity_kind,template_id,usage_type,priority"
+      "template_id,usage_type,priority"
     ],
-    "indexes": [
-      "asset_id"
-    ],
-    "note": "",
+    "indexes": [],
+    "note": "template_id와 asset_id는 물리 FK다. canonical usage만 저장하고 category/crop profile은 usage에서 파생한다. composite UNIQUE prefix로 exact binding을 조회한다. legacy code는 source build에서만 변환하고 runtime 입력은 거절.",
     "store": "content"
   },
   "asset_fallback": {
     "name": "asset_fallback",
     "fields": [
-      "category TEXT NOT NULL",
-      "matcher TEXT NOT NULL",
+      "usage_type TEXT NOT NULL CHECK(usage_type IN ('LIST_FACE','DETAIL_PORTRAIT','DIALOG_PORTRAIT','BATTLE_TOKEN','CHRONICLE_THUMB','ROOM_BACKGROUND','KEY_ART','ICON','EMBLEM','EVENT_ART'))",
+      "matcher_type TEXT NOT NULL CHECK(matcher_type IN ('SEX','ARCHETYPE','CLASS','MONSTER_FAMILY','REGION','ROOM_THEME','ITEM_TYPE','FACILITY_CATEGORY','CATEGORY_DEFAULT','GLOBAL_DEFAULT'))",
+      "matcher_value TEXT",
       "asset_id TEXT NOT NULL REFERENCES asset_image(id) ON DELETE RESTRICT",
-      "priority INTEGER NOT NULL"
+      "priority INTEGER NOT NULL CHECK(priority>=0)",
+      "CHECK((matcher_type IN ('CATEGORY_DEFAULT','GLOBAL_DEFAULT') AND matcher_value IS NULL) OR (matcher_type NOT IN ('CATEGORY_DEFAULT','GLOBAL_DEFAULT') AND matcher_value IS NOT NULL AND length(trim(matcher_value))>0))"
     ],
     "unique": [
-      "category,matcher,priority"
+      "usage_type,matcher_type,COALESCE(matcher_value,''),priority"
     ],
-    "indexes": [
-      "asset_id"
-    ],
-    "note": "",
+    "indexes": [],
+    "note": "entity kind/usage별 matcher 순서를 적용한다. default matcher는 value NULL, 나머지는 공개 canonical ID. expression UNIQUE의 usage_type prefix로 후보를 조회하고 bounded 결과에서 matcher rank/priority를 적용한다. category/crop은 usage에서 파생하며 fallback은 source key를 변경하지 않음.",
     "store": "content"
   },
   "world_state": {
@@ -417,14 +408,14 @@
     "fields": [
       "content_version TEXT NOT NULL",
       "balance_version TEXT NOT NULL",
-      "source_bundle_hash TEXT NOT NULL",
+      "logical_content_hash TEXT NOT NULL",
       "compatibility_json TEXT NOT NULL"
     ],
     "unique": [
       "content_version,balance_version"
     ],
     "indexes": [],
-    "note": "",
+    "note": "logical_content_hash는 save가 참조한 canonical record의 logicalContentHash다. assetManifestSha256, artifactFileSha256, bundleId와 혼용하지 않는다.",
     "store": "save"
   },
   "mercenary": {

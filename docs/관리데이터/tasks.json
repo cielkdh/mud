@@ -24,7 +24,7 @@
       "P0-CT-001",
       "P0-IT-001"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -64,7 +64,7 @@
       "P0-BT-001",
       "P0-FT-001"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -101,7 +101,7 @@
       "P0-CT-001",
       "P0-IT-001"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -138,7 +138,7 @@
       "P0-CT-001",
       "P0-IT-001"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -168,7 +168,7 @@
     "kind": "implementation",
     "owner": "Codex",
     "role": "QA/리뷰어",
-    "status": "ACCEPTED",
+    "status": "DONE",
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
@@ -218,7 +218,7 @@
       "P0-CT-002",
       "P0-IT-002"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -258,7 +258,7 @@
       "P0-BT-002",
       "P0-FT-002"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -295,7 +295,7 @@
       "P0-CT-002",
       "P0-IT-002"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -332,7 +332,7 @@
       "P0-CT-002",
       "P0-IT-002"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -374,7 +374,7 @@
       "P0-CT-002",
       "P0-IT-002"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -412,7 +412,7 @@
       "P0-CT-003",
       "P0-IT-003"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -452,7 +452,7 @@
       "P0-BT-003",
       "P0-FT-003"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -489,7 +489,7 @@
       "P0-CT-003",
       "P0-IT-003"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -526,7 +526,7 @@
       "P0-CT-003",
       "P0-IT-003"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -568,7 +568,7 @@
       "P0-CT-003",
       "P0-IT-003"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -606,7 +606,7 @@
       "P0-CT-004",
       "P0-IT-004"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -646,7 +646,7 @@
       "P0-BT-004",
       "P0-FT-004"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -683,7 +683,7 @@
       "P0-CT-004",
       "P0-IT-004"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -720,7 +720,7 @@
       "P0-CT-004",
       "P0-IT-004"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -762,7 +762,7 @@
       "P0-CT-004",
       "P0-IT-004"
     ],
-    "pr": null,
+    "pr": "local:714941d",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -793,7 +793,7 @@
     "kind": "implementation",
     "owner": "Codex",
     "role": "QA/리뷰어",
-    "status": "ACCEPTED",
+    "status": "DONE",
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
@@ -808,7 +808,7 @@
       "P0-CT-004",
       "P0-IT-002"
     ],
-    "pr": "local:714941d",
+    "pr": "local:714941d; acceptance:dacb508; evidence:docs/검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -838,11 +838,11 @@
   {
     "id": "P1-TASK-001",
     "phase": 1,
-    "name": "정적 카탈로그 스키마와 ID 보존 — 계약·Fixture",
+    "name": "canonical source·Assertion 계약",
     "function": "FUNC-P1-001",
     "stage": "계약",
-    "detail": "CatalogImporter.import(source: ContentSource, version: ContentVersion) -> CatalogDraft의 DTO/오류/불변식 정의. 입력 sourceFile, contentVersion, sourceHash, encoding=UTF-8. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "catalog-manifest.json, UTF-8/NFC, CSV dialect v1, JSON v1, ContentId=sourceId 단일 저장, closed ContentKind.v1/EntityKind.v1, input 파일·행 상한, ContentSource/CatalogDraft와 severity/code/messageKey/sourceId/sourceFile/row/column/field/expected/actual diagnostics를 고정한다. FUNC-P1-001 REQUIRED/DATA Assertion을 승인하거나 결정 근거로 재분류한다.",
+    "module": ":core:content / :tools:content-builder",
     "depends": [
       "P0-TASK-021"
     ],
@@ -852,9 +852,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "CSV/JSON dialect·canonical ID/kind·input 상한·source schema·diagnostic fixture 승인, FUNC-P1-001 미승인 REQUIRED/DATA 0건",
     "tests": [
       "P1-UT-001",
       "P1-BT-001",
@@ -883,11 +883,11 @@
   {
     "id": "P1-TASK-002",
     "phase": 1,
-    "name": "정적 카탈로그 스키마와 ID 보존 — 핵심 규칙",
+    "name": "Importer·ID/원문 필드 보존",
     "function": "FUNC-P1-001",
     "stage": "알고리즘",
-    "detail": "원문 카탈로그 ID·한글명·등급·태그·수치·단위를 원본 필드로 유지한다; 무기420/방어구480/장신구420/아이템180/몬스터300과 별도 스킬·보스·이벤트 카탈로그를 검증한다; 설명만 있는 효과는 미정 필드로 기록하고 임의 수치를 실제 원문값처럼 채우지 않는다; 잘못된 조사/표기 교정은 displayName override와 원문명 이력을 별도 관리한다. 정해진 입력에서는 '원문 ID와 수치가 content_template에 일치'을 만족해야 한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "manifest 순서로 source를 파싱하고 CSV BOM/LF/CRLF/quoted empty/unquoted null과 JSON duplicate key/unknown field/NaN 금지 규칙을 적용한다. ID·sourceDisplayName·등급·태그·수치·단위를 보존하고 displayNameOverride/UNRESOLVED 및 중복 ID source locator를 분리한다.",
+    "module": ":core:content",
     "depends": [
       "P1-TASK-001"
     ],
@@ -897,9 +897,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "순수 importer·CSV/JSON dialect·중복/미정/effective display·logical row golden PASS",
     "tests": [
       "P1-UT-001",
       "P1-BT-001",
@@ -924,11 +924,11 @@
   {
     "id": "P1-TASK-003",
     "phase": 1,
-    "name": "정적 카탈로그 스키마와 ID 보존 — 저장·연계",
+    "name": "bootstrap→canonical source 변환",
     "function": "FUNC-P1-001",
-    "stage": "어댑터",
-    "detail": "대상 content_manifest, content_template, content_alias. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "소스/어댑터",
+    "detail": "catalog_rows.json을 provenance bootstrap으로만 읽어 CSV dialect v1/JSON v1을 따르는 검수된 content/source와 catalog-manifest.json으로 변환한다. 20개 ContentKind.v1, ContentId=sourceId, exactFileSha256·rowCount·source locator를 보존하고 BOM/newline/null 경계와 파일당 64MiB·100,000행/전체 1,000,000행 상한을 포함한 ID/원문 필드 roundtrip을 검사한다.",
+    "module": ":tools:content-builder / content/source",
     "depends": [
       "P1-TASK-001"
     ],
@@ -940,7 +940,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "canonical source manifest·provenance·roundtrip 승인, bootstrap 직접 build 0",
     "tests": [
       "P1-CT-001",
       "P1-IT-001"
@@ -964,11 +964,11 @@
   {
     "id": "P1-TASK-004",
     "phase": 1,
-    "name": "정적 카탈로그 스키마와 ID 보존 — UI·호출 경로",
+    "name": "Phase1 Gradle 경계·Build Spike",
     "function": "FUNC-P1-001",
-    "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "빌드경계",
+    "detail": "P0 승인 뒤 :core:content, :core:image, :tools:content-builder와 :core:simulation→:core:content graph 및 plugin/dependency/import allowlist를 추가하고 기존 architecture verifier를 먼저 갱신한다. app bootstrap은 ContentRepository 결과를 immutable ContentSnapshot으로 조립해 WorldSession에 주입한다. P1은 새 Android DB 모듈을 만들지 않고 P3 :core:data 논리 package가 ContentRepository adapter를 소유하도록 handoff한다. compile·builder 실행·SQLite integrity·app debug/release compile을 증거화한다.",
+    "module": "Gradle root / :app / :core:content / :core:image / :tools:content-builder",
     "depends": [
       "P1-TASK-001"
     ],
@@ -978,9 +978,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "정확한 graph/allowlist/금지 import 검사와 Phase1 Build Spike PASS",
     "tests": [
       "P1-CT-001",
       "P1-IT-001"
@@ -1004,11 +1004,11 @@
   {
     "id": "P1-TASK-005",
     "phase": 1,
-    "name": "정적 카탈로그 스키마와 ID 보존 — Test·리뷰",
+    "name": "Importer Test·독립 리뷰",
     "function": "FUNC-P1-001",
     "stage": "검증",
-    "detail": "P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "P1-UT/BT/FT/CT/IT-001을 실행하고 source assertion을 row/field fixture에 연결한다. live save.db write, Android/Room/Coil 의존, 미정값 자동보정이 없는지 독립 리뷰한다.",
+    "module": ":core:content / :tools:content-builder",
     "depends": [
       "P1-TASK-002",
       "P1-TASK-003",
@@ -1020,9 +1020,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "5개 Test PASS·Assertion coverage·중대 결함 0·리뷰 승인",
     "tests": [
       "P1-UT-001",
       "P1-BT-001",
@@ -1049,11 +1049,11 @@
   {
     "id": "P1-TASK-006",
     "phase": 1,
-    "name": "콘텐츠 검증·사전 DB 빌드 — 계약·Fixture",
+    "name": "bundle schema·hash 계약",
     "function": "FUNC-P1-002",
     "stage": "계약",
-    "detail": "ContentBuilder.build(draft: CatalogDraft, rules: BuildRules) -> ContentBundle의 DTO/오류/불변식 정의. 입력 catalogDraft, profile, schemaVersion, balanceVersion. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "ContentBundle, content-bundle-manifest.json, profile, ContentId=sourceId/closed kind, 무조건 실행하는 fresh DDL, 갱신용 row_version 없는 immutable content row, CDB-Q01..Q06 query inventory, transaction 전 foreign_keys=1/journal_mode=delete, resource close/sidecar 0/read-only 재오픈, 참조 license registry entry를 포함한 assetManifestSha256, generatedByVersion을 포함한 bundleId, 동일 target idempotent publish와 build output 전용 current.json, sourceHash/logicalContentHash/artifactFileSha256 범위를 고정한다. JSON validation report를 권위로 두고 Markdown/asset-preview.html은 동일 JSON을 읽는다. FUNC-P1-002 REQUIRED/DATA Assertion과 fixture를 승인하거나 결정 근거로 재분류한다.",
+    "module": ":core:content / :tools:content-builder",
     "depends": [
       "P0-TASK-021"
     ],
@@ -1063,9 +1063,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "canonical ID/kind·fresh DDL/query inventory/journal·close·sidecar/idempotent publish/build pointer/report schema/hash/profile fixture 승인, FUNC-P1-002 미승인 REQUIRED/DATA 0건",
     "tests": [
       "P1-UT-002",
       "P1-BT-002",
@@ -1094,11 +1094,11 @@
   {
     "id": "P1-TASK-007",
     "phase": 1,
-    "name": "콘텐츠 검증·사전 DB 빌드 — 핵심 규칙",
+    "name": "Validator·canonical hash",
     "function": "FUNC-P1-002",
     "stage": "알고리즘",
-    "detail": "schema/type/range/reference/태그 충돌/레시피 순환을 검사한다; validation report에 ERROR/WARN과 영향 ID를 남긴다; content.db는 임시 디렉터리에서 생성·무결성 검사 후 manifest와 함께 발행한다; Prototype/Alpha/Full은 데이터 profile만 다르며 최종 Full 목표를 삭제하지 않는다. 정해진 입력에서는 'canonical 콘텐츠 hash 동일, wall-clock metadata는 hash 제외'을 만족해야 한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "schema/type/range/reference/tag/recipe cycle/AST/profile 검사와 diagnostics 안정 정렬을 구현한다. 진단은 severity/code/messageKey/sourceId/sourceFile/row/column/field/expected/actual을 사용하며 parsed record canonical JSON으로 logicalContentHash를 만들고 wall-clock/절대경로를 제외한다. DB writer와 독립된 post-build semantic audit가 ContentId=sourceId/closed kind, effective displayName, tags/definition JSON, 지원 definitionVersion, usage 파생 category와 asset byte size/SHA-256을 재검증한다.",
+    "module": ":core:content",
     "depends": [
       "P1-TASK-006"
     ],
@@ -1108,9 +1108,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "검증 순서·오류 정렬·logical hash golden·독립 semantic audit·미정 Full 차단 PASS",
     "tests": [
       "P1-UT-002",
       "P1-BT-002",
@@ -1135,11 +1135,11 @@
   {
     "id": "P1-TASK-008",
     "phase": 1,
-    "name": "콘텐츠 검증·사전 DB 빌드 — 저장·연계",
+    "name": "staging content.db writer",
     "function": "FUNC-P1-002",
-    "stage": "어댑터",
-    "detail": "대상 content_manifest, content_template, content_alias. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "산출물",
+    "detail": "존재하지 않는 fresh staging root에 version별 새 content.db를 만들고 transaction 전에 foreign_keys=1/journal_mode=delete를 확인해 무조건 DDL을 실행한다. 기존 파일/schema object는 STAGING_NOT_EMPTY로 거절한다. checked-in SQL identifier와 PreparedStatement batch만 사용하고 모든 source 값을 parameter binding한다. commit 뒤 manifest 1행/FK/integrity/독립 semantic audit, 전체 JDBC resource close, content.db-wal/shm/journal 0, 별도 read-only 재오픈을 확인한 뒤 hash를 계산한다. 그 hash와 generatedByVersion으로 content-bundle-manifest.json/bundleId를 확정해 파일/staging directory를 fsync한다. 동일 target이 있으면 모든 hash가 같을 때만 staging을 폐기하는 idempotent success, 다르면 INTEGRITY_FAILED다. 새 target은 immutable bundles/<bundleId>로 ATOMIC_MOVE하고 build output 전용 current.json.tmp를 fsync 후 current.json으로 ATOMIC_MOVE+REPLACE_EXISTING한다.",
+    "module": ":tools:content-builder",
     "depends": [
       "P1-TASK-006"
     ],
@@ -1151,7 +1151,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "IF NOT EXISTS·N→N+1 migration·SQL 문자열 결합 0, STAGING_NOT_EMPTY 차단, FK/integrity/semantic audit·resource close·sidecar 0·read-only reopen/hash·동일 target idempotent/build-only pointer kill-safe publish PASS",
     "tests": [
       "P1-CT-002",
       "P1-IT-002"
@@ -1175,11 +1175,11 @@
   {
     "id": "P1-TASK-009",
     "phase": 1,
-    "name": "콘텐츠 검증·사전 DB 빌드 — UI·호출 경로",
+    "name": "CLI·Gradle build entry",
     "function": "FUNC-P1-002",
-    "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "CLI/배포",
+    "detail": "headless build CLI와 Gradle entry를 기존 builder에 연결한다. 입력 manifest/profile/output root, 고정 error/exit code, 권위 validation JSON/파생 Markdown/정적 asset-preview.html/DB/bundle manifest만 제공하고 editable 관리 UI를 만들지 않는다.",
+    "module": ":tools:content-builder / Gradle root",
     "depends": [
       "P1-TASK-006"
     ],
@@ -1189,9 +1189,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "동일 JSON에서 Markdown/HTML 생성·logical hash 동치·실패 non-zero·부분 산출물 0",
     "tests": [
       "P1-CT-002",
       "P1-IT-002"
@@ -1215,11 +1215,11 @@
   {
     "id": "P1-TASK-010",
     "phase": 1,
-    "name": "콘텐츠 검증·사전 DB 빌드 — Test·리뷰",
+    "name": "Content builder Test·독립 리뷰",
     "function": "FUNC-P1-002",
     "stage": "검증",
-    "detail": "P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "P1-UT/BT/FT/CT/IT-002를 실제 temp SQLite와 fault injection으로 실행한다. unconditional fresh DDL, physical FK/cheap CHECK, PreparedStatement 경계문자 roundtrip, 독립 semantic audit, foreign_keys/journal mode, STAGING_NOT_EMPTY, JSON report 파생, resource close/sidecar 0/read-only reopen/hash와 staging/publish를 독립 리뷰한다.",
+    "module": ":core:content / :tools:content-builder",
     "depends": [
       "P1-TASK-007",
       "P1-TASK-008",
@@ -1231,9 +1231,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "5개 Test PASS·artifact/FK/semantic audit/sealing/hash 증거·중대 결함 0",
     "tests": [
       "P1-UT-002",
       "P1-BT-002",
@@ -1260,11 +1260,11 @@
   {
     "id": "P1-TASK-011",
     "phase": 1,
-    "name": "로컬 이미지·AssetResolver·크롭 — 계약·Fixture",
+    "name": "asset schema·path·crop 계약",
     "function": "FUNC-P1-003",
     "stage": "계약",
-    "detail": "AssetResolver.resolve(key: AssetKey, usage: ImageUsage) -> LocalAssetRef의 DTO/오류/불변식 정의. 입력 assetKey, usageType, cropProfile, screenSizePx. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "licenseId를 가진 AssetManifest entry, closed EntityKind.v1과 nullable templateId/ordered exactAssetKeys를 가진 category 없는 AssetResolveRequest/ResolvedAsset, findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 read method와 CDB-Q01..Q06 prepared query allowlist, canonical path/usage에서 유일하게 파생한 category/crop, 정수 floor/clamp crop geometry, target decode/input 상한/focal 좌표와 화면별 fallback matcher 순서를 고정한다. listTemplates는 id 순이며 alias는 terminal 한 hop/TOMBSTONE만 반환한다. TEXT usage allowlist, 후보 assetId 1회·유한 종료, memoryCacheKey와 ContentRepository owner cancel/join/close, Exact/Fallback/SkippedByQualityMode/Loading 표시 계약을 포함해 FUNC-P1-003 REQUIRED/DATA Assertion과 PNG/WebP fixture를 승인하거나 결정 근거로 재분류한다.",
+    "module": ":core:content / :core:image / :tools:content-builder",
     "depends": [
       "P0-TASK-021"
     ],
@@ -1274,9 +1274,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "canonical type·license registry·manifest/path/input 상한/physical metadata·파생 category/crop/focal/화면별 fallback/TEXT/cache/UI state와 6 read API/query plan/lifecycle fixture 승인, FUNC-P1-003 미승인 REQUIRED/DATA 0건",
     "tests": [
       "P1-UT-003",
       "P1-BT-003",
@@ -1305,11 +1305,11 @@
   {
     "id": "P1-TASK-012",
     "phase": 1,
-    "name": "로컬 이미지·AssetResolver·크롭 — 핵심 규칙",
+    "name": "Asset validator/compiler",
     "function": "FUNC-P1-003",
     "stage": "알고리즘",
-    "detail": "원문 10,000장 NPC 파일명과 단일 portraitKey 사용을 유지한다; domain에는 Key만 저장하며 Android URI 조합은 core:image에서 수행한다; 사용처별 crop profile을 적용하고 fallback이 발생해도 저장된 원래 key를 바꾸지 않는다; 네트워크 URI·경로 탈출·임의 파일 접근은 거부하고 실제 자산 미제공 상태는 NOT_PROVIDED로 기록한다. 정해진 입력에서는 '동일 파일의 1:1 crop과 원래 key 유지'을 만족해야 한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "asset root 아래 파일의 path/hash/magic MIME/dimension/byte size/단일 frame/EXIF orientation/실제 alpha/sRGB/licenseId와 checked-in license registry의 APPROVED/distributionScopes/focal 좌표를 manifest와 대조하고, 참조 registry entry를 assetManifestSha256에 포함하며 entity kind×usage별 exact 또는 승인 fallback coverage를 계산한다. decode 전 파일당 32MiB·축 8,192px·maxPixelCount 16,777,216을 검사하고 한 파일씩 decode한다. traversal/absolute/URI/symlink escape/case-fold collision, 과대 입력, 미승인 license, animated/multi-frame·회전·wide-gamut/미지원 ICC·alpha 불일치와 runtime legacy usage code를 거절한다.",
+    "module": ":tools:content-builder",
     "depends": [
       "P1-TASK-011"
     ],
@@ -1319,9 +1319,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "유효 fixture compile·경로/input 상한/license registry/focal/physical metadata negative case·coverage unresolved 0·stable diagnostics PASS",
     "tests": [
       "P1-UT-003",
       "P1-BT-003",
@@ -1346,11 +1346,11 @@
   {
     "id": "P1-TASK-013",
     "phase": 1,
-    "name": "로컬 이미지·AssetResolver·크롭 — 저장·연계",
+    "name": "asset row·manifest 산출",
     "function": "FUNC-P1-003",
-    "stage": "어댑터",
-    "detail": "대상 asset_image, asset_binding, asset_fallback. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "산출물",
+    "detail": "검증된 AssetManifest에서 asset_image/binding/fallback row를 staging content.db에 넣고 DB row와 manifest hash/metadata를 대조한다. JSON report와 Markdown을 만들고 asset-preview.html은 요약 index, 실제 thumbnail/crop/fallback/missing/duplicate/unused/license/coverage는 category별 정적 page를 최대 500 asset씩 분할해 loading=lazy로 생성한다. 모든 source 문자열을 HTML escape하고 외부 URL을 만들지 않는다. 실물 미제공은 NOT_PROVIDED/BLOCKED_ASSET로 유지한다.",
+    "module": ":tools:content-builder",
     "depends": [
       "P1-TASK-011"
     ],
@@ -1362,7 +1362,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "asset DB row·manifest·파일 metadata 일치, 10,000 asset에서도 bounded DOM인 HTML escape 분할 정적 preview/coverage 생성, 외부 요청과 실물 부족 상태 은폐 0",
     "tests": [
       "P1-CT-003",
       "P1-IT-003"
@@ -1386,11 +1386,11 @@
   {
     "id": "P1-TASK-014",
     "phase": 1,
-    "name": "로컬 이미지·AssetResolver·크롭 — UI·호출 경로",
+    "name": "Android 읽기 전용 AssetResolver",
     "function": "FUNC-P1-003",
-    "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "런타임",
+    "detail": ":core:content의 ContentRepository가 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 method와 CDB-Q01..Q06 prepared query allowlist만 제공하고 :core:image AssetResolver가 AssetResolveRequest(bundleId, templateId?, exactAssetKeys, entityKind, usage, fallbackContext, targetPx, qualityMode)를 instance key→template binding→fallback 유한 후보의 ResolvedAsset/로컬 URI/usage 파생 category·crop request로 변환한다. repository는 InstalledBundle 하나에 고정된 AutoCloseable이고 P3 :core:data adapter는 OPEN_READONLY/query_only를 사용한다. session owner가 child job cancel/join 뒤 idempotent close하고 OPEN 동시 read·불법 read/close 경합·close 뒤 read를 검증한다. index/file/decode는 Main 밖에서 수행하고 후보 assetId를 한 번만 열며 Coil bounded cache key를 고정한다. :app fixture gallery에서 TEXT usage별 표시/생략, Exact/Fallback/Loading/terminal text layout과 공개 이름 contentDescription을 확인한다.",
+    "module": ":core:image / :app",
     "depends": [
       "P1-TASK-011"
     ],
@@ -1400,10 +1400,11 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "6개 read method의 in-memory/SQLite 결과와 CDB-Q01..Q06 query plan 동일, network/save write/Main-thread I/O 0, OPEN_READONLY/query_only 및 owner cancel/join/close adapter contract fixture 승인, 유한 후보/TEXT/파생 category·crop/cache/Exact/Fallback/Loading/terminal text layout/contentDescription smoke PASS",
     "tests": [
+      "P1-UT-003",
       "P1-CT-003",
       "P1-IT-003"
     ],
@@ -1426,11 +1427,11 @@
   {
     "id": "P1-TASK-015",
     "phase": 1,
-    "name": "로컬 이미지·AssetResolver·크롭 — Test·리뷰",
+    "name": "Asset Test·독립 리뷰",
     "function": "FUNC-P1-003",
     "stage": "검증",
-    "detail": "P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "P1-UT/BT/FT/CT/IT-003을 실제 PNG/WebP fixture와 Android fixture gallery로 실행한다. 6개 read method의 in-memory/SQLite 동치와 CDB-Q01..Q06 query plan, usage 파생 category/crop과 정수 crop golden, path/input 상한/license registry/physical metadata trust boundary, cancellation과 repository read/close lifecycle, target decode/memory/PSS, bundle cache invalidation, 화면별 fallback 순서·유한 종료, TEXT usage별 표시/생략, 분할 preview, Loading 구분과 접근성 semantics를 독립 리뷰한다.",
+    "module": ":core:image / :tools:content-builder / :app",
     "depends": [
       "P1-TASK-012",
       "P1-TASK-013",
@@ -1442,9 +1443,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "5개 Test PASS·6-query repository 동치/query plan·physical metadata·crop/fallback/TEXT/terminal layout screenshot·cache/decode/PSS·contentDescription 증거·중대 결함 0",
     "tests": [
       "P1-UT-003",
       "P1-BT-003",
@@ -1471,11 +1472,11 @@
   {
     "id": "P1-TASK-016",
     "phase": 1,
-    "name": "콘텐츠·이미지 버전 교체와 호환 — 계약·Fixture",
+    "name": "BindingPlan·alias 계약",
     "function": "FUNC-P1-004",
     "stage": "계약",
-    "detail": "ContentBinding.resolve(saved: ContentBinding, installed: ContentBundle) -> BindingPlan의 DTO/오류/불변식 정의. 입력 saveContentVersion, installedManifest, aliasMap, legacyTemplates. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "save의 logicalContentHash를 유일한 콘텐츠 호환 identity로 사용하는 Compatible/MigrationRequired/Unsupported BindingPlan, REMAP/TOMBSTONE alias와 legacy snapshot 입력을 고정한다. assetManifestSha256/artifactFileSha256/bundleId는 설치 무결성 값이며 save 호환 판정에서 제외한다. 적용 owner가 P3/P25임을 명시하고 FUNC-P1-004 REQUIRED/DATA Assertion을 승인하거나 결정 근거로 재분류한다.",
+    "module": ":core:content",
     "depends": [
       "P0-TASK-021"
     ],
@@ -1485,9 +1486,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "BindingPlan/alias/오류 fixture 승인, FUNC-P1-004 미승인 REQUIRED/DATA 0건",
     "tests": [
       "P1-UT-004",
       "P1-BT-004",
@@ -1516,11 +1517,11 @@
   {
     "id": "P1-TASK-017",
     "phase": 1,
-    "name": "콘텐츠·이미지 버전 교체와 호환 — 핵심 규칙",
+    "name": "순수 compatibility resolver",
     "function": "FUNC-P1-004",
     "stage": "알고리즘",
-    "detail": "save contentVersion과 생성기/밸런스/RNG 버전을 별도로 저장한다; 삭제 ID는 alias 또는 legacy snapshot으로 복구하며 의미가 다른 템플릿으로 자동 치환하지 않는다; 자산팩 변경은 파일 checksum만 새로 계산하고 NPC의 portrait key는 그대로 유지한다; 선택 자산팩/표정 variant는 선택 범위로 추적하되 기본 오프라인 플레이를 막지 않는다. 정해진 입력에서는 '변환 이력과 이전 ID 보존'을 만족해야 한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "save/installed logicalContentHash와 terminal alias/legacy를 비교해 immutable BindingPlan만 계산한다. logical hash가 같으면 asset bundle 차이와 무관하게 Compatible이며, 같은 입력은 같은 plan을 반환하고 의미가 다른 template 자동치환과 I/O를 금지한다.",
+    "module": ":core:content",
     "depends": [
       "P1-TASK-016"
     ],
@@ -1530,9 +1531,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
-    "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
+    "done": "compatibility matrix golden·determinism·I/O 0 PASS",
     "tests": [
       "P1-UT-004",
       "P1-BT-004",
@@ -1557,11 +1558,11 @@
   {
     "id": "P1-TASK-018",
     "phase": 1,
-    "name": "콘텐츠·이미지 버전 교체와 호환 — 저장·연계",
+    "name": "alias flatten·legacy plan",
     "function": "FUNC-P1-004",
-    "stage": "어댑터",
-    "detail": "대상 content_manifest, content_alias, asset_image. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "호환",
+    "detail": "source alias graph를 same-kind terminal 한 hop 또는 TOMBSTONE으로 평탄화한다. self/cycle/alias-to-alias/missing target/kind 변경을 ERROR로 만들고 원래 edge provenance를 report에 남긴다.",
+    "module": ":core:content / :tools:content-builder",
     "depends": [
       "P1-TASK-016"
     ],
@@ -1573,7 +1574,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "alias negative graph 전부 거절·runtime 최대 1회 lookup PASS",
     "tests": [
       "P1-CT-004",
       "P1-IT-004"
@@ -1597,11 +1598,11 @@
   {
     "id": "P1-TASK-019",
     "phase": 1,
-    "name": "콘텐츠·이미지 버전 교체와 호환 — UI·호출 경로",
+    "name": "P3/P22/P25 계약 인계",
     "function": "FUNC-P1-004",
-    "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "stage": "인계",
+    "detail": "logicalContentHash 기반 BindingPlan DTO/codec와 immutable InstalledBundle/ContentSnapshot을 P3/P25와 WorldSession bootstrap에, ContentRepository의 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage)·CDB-Q01..Q06 prepared query·AutoCloseable owner cancel/join/close·OPEN_READONLY/query_only 구현을 P3 :core:data에, TEXT usage별 표시/생략·Loading·terminal text layout·contentDescription 책임을 P22에 인계한다. P1에 apply command, migration history, SavePort, editable 관리 UI를 추가하지 않는다.",
+    "module": ":core:content / docs",
     "depends": [
       "P1-TASK-016"
     ],
@@ -1611,9 +1612,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "P3/P22/P25 handoff contract/fixture 승인, P1 save/apply/editable UI 구현 0",
     "tests": [
       "P1-CT-004",
       "P1-IT-004"
@@ -1637,11 +1638,11 @@
   {
     "id": "P1-TASK-020",
     "phase": 1,
-    "name": "콘텐츠·이미지 버전 교체와 호환 — Test·리뷰",
+    "name": "Compatibility Test·독립 리뷰",
     "function": "FUNC-P1-004",
     "stage": "검증",
-    "detail": "P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "P1-UT/BT/FT/CT/IT-004를 logicalContentHash/asset-only bundle/version/alias/legacy matrix와 read-only save fixture로 실행한다. plan만 생성되고 원본 save hash가 유지되는지 독립 리뷰한다.",
+    "module": ":core:content",
     "depends": [
       "P1-TASK-017",
       "P1-TASK-018",
@@ -1653,9 +1654,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "5개 Test PASS·save hash 불변·P3/P25 적용 경계 승인",
     "tests": [
       "P1-UT-004",
       "P1-BT-004",
@@ -1685,8 +1686,8 @@
     "name": "Phase 1 통합 검증·인계 Gate",
     "function": "PHASE-1",
     "stage": "Gate",
-    "detail": "원문 ID 수량 일치·필수 참조 0건 오류·자산 검증 리포트; 기능별리뷰/예외/회귀/세이브호환/후속port확인. 미승인설계보완안은해당기능구현활성화를차단하고상태를은폐하지않는다.",
-    "module": ":core:content / :core:image / tools:content-builder",
+    "detail": "27개 P1 Test, Gradle graph/build spike와 immutable ContentSnapshot handoff, CSV dialect v1/JSON v1/canonical ID·kind/input 상한 roundtrip, fresh staging DDL, content.db manifest 1행/physical FK/integrity/독립 semantic audit/PreparedStatement/journal·close·sidecar 0/read-only reopen/hash·동일 target idempotent publish, CDB-Q01..Q06 query plan, entity kind×usage exact/approved fallback coverage unresolved 0, 10,000 asset 분할 asset-preview.html, license registry/physical image metadata, 화면별 fallback 유한 종료, TEXT usage별 표시/생략, Android Exact/Fallback/Loading/terminal text layout 및 접근성 smoke, ContentRepository 6개 read method/lifecycle과 logicalContentHash 기반 BindingPlan write 0을 증거로 심의한다. 실물 부족은 PROTOTYPE_ACCEPTED/BLOCKED_ASSET로 분리한다.",
+    "module": ":app / :core:content / :core:image / :tools:content-builder / docs",
     "depends": [
       "P1-TASK-005",
       "P1-TASK-010",
@@ -1701,7 +1702,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "필수Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0",
+    "done": "27개 Test PASS·DB sealing/query plan·중대 결함 0·coverage unresolved 0·PROTOTYPE_ACCEPTED 또는 FULL_CONTENT_READY 명시·P3/P22/P25 인계 승인",
     "tests": [
       "P1-UT-001",
       "P1-BT-001",

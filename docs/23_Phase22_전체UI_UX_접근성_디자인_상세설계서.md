@@ -114,7 +114,7 @@
 |---|---|
 | 기능 목적 | 디자인 토큰·컴포넌트·이미지을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§2555](#src-2555), [§2576](#src-2576), [§2588](#src-2588), [§2608](#src-2608), [§2623](#src-2623), [§2629](#src-2629), [§2631](#src-2631), [§2637](#src-2637), [§2671](#src-2671), [§2673](#src-2673), [§2820](#src-2820), [§2821](#src-2821), [§2822](#src-2822), [§2823](#src-2823), [§2824](#src-2824) 외 108 개 |
-| 기능 요구사항 | 1. V28 색상/타이포/간격/모서리/상태배지토큰을원문 값으로등록한다<br>2. 용병/아이템/던전카드와확률분해/상태칩/정보미확인표시를재사용한다<br>3. 동일 portraitKey 의화면별 crop 을적용하고장비변경으로 portrait 를재생성하지않는다<br>4. 로딩/실패/누락상태에서도텍스트행동과레이아웃을유지한다 |
+| 기능 요구사항 | 1. V28 색상/타이포/간격/모서리/상태배지토큰을원문 값으로등록한다<br>2. 용병/아이템/던전카드와확률분해/상태칩/정보미확인표시를재사용한다<br>3. 동일 portraitKey 의화면별 crop 을적용하고장비변경으로 portrait 를재생성하지않는다<br>4. P1 `ResolvedAsset`의 `Exact`/`Fallback`/`SkippedByQualityMode`와 P22 소유 `Loading` placeholder를 시각적으로 구분하고, 실패/누락에서도 텍스트 행동과 레이아웃을 유지한다<br>5. `TEXT`에서는 얼굴·전투 token·아이콘·문장 usage를 유지하고 room/event/key art만 생략하며, 모든 자산 후보 실패 시에도 이미지 없는 텍스트/행동 레이아웃으로 종료한다<br>6. `contentDescription`은 공개된 엔티티 이름/역할에서 생성하며 asset ID·파일명·fallback 여부를 발화하지 않는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `DesignSystemValidator.validate(spec: ComponentSpec) -> UiCheckReport` |
@@ -134,8 +134,9 @@
 2. V28 색상/타이포/간격/모서리/상태배지토큰을원문 값으로등록한다
 3. 용병/아이템/던전카드와확률분해/상태칩/정보미확인표시를재사용한다
 4. 동일 portraitKey 의화면별 crop 을적용하고장비변경으로 portrait 를재생성하지않는다
-5. 로딩/실패/누락상태에서도텍스트행동과레이아웃을유지한다
-6. 출력계약과원본불변을검증하고 view/report 만반환한다.
+5. P1의 Exact/Fallback/SkippedByQualityMode와 P22의 Loading placeholder를 구분하고, `TEXT`에서 `LIST_FACE, DETAIL_PORTRAIT, DIALOG_PORTRAIT, BATTLE_TOKEN, CHRONICLE_THUMB, ICON, EMBLEM`은 표시하되 `ROOM_BACKGROUND, EVENT_ART, KEY_ART`는 이미지 요청 없이 생략한다.
+6. 모든 exact/fallback 후보가 실패해도 Loading에 머물지 않고 이미지 없는 텍스트·행동 레이아웃으로 종료하며 공개된 이름/역할로만 `contentDescription`을 생성한다.
+7. 출력계약과원본불변을검증하고 view/report 만반환한다.
 
 입력 `tokenVersion, component, stateVariant, cropUsage, locale` → `DesignSystemValidator.validate` → 검증된 `screenshotSpec, tokenViolations, renderState` → 호출 UI/검증리포트; live world 변경 없음.
 
@@ -287,15 +288,8 @@
 
 #### `asset_image` 필드 및 관계
 
-| 필드/제약 | 용도 |
-|---|---|
-| relative_path TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| category TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| width INTEGER NOT NULL CHECK(width>0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| height INTEGER NOT NULL CHECK(height>0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| byte_size INTEGER NOT NULL CHECK(byte_size>=0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| sha256 TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| pool_version TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+P22는 필드 계약을 복제하지 않는다. `81_전체_데이터사전.md`와 P1 content DDL의 `asset_image` 정의를 참조하며 read-only 표시만 수행한다.
+
 #### `command_receipt` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -331,24 +325,8 @@ Index 는조회조건/정렬을기준으로추가하고 EXPLAIN QUERY PLAN 과�
 content.db 와 save.db 는**별도로**생성하며 cross-DB JOIN/transaction 을하지않는다. 아래구문은각각해당 DB 에서실행한다. 부모 FK 테이블은선행 Phase 의완료스키마가제공해야한다. 전체초기 schema 는공통부록 SQL 에있다.
 
 **content.db**
-```sql
--- 제안 DDL; 실제 Room 생성 schema와 검토 후 동기화.
-PRAGMA foreign_keys=ON;
 
-CREATE TABLE IF NOT EXISTS asset_image (
-  id TEXT PRIMARY KEY NOT NULL,
-  row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  relative_path TEXT NOT NULL,
-  category TEXT NOT NULL,
-  width INTEGER NOT NULL CHECK(width>0),
-  height INTEGER NOT NULL CHECK(height>0),
-  byte_size INTEGER NOT NULL CHECK(byte_size>=0),
-  sha256 TEXT NOT NULL,
-  pool_version TEXT,
-  UNIQUE(relative_path)
-);
-CREATE INDEX IF NOT EXISTS ix_asset_image_1 ON asset_image(category);
-```
+P22는 `asset_image` DDL을 재정의하지 않는다. P1의 `docs/설계부록/02_제안_content_schema.sql`과 P3 `:core:data` read adapter를 그대로 사용하며, P22는 `ResolvedAsset` 표시 상태, `TEXT` usage별 표시/생략, 모든 후보 실패 시 이미지 없는 terminal layout과 semantics만 소유한다.
 
 **save.db**
 ```sql

@@ -401,8 +401,8 @@
       "FUNC-P0-001",
       "FUNC-P0-002"
     ],
-    "status": "ACCEPTED",
-    "owner": "Codex",
+    "status": "DONE",
+    "owner": "사용자",
     "related_source_ids": []
   },
   {
@@ -412,9 +412,9 @@
       0
     ],
     "goal": "원문 카탈로그를 손실 없이 형식화하고 로컬 자산을 검증·배포한다.",
-    "modules": ":core:content / :core:image / tools:content-builder",
-    "gate": "원문 ID 수량 일치·필수 참조 0건 오류·자산 검증 리포트",
-    "risks": "실제 이미지 미첨부; 미정 효과 수치; 콘텐츠 ID 충돌",
+    "modules": ":core:content / :core:image / :tools:content-builder / :app(fixture smoke)",
+  "gate": "P0-TASK-021 DONE·active REQUIRED/DATA 승인·CSV dialect v1/JSON v1 roundtrip·fresh staging DDL·content.db manifest 1행/FK/integrity/semantic audit/journal·close·sidecar/read-only reopen/hash·CDB-Q01..Q06 query plan·asset-preview.html 및 entity kind×usage coverage·Android Exact/Fallback/Loading smoke·27개 Test PASS; 실물 부족은 PROTOTYPE_ACCEPTED/BLOCKED_ASSET로 분리",
+    "risks": "실제 10,000개 이미지 미첨부; canonical source 미생성; 미정 효과 수치; 콘텐츠 ID/alias 충돌",
     "features": [
       {
         "p": 1,
@@ -428,10 +428,10 @@
           "content_alias"
         ],
         "rules": [
-          "원문 카탈로그 ID·한글명·등급·태그·수치·단위를 원본 필드로 유지한다",
-          "무기420/방어구480/장신구420/아이템180/몬스터300과 별도 스킬·보스·이벤트 카탈로그를 검증한다",
-          "설명만 있는 효과는 미정 필드로 기록하고 임의 수치를 실제 원문값처럼 채우지 않는다",
-          "잘못된 조사/표기 교정은 displayName override와 원문명 이력을 별도 관리한다"
+          "catalog-manifest.json에 열거된 UTF-8/NFC source만 읽고 filesystem glob 순서를 사용하지 않으며 CSV dialect v1과 JSON v1을 적용한다",
+          "원문 ID·sourceDisplayName·등급·태그·수치·단위를 보존하고 displayNameOverride를 분리한다",
+          "설명만 있는 효과는 UNRESOLVED로 유지하며 Full profile에서 거절한다",
+          "Importer는 CatalogDraft와 diagnostics만 반환하며 content.db·save.db·게임 상태를 쓰지 않는다"
         ],
         "normal": [
           "WPN-0001 물리19 레벨1",
@@ -456,8 +456,8 @@
           "데이터",
           "관리"
         ],
-        "state": "RAW → PARSED → VALIDATED → PUBLISHED",
-        "kind": "mutation",
+        "state": "RAW → PARSED → REJECTED/VALIDATED",
+        "kind": "tool",
         "refs": [],
         "sources": [
           51,
@@ -506,10 +506,10 @@
           "content_alias"
         ],
         "rules": [
-          "schema/type/range/reference/태그 충돌/레시피 순환을 검사한다",
-          "validation report에 ERROR/WARN과 영향 ID를 남긴다",
-          "content.db는 임시 디렉터리에서 생성·무결성 검사 후 manifest와 함께 발행한다",
-          "Prototype/Alpha/Full은 데이터 profile만 다르며 최종 Full 목표를 삭제하지 않는다"
+          "schema/type/range/reference/tag/recipe cycle/AST/profile을 고정 순서로 검사하고 diagnostics를 안정 정렬한다",
+          "content.db는 비어 있는 새 staging root에 무조건 DDL로 만들며 transaction 전에 foreign_keys=1과 journal_mode=delete를 확인하고 기존 파일/schema object는 STAGING_NOT_EMPTY로 거절하며 N→N+1 migration을 적용하지 않는다",
+          "JSON validation report를 권위 산출물로 만들고 Markdown과 asset-preview.html은 같은 JSON만 읽어 생성한다",
+          "모든 값은 PreparedStatement parameter로 적재하고 FK·integrity·독립 semantic audit·resource close·SQLite sidecar 0·read-only 재오픈 통과 뒤 hash로 외부 bundle manifest를 확정·fsync해 bundleId directory로 발행하며 current.json은 build output 전용 pointer다"
         ],
         "normal": [
           "두 번 동일 소스를 빌드",
@@ -531,8 +531,8 @@
           "Format",
           "Content"
         ],
-        "state": "DRAFT → CHECKED → STAGED → ACTIVE",
-        "kind": "mutation",
+        "state": "DRAFT → CHECKED → STAGED → PUBLISHED",
+        "kind": "tool",
         "refs": [],
         "sources": [
           3049,
@@ -562,30 +562,33 @@
         "p": 1,
         "i": 3,
         "id": "FUNC-P1-003",
-        "name": "로컬 이미지·AssetResolver·크롭",
-        "method": "AssetResolver.resolve(key: AssetKey, usage: ImageUsage) -> LocalAssetRef",
+        "name": "정적 콘텐츠 조회·로컬 AssetResolver·크롭",
+        "method": "AssetResolver.resolve(request: AssetResolveRequest) -> ResolvedAsset",
         "tables": [
+          "content_template",
+          "content_alias",
           "asset_image",
           "asset_binding",
           "asset_fallback"
         ],
         "rules": [
-          "원문 10,000장 NPC 파일명과 단일 portraitKey 사용을 유지한다",
-          "domain에는 Key만 저장하며 Android URI 조합은 core:image에서 수행한다",
-          "사용처별 crop profile을 적용하고 fallback이 발생해도 저장된 원래 key를 바꾸지 않는다",
-          "네트워크 URI·경로 탈출·임의 파일 접근은 거부하고 실제 자산 미제공 상태는 NOT_PROVIDED로 기록한다"
+          "AssetCatalogCompiler는 input 상한과 magic bytes/hash/크기/단일 frame/EXIF orientation/alpha/sRGB/license registry/focal 좌표를 검증하고 참조 registry entry를 assetManifestSha256에 포함한다",
+          "ContentRepository는 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 read method만 제공하며 InstalledBundle 하나에 고정되고 CDB-Q01..Q06 prepared query와 owner cancel/join/close lifecycle을 사용한다",
+          "AssetResolver는 nullable templateId의 binding을 ordered exactAssetKeys 뒤에 붙이고 entityKind/usage별 공개 fallbackContext matcher를 유한 순회하며 후보 assetId를 한 번만 열고 source key를 바꾸지 않는다",
+          "ResolvedAsset은 Exact/Fallback/SkippedByQualityMode를 구분하고 TEXT usage allowlist, usage에서 유일하게 파생한 category/crop과 정수 crop geometry·target decode 상한을 반환한다",
+          "core:image는 local-only Coil을 사용하고 memoryCacheKey=bundleId|assetId|sha256|usage|targetBucket|qualityMode로 bounded cache를 재사용한다"
         ],
         "normal": [
-          "NPC-W-03147, BATTLE_TOKEN",
+          "MONSTER, templateId=MON-0001, BATTLE_TOKEN",
           "동일 파일의 1:1 crop과 원래 key 유지"
         ],
         "edge": [
           "해당 파일 없음",
-          "여성 generic fallback 표시; NPC identity 불변"
+          "여성 generic fallback 표시; 용병 identity 불변"
         ],
         "failure": [
           "../../save.db를 asset key로 입력",
-          "InvalidAssetKey; 파일 읽지 않음"
+          "INVALID_ASSET_PATH; 파일 읽지 않음"
         ],
         "kw": [
           "이미지",
@@ -602,8 +605,8 @@
           "캐시",
           "Placeholder"
         ],
-        "state": "RESOLVE → LOCAL/OVERRIDE/FALLBACK",
-        "kind": "mutation",
+        "state": "REQUEST → EXACT/FALLBACK/SKIPPED/ERROR",
+        "kind": "read",
         "refs": [],
         "sources": [
           2709,
@@ -716,10 +719,10 @@
           "asset_image"
         ],
         "rules": [
-          "save contentVersion과 생성기/밸런스/RNG 버전을 별도로 저장한다",
-          "삭제 ID는 alias 또는 legacy snapshot으로 복구하며 의미가 다른 템플릿으로 자동 치환하지 않는다",
-          "자산팩 변경은 파일 checksum만 새로 계산하고 NPC의 portrait key는 그대로 유지한다",
-          "선택 자산팩/표정 variant는 선택 범위로 추적하되 기본 오프라인 플레이를 막지 않는다"
+          "save content/balance/generator/RNG 버전과 설치 bundle/alias/legacy를 입력으로 immutable BindingPlan만 계산한다",
+          "alias는 same-kind terminal 한 hop 또는 TOMBSTONE만 허용하고 self/cycle/chain/missing target을 build time에 거절한다",
+          "필수 ID가 alias/legacy에 없으면 Unsupported이며 의미가 다른 template으로 자동 치환하지 않는다",
+          "Android는 세션 시작 시 검증된 InstalledBundle을 immutable snapshot으로 고정하며 P1은 BindingPlan을 적용하거나 save를 쓰지 않고 실제 적용은 P3/P25가 소유한다"
         ],
         "normal": [
           "옛 ID alias OLD-WPN→WPN-0001",
@@ -744,7 +747,7 @@
           "팩"
         ],
         "state": "BOUND → COMPATIBLE/MIGRATION_REQUIRED/UNSUPPORTED",
-        "kind": "mutation",
+        "kind": "compute",
         "refs": [],
         "sources": [
           2782,
@@ -958,6 +961,12 @@
     "expected_effort": 29.15,
     "optimistic_effort": 17.9,
     "pessimistic_effort": 46.75,
+    "active_function_ids": [
+      "FUNC-P1-001",
+      "FUNC-P1-002",
+      "FUNC-P1-003",
+      "FUNC-P1-004"
+    ],
     "status": "NOT_STARTED",
     "owner": "미지정",
     "related_source_ids": []

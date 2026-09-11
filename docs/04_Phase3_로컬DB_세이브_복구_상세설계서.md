@@ -30,7 +30,7 @@
 | C16 | 세대번호만 존재하는 과거상태 복원 | 승인·기준선 반영 | 불변청크+완전 manifest+정규화 current projection 원자저장. GC root 보호. |
 | C22 | 암호화·checksum 보장범위 | 원문 해석 확정 | checksum 은손상탐지,인증/치트방지아님. 기본로컬파일백업·사용자동의·원본 보존. |
 
-P3 진입 시 `:core:save`를 실제 Room schema와 함께 처음 생성한다. 이 문서의 `:core:database`/`:core:data`는 독립 build 근거가 생기기 전까지 `:core:save` 내 논리 package로 해석하며 빈 Gradle module로 만들지 않는다. P3 검증은 `:core:save` JVM/instrumented test source를 사용하고 `:tools:headless`를 선행 요구하지 않는다.
+P3 진입 시 `:core:save`를 실제 Room schema와 함께 처음 생성한다. 이 문서의 `:core:database`/`:core:data`는 독립 build 근거가 생기기 전까지 `:core:save` 내 논리 package로 해석하며 빈 Gradle module로 만들지 않는다. `:core:data` 논리 package는 P1 `ContentRepository`의 Android `content.db` read adapter도 소유하며 `OPEN_READONLY`와 `PRAGMA query_only=ON`을 적용하고 live content write를 제공하지 않는다. adapter는 검증된 `InstalledBundle` 하나에 고정된 `AutoCloseable`로서 P1의 `findTemplate(templateId)`, `listTemplates(kind)`, `findAlias(oldId)`, `findAssetBindings(templateId,usage)`, `findAsset(assetId)`, `listAssetFallbacks(usage)`만 구현하고, in-memory fixture와 같은 결과·정렬·미존재·지원하지 않는 definition version/JSON 손상 시 `IncompatibleContent` contract test를 통과해야 한다. 6개 method는 blocking read이므로 호출자가 background dispatcher를 보장하며 Main thread 호출을 실패 테스트로 차단한다. session owner가 child job을 cancel/join한 뒤 idempotent close하며 OPEN 동시 read와 불법 read/close 경합·close 뒤 `ContentRepositoryClosed`를 contract test로 검증한다. SQL은 P1 `CDB-Q01..Q06` allowlist와 prepared parameter만 사용하고 대표 FULL fixture의 `EXPLAIN QUERY PLAN`을 회귀 증거로 보존한다. P3 검증은 `:core:save` JVM/instrumented test source를 사용하고 `:tools:headless`를 선행 요구하지 않는다.
 
 Room/SQLite 물리 구현을 기능별 adapter Task로 확장하기 전에 실제 단말 storage/recovery spike를 통과해야 한다. 최소 시나리오는 `save→process kill→recovery`, restore 중 kill, storage full, WAL 존재, candidate DB swap 중 kill, 손상 generation 거절, `save.previous.db` fallback이다. 각 시나리오는 이전 또는 다음 완전 세대만 선택하고 live slot 부분 갱신이 0건임을 증명한다. 실패하면 구조를 단순화하거나 결정대장에 차단 결정을 기록하며 성공으로 간주하지 않는다.
 
@@ -469,7 +469,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 |---|---|
 | content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | balance_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| source_bundle_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| logical_content_hash TEXT NOT NULL | save가 참조한 canonical content record의 `logicalContentHash`; asset/artifact/bundle hash와 혼용하지 않음 |
 | compatibility_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 #### `dialogue_session` 필드 및 관계
 
@@ -675,7 +675,7 @@ CREATE TABLE IF NOT EXISTS content_binding (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   content_version TEXT NOT NULL,
   balance_version TEXT NOT NULL,
-  source_bundle_hash TEXT NOT NULL,
+  logical_content_hash TEXT NOT NULL,
   compatibility_json TEXT NOT NULL,
   UNIQUE(content_version,balance_version)
 );

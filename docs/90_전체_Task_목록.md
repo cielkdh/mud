@@ -31,27 +31,27 @@
 | 0 | [P0-TASK-019](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-task-019) | 최소 검증 하네스·공통 UI 껍데기 — UI·호출 경로 | P0-TASK-016 | 필수 | :app | 선행계약후;공통 schema 충돌은직렬 | P0-CT-004, P0-IT-004 | 5-state·retry·unknown route·접근성 Compose test PASS | 1.06 |
 | 0 | [P0-TASK-020](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-task-020) | 최소 검증 하네스·공통 UI 껍데기 — Test·리뷰 | P0-TASK-017, P0-TASK-018, P0-TASK-019 | 필수 | :app / :core:simulation | 선행계약후;공통 schema 충돌은직렬 | P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 | 대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
 | 0 | [P0-TASK-021](01_Phase0_기준선_아키텍처_개발기반_상세설계서.md#p0-task-021) | Phase 0 통합 검증·인계 Gate | P0-TASK-005, P0-TASK-010, P0-TASK-015, P0-TASK-020 | 필수 | docs/검증도구 / Gradle root / :app / :core:simulation | 선행계약후;공통 schema 충돌은직렬 | P0-UT-001, P0-UT-002, P0-BT-002, P0-BT-003, P0-CT-003, P0-CN-001, P0-CT-004, P0-IT-002 | Gate 8개 PASS·C01/C02/C03 적용·C14 빌드 증거·인계 contract/fixture·미해결 P0/P1 결함 0 | 1.59 |
-| 1 | [P1-TASK-001](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-001) | 정적 카탈로그 스키마와 ID 보존 — 계약·Fixture | P0-TASK-021 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
-| 1 | [P1-TASK-002](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-002) | 정적 카탈로그 스키마와 ID 보존 — 핵심 규칙 | P1-TASK-001 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
-| 1 | [P1-TASK-003](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-003) | 정적 카탈로그 스키마와 ID 보존 — 저장·연계 | P1-TASK-001 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-001, P1-IT-001 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
-| 1 | [P1-TASK-004](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-004) | 정적 카탈로그 스키마와 ID 보존 — UI·호출 경로 | P1-TASK-001 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-001, P1-IT-001 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
-| 1 | [P1-TASK-005](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-005) | 정적 카탈로그 스키마와 ID 보존 — Test·리뷰 | P1-TASK-002, P1-TASK-003, P1-TASK-004 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 1 | [P1-TASK-006](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-006) | 콘텐츠 검증·사전 DB 빌드 — 계약·Fixture | P0-TASK-021 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
-| 1 | [P1-TASK-007](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-007) | 콘텐츠 검증·사전 DB 빌드 — 핵심 규칙 | P1-TASK-006 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-002, P1-BT-002, P1-FT-002 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
-| 1 | [P1-TASK-008](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-008) | 콘텐츠 검증·사전 DB 빌드 — 저장·연계 | P1-TASK-006 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-002, P1-IT-002 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
-| 1 | [P1-TASK-009](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-009) | 콘텐츠 검증·사전 DB 빌드 — UI·호출 경로 | P1-TASK-006 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-002, P1-IT-002 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
-| 1 | [P1-TASK-010](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-010) | 콘텐츠 검증·사전 DB 빌드 — Test·리뷰 | P1-TASK-007, P1-TASK-008, P1-TASK-009 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 1 | [P1-TASK-011](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-011) | 로컬 이미지·AssetResolver·크롭 — 계약·Fixture | P0-TASK-021 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
-| 1 | [P1-TASK-012](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-012) | 로컬 이미지·AssetResolver·크롭 — 핵심 규칙 | P1-TASK-011 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-BT-003, P1-FT-003 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
-| 1 | [P1-TASK-013](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-013) | 로컬 이미지·AssetResolver·크롭 — 저장·연계 | P1-TASK-011 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-003, P1-IT-003 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
-| 1 | [P1-TASK-014](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-014) | 로컬 이미지·AssetResolver·크롭 — UI·호출 경로 | P1-TASK-011 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-003, P1-IT-003 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
-| 1 | [P1-TASK-015](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-015) | 로컬 이미지·AssetResolver·크롭 — Test·리뷰 | P1-TASK-012, P1-TASK-013, P1-TASK-014 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 1 | [P1-TASK-016](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-016) | 콘텐츠·이미지 버전 교체와 호환 — 계약·Fixture | P0-TASK-021 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
-| 1 | [P1-TASK-017](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-017) | 콘텐츠·이미지 버전 교체와 호환 — 핵심 규칙 | P1-TASK-016 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-004, P1-BT-004, P1-FT-004 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
-| 1 | [P1-TASK-018](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-018) | 콘텐츠·이미지 버전 교체와 호환 — 저장·연계 | P1-TASK-016 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-004, P1-IT-004 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
-| 1 | [P1-TASK-019](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-019) | 콘텐츠·이미지 버전 교체와 호환 — UI·호출 경로 | P1-TASK-016 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-004, P1-IT-004 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
-| 1 | [P1-TASK-020](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-020) | 콘텐츠·이미지 버전 교체와 호환 — Test·리뷰 | P1-TASK-017, P1-TASK-018, P1-TASK-019 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 1 | [P1-TASK-021](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-021) | Phase 1 통합 검증·인계 Gate | P1-TASK-005, P1-TASK-010, P1-TASK-015, P1-TASK-020 | 필수 | :core:content / :core:image / tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001, P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002, P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003, P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004, P1-RT-001, P1-CN-001, P1-REC-001, P1-PT-001, P1-OP-001, P1-ET-001, P1-IT-005 | 필수 Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0 | 1.59 |
+| 1 | [P1-TASK-001](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-001) | canonical source·Assertion 계약 | P0-TASK-021 | 필수 | :core:content / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 | CSV/JSON dialect·canonical ID/kind·input 상한·source schema·diagnostic fixture 승인, FUNC-P1-001 미승인 REQUIRED/DATA 0건 | 1.06 |
+| 1 | [P1-TASK-002](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-002) | Importer·ID/원문 필드 보존 | P1-TASK-001 | 필수 | :core:content | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001 | 순수 importer·CSV/JSON dialect·중복/미정/effective display·logical row golden PASS | 2.12 |
+| 1 | [P1-TASK-003](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-003) | bootstrap→canonical source 변환 | P1-TASK-001 | 필수 | :tools:content-builder / content/source | 선행계약후;공통 schema 충돌은직렬 | P1-CT-001, P1-IT-001 | canonical source manifest·provenance·roundtrip 승인, bootstrap 직접 build 0 | 1.59 |
+| 1 | [P1-TASK-004](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-004) | Phase1 Gradle 경계·Build Spike | P1-TASK-001 | 필수 | Gradle root / :app / :core:content / :core:image / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-001, P1-IT-001 | 정확한 graph/allowlist/금지 import 검사와 Phase1 Build Spike PASS | 1.06 |
+| 1 | [P1-TASK-005](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-005) | Importer Test·독립 리뷰 | P1-TASK-002, P1-TASK-003, P1-TASK-004 | 필수 | :core:content / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001 | 5개 Test PASS·Assertion coverage·중대 결함 0·리뷰 승인 | 1.06 |
+| 1 | [P1-TASK-006](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-006) | bundle schema·hash 계약 | P0-TASK-021 | 필수 | :core:content / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 | canonical ID/kind·fresh DDL/query inventory/journal·close·sidecar/idempotent publish/build pointer/report schema/hash/profile fixture 승인, FUNC-P1-002 미승인 REQUIRED/DATA 0건 | 1.06 |
+| 1 | [P1-TASK-007](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-007) | Validator·canonical hash | P1-TASK-006 | 필수 | :core:content | 선행계약후;공통 schema 충돌은직렬 | P1-UT-002, P1-BT-002, P1-FT-002 | 검증 순서·오류 정렬·logical hash golden·독립 semantic audit·미정 Full 차단 PASS | 2.12 |
+| 1 | [P1-TASK-008](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-008) | staging content.db writer | P1-TASK-006 | 필수 | :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-002, P1-IT-002 | IF NOT EXISTS·N→N+1 migration·SQL 문자열 결합 0, STAGING_NOT_EMPTY 차단, FK/integrity/semantic audit·resource close·sidecar 0·read-only reopen/hash·동일 target idempotent/build-only pointer kill-safe publish PASS | 1.59 |
+| 1 | [P1-TASK-009](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-009) | CLI·Gradle build entry | P1-TASK-006 | 필수 | :tools:content-builder / Gradle root | 선행계약후;공통 schema 충돌은직렬 | P1-CT-002, P1-IT-002 | 동일 JSON에서 Markdown/HTML 생성·logical hash 동치·실패 non-zero·부분 산출물 0 | 1.06 |
+| 1 | [P1-TASK-010](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-010) | Content builder Test·독립 리뷰 | P1-TASK-007, P1-TASK-008, P1-TASK-009 | 필수 | :core:content / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002 | 5개 Test PASS·artifact/FK/semantic audit/sealing/hash 증거·중대 결함 0 | 1.06 |
+| 1 | [P1-TASK-011](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-011) | asset schema·path·crop 계약 | P0-TASK-021 | 필수 | :core:content / :core:image / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 | canonical type·license registry·manifest/path/input 상한/physical metadata·파생 category/crop/focal/화면별 fallback/TEXT/cache/UI state와 6 read API/query plan/lifecycle fixture 승인, FUNC-P1-003 미승인 REQUIRED/DATA 0건 | 1.06 |
+| 1 | [P1-TASK-012](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-012) | Asset validator/compiler | P1-TASK-011 | 필수 | :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-BT-003, P1-FT-003 | 유효 fixture compile·경로/input 상한/license registry/focal/physical metadata negative case·coverage unresolved 0·stable diagnostics PASS | 2.12 |
+| 1 | [P1-TASK-013](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-013) | asset row·manifest 산출 | P1-TASK-011 | 필수 | :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-003, P1-IT-003 | asset DB row·manifest·파일 metadata 일치, 10,000 asset에서도 bounded DOM인 HTML escape 분할 정적 preview/coverage 생성, 외부 요청과 실물 부족 상태 은폐 0 | 1.59 |
+| 1 | [P1-TASK-014](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-014) | Android 읽기 전용 AssetResolver | P1-TASK-011 | 필수 | :core:image / :app | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-CT-003, P1-IT-003 | 6개 read method의 in-memory/SQLite 결과와 CDB-Q01..Q06 query plan 동일, network/save write/Main-thread I/O 0, OPEN_READONLY/query_only 및 owner cancel/join/close adapter contract fixture 승인, 유한 후보/TEXT/파생 category·crop/cache/Exact/Fallback/Loading/terminal text layout/contentDescription smoke PASS | 1.06 |
+| 1 | [P1-TASK-015](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-015) | Asset Test·독립 리뷰 | P1-TASK-012, P1-TASK-013, P1-TASK-014 | 필수 | :core:image / :tools:content-builder / :app | 선행계약후;공통 schema 충돌은직렬 | P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003 | 5개 Test PASS·6-query repository 동치/query plan·physical metadata·crop/fallback/TEXT/terminal layout screenshot·cache/decode/PSS·contentDescription 증거·중대 결함 0 | 1.06 |
+| 1 | [P1-TASK-016](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-016) | BindingPlan·alias 계약 | P0-TASK-021 | 필수 | :core:content | 선행계약후;공통 schema 충돌은직렬 | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 | BindingPlan/alias/오류 fixture 승인, FUNC-P1-004 미승인 REQUIRED/DATA 0건 | 1.06 |
+| 1 | [P1-TASK-017](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-017) | 순수 compatibility resolver | P1-TASK-016 | 필수 | :core:content | 선행계약후;공통 schema 충돌은직렬 | P1-UT-004, P1-BT-004, P1-FT-004 | compatibility matrix golden·determinism·I/O 0 PASS | 2.12 |
+| 1 | [P1-TASK-018](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-018) | alias flatten·legacy plan | P1-TASK-016 | 필수 | :core:content / :tools:content-builder | 선행계약후;공통 schema 충돌은직렬 | P1-CT-004, P1-IT-004 | alias negative graph 전부 거절·runtime 최대 1회 lookup PASS | 1.59 |
+| 1 | [P1-TASK-019](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-019) | P3/P22/P25 계약 인계 | P1-TASK-016 | 필수 | :core:content / docs | 선행계약후;공통 schema 충돌은직렬 | P1-CT-004, P1-IT-004 | P3/P22/P25 handoff contract/fixture 승인, P1 save/apply/editable UI 구현 0 | 1.06 |
+| 1 | [P1-TASK-020](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-020) | Compatibility Test·독립 리뷰 | P1-TASK-017, P1-TASK-018, P1-TASK-019 | 필수 | :core:content | 선행계약후;공통 schema 충돌은직렬 | P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004 | 5개 Test PASS·save hash 불변·P3/P25 적용 경계 승인 | 1.06 |
+| 1 | [P1-TASK-021](02_Phase1_콘텐츠_자산_빌드파이프라인_상세설계서.md#p1-task-021) | Phase 1 통합 검증·인계 Gate | P1-TASK-005, P1-TASK-010, P1-TASK-015, P1-TASK-020 | 필수 | :app / :core:content / :core:image / :tools:content-builder / docs | 선행계약후;공통 schema 충돌은직렬 | P1-UT-001, P1-BT-001, P1-FT-001, P1-CT-001, P1-IT-001, P1-UT-002, P1-BT-002, P1-FT-002, P1-CT-002, P1-IT-002, P1-UT-003, P1-BT-003, P1-FT-003, P1-CT-003, P1-IT-003, P1-UT-004, P1-BT-004, P1-FT-004, P1-CT-004, P1-IT-004, P1-RT-001, P1-CN-001, P1-REC-001, P1-PT-001, P1-OP-001, P1-ET-001, P1-IT-005 | 27개 Test PASS·DB sealing/query plan·중대 결함 0·coverage unresolved 0·PROTOTYPE_ACCEPTED 또는 FULL_CONTENT_READY 명시·P3/P22/P25 인계 승인 | 1.59 |
 | 2 | [P2-TASK-001](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-task-001) | 단일 작성자 명령 처리 — 계약·Fixture | P0-TASK-021 | 필수 | :core:simulation / :core:common | 선행계약후;공통 schema 충돌은직렬 | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
 | 2 | [P2-TASK-002](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-task-002) | 단일 작성자 명령 처리 — 핵심 규칙 | P2-TASK-001 | 필수 | :core:simulation / :core:common | 선행계약후;공통 schema 충돌은직렬 | P2-UT-001, P2-BT-001, P2-FT-001 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
 | 2 | [P2-TASK-003](03_Phase2_월드명령_시간_예약_RNG_상세설계서.md#p2-task-003) | 단일 작성자 명령 처리 — 저장·연계 | P2-TASK-001 | 필수 | :core:simulation / :core:common | 선행계약후;공통 schema 충돌은직렬 | P2-CT-001, P2-IT-001 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
@@ -709,26 +709,26 @@
 019. P0-TASK-019 최소 검증 하네스·공통 UI 껍데기 — UI·호출 경로
 020. P0-TASK-020 최소 검증 하네스·공통 UI 껍데기 — Test·리뷰
 021. P0-TASK-021 Phase 0 통합 검증·인계 Gate
-022. P1-TASK-001 정적 카탈로그 스키마와 ID 보존 — 계약·Fixture
-023. P1-TASK-002 정적 카탈로그 스키마와 ID 보존 — 핵심 규칙
-024. P1-TASK-003 정적 카탈로그 스키마와 ID 보존 — 저장·연계
-025. P1-TASK-004 정적 카탈로그 스키마와 ID 보존 — UI·호출 경로
-026. P1-TASK-005 정적 카탈로그 스키마와 ID 보존 — Test·리뷰
-027. P1-TASK-006 콘텐츠 검증·사전 DB 빌드 — 계약·Fixture
-028. P1-TASK-007 콘텐츠 검증·사전 DB 빌드 — 핵심 규칙
-029. P1-TASK-008 콘텐츠 검증·사전 DB 빌드 — 저장·연계
-030. P1-TASK-009 콘텐츠 검증·사전 DB 빌드 — UI·호출 경로
-031. P1-TASK-010 콘텐츠 검증·사전 DB 빌드 — Test·리뷰
-032. P1-TASK-011 로컬 이미지·AssetResolver·크롭 — 계약·Fixture
-033. P1-TASK-012 로컬 이미지·AssetResolver·크롭 — 핵심 규칙
-034. P1-TASK-013 로컬 이미지·AssetResolver·크롭 — 저장·연계
-035. P1-TASK-014 로컬 이미지·AssetResolver·크롭 — UI·호출 경로
-036. P1-TASK-015 로컬 이미지·AssetResolver·크롭 — Test·리뷰
-037. P1-TASK-016 콘텐츠·이미지 버전 교체와 호환 — 계약·Fixture
-038. P1-TASK-017 콘텐츠·이미지 버전 교체와 호환 — 핵심 규칙
-039. P1-TASK-018 콘텐츠·이미지 버전 교체와 호환 — 저장·연계
-040. P1-TASK-019 콘텐츠·이미지 버전 교체와 호환 — UI·호출 경로
-041. P1-TASK-020 콘텐츠·이미지 버전 교체와 호환 — Test·리뷰
+022. P1-TASK-001 canonical source·Assertion 계약
+023. P1-TASK-002 Importer·ID/원문 필드 보존
+024. P1-TASK-003 bootstrap→canonical source 변환
+025. P1-TASK-004 Phase1 Gradle 경계·Build Spike
+026. P1-TASK-005 Importer Test·독립 리뷰
+027. P1-TASK-006 bundle schema·hash 계약
+028. P1-TASK-007 Validator·canonical hash
+029. P1-TASK-008 staging content.db writer
+030. P1-TASK-009 CLI·Gradle build entry
+031. P1-TASK-010 Content builder Test·독립 리뷰
+032. P1-TASK-011 asset schema·path·crop 계약
+033. P1-TASK-012 Asset validator/compiler
+034. P1-TASK-013 asset row·manifest 산출
+035. P1-TASK-014 Android 읽기 전용 AssetResolver
+036. P1-TASK-015 Asset Test·독립 리뷰
+037. P1-TASK-016 BindingPlan·alias 계약
+038. P1-TASK-017 순수 compatibility resolver
+039. P1-TASK-018 alias flatten·legacy plan
+040. P1-TASK-019 P3/P22/P25 계약 인계
+041. P1-TASK-020 Compatibility Test·독립 리뷰
 042. P1-TASK-021 Phase 1 통합 검증·인계 Gate
 043. P2-TASK-001 단일 작성자 명령 처리 — 계약·Fixture
 044. P2-TASK-002 단일 작성자 명령 처리 — 핵심 규칙

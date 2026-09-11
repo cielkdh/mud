@@ -123,7 +123,7 @@ erDiagram
 
 `asset_binding`, `asset_fallback`, `asset_image`, `content_alias`, `content_manifest`, `content_template`
 
-관련 기능: `FUNC-P1-001` 정적 카탈로그 스키마와 ID 보존, `FUNC-P1-002` 콘텐츠 검증·사전 DB 빌드, `FUNC-P1-003` 로컬 이미지·AssetResolver·크롭, `FUNC-P1-004` 콘텐츠·이미지 버전 교체와 호환
+관련 기능: `FUNC-P1-001` 정적 카탈로그 스키마와 ID 보존, `FUNC-P1-002` 콘텐츠 검증·사전 DB 빌드, `FUNC-P1-003` 정적 콘텐츠 조회·로컬 AssetResolver·크롭, `FUNC-P1-004` 콘텐츠·이미지 버전 교체와 호환
 
 ### 6.3. P2 — 월드명령 시간 예약 RNG
 

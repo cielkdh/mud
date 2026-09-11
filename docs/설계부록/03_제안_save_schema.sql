@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS content_binding (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   content_version TEXT NOT NULL,
   balance_version TEXT NOT NULL,
-  source_bundle_hash TEXT NOT NULL,
+  logical_content_hash TEXT NOT NULL,
   compatibility_json TEXT NOT NULL,
   UNIQUE(content_version,balance_version)
 );

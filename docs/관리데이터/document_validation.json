@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-11T09:39:47+09:00",
+  "executed_at": "2026-09-11T17:17:19+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -87,6 +87,12 @@
       "failures": []
     },
     {
+      "name": "P1 Build Artifact·Read-only·BindingPlan 계약 동기화",
+      "status": "PASS",
+      "detail": "functions/phases/task/test/DDL/Phase 본문을 P1 tool·read·compute 경계와 교차 검사",
+      "failures": []
+    },
+    {
       "name": "NFR 승인 상태 동기화",
       "status": "PASS",
       "detail": "85/C19=BASELINE_V1·실측 NOT_RUN, 86 신규 정량 규칙=PROVISIONAL",
@@ -131,7 +137,7 @@
     {
       "name": "기능별 기계적 Port/Validator/Projection 제거",
       "status": "PASS",
-      "detail": "P0 기반 기능 4개를 제외한 107개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용",
+      "detail": "P0 기반 4개와 P1 build/read/compute 4개를 제외한 103개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용",
       "failures": []
     },
     {
@@ -161,7 +167,7 @@
     {
       "name": "착수 가능 Task Context Pack",
       "status": "PASS",
-      "detail": "2개 ready Task에 계약·Test·Assertion·Schema·Command/Event 요약 제공",
+      "detail": "4개 ready Task에 계약·Test·Assertion·Schema·Command/Event 요약 제공",
       "failures": []
     },
     {
@@ -221,7 +227,7 @@
     {
       "name": "로컬 Markdown 링크·명시적 anchor",
       "status": "PASS",
-      "detail": "8175개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
+      "detail": "8087개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
       "failures": []
     },
     {
@@ -245,13 +251,19 @@
     {
       "name": "SQL-content: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.45.3; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.53.1; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "failures": []
+    },
+    {
+      "name": "SQL-content: manifest·물리 FK·cheap semantic·asset code 제약",
+      "status": "PASS",
+      "detail": "두 번째 manifest ID, dangling alias/template FK, ContentKind/effective display, asset size/SHA, focal/category/matcher/value/usage/priority/중복 fallback을 실제 SQLite가 거절",
       "failures": []
     },
     {
       "name": "SQL-save: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.45.3; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.53.1; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
@@ -298,7 +310,7 @@
     }
   ],
   "summary": {
-    "PASS": 49
+    "PASS": 51
   },
   "game_test_execution": "NOT_RUN"
 }

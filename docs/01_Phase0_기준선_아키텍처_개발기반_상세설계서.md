@@ -1,7 +1,8 @@
 # Phase 0. 기준선 · 아키텍처 · 개발기반 상세 설계서
 
 > 버전 v31.2 · 기준원문 v30 · 작성일 2026-09-09
-> 상태: **ACCEPTED — revision `714941d`에서 구현·Gate 재검증·독립 리뷰 완료**
+> 상태: **DONE — 코드 revision `714941d`, 승인·증거 record `dacb508`에서 Gate 재검증·독립 리뷰 완료**
+> Phase 책임자: 사용자 · 독립 리뷰어: Codex
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
 ## 1. 문서 개요
@@ -380,12 +381,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — Gate 필수 항목 검증 및 독립 리뷰 완료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001 |
 | 완료 조건 | 검증 계약·fixture 승인, FUNC-P0-001 미승인 REQUIRED/DATA 0건, 별도 production resolver 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | 독립 리뷰 완료 / `local:714941d` / 승인 record `dacb508` 및 [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-002"></a>
 ### P0-TASK-002 — 원문 기준선과 충돌 판정 — 핵심 규칙
@@ -404,12 +405,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — Gate 필수 항목 검증 및 독립 리뷰 완료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-001, P0-BT-001, P0-FT-001 |
 | 완료 조건 | 충돌 우선순위·차단 규칙과 C01 근거 추적 검사 PASS |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-003"></a>
 ### P0-TASK-003 — 원문 기준선과 충돌 판정 — 저장·연계
@@ -428,12 +429,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-001, P0-IT-001 |
 | 완료 조건 | 검증보고서 원자 교체·실패 종료코드 1·game DB/앱 호출 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-004"></a>
 ### P0-TASK-004 — 원문 기준선과 충돌 판정 — UI·호출 경로
@@ -452,12 +453,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-001, P0-IT-001 |
 | 완료 조건 | CLI 종료코드·Markdown 보고서로 실패 관측, Android UI·SavePort 경로 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-005"></a>
 ### P0-TASK-005 — 원문 기준선과 충돌 판정 — Test·리뷰
@@ -476,12 +477,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-001, P0-BT-001, P0-FT-001, P0-CT-001, P0-IT-001 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-006"></a>
 ### P0-TASK-006 — 빌드·모듈·기술버전 고정 — 계약·Fixture
@@ -500,12 +501,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002 |
 | 완료 조건 | P0 Build Manifest·두 project graph·fixture 승인, FUNC-P0-002 미승인 REQUIRED/DATA 0건, 채택 RECOMMENDED 결정 ID 연결 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | 독립 리뷰 완료 / `local:714941d` / 승인 record `dacb508` 및 [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-007"></a>
 ### P0-TASK-007 — 빌드·모듈·기술버전 고정 — 핵심 규칙
@@ -524,12 +525,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — Gate 필수 항목 검증 및 독립 리뷰 완료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-002, P0-BT-002, P0-FT-002 |
 | 완료 조건 | 두 project graph·allowlist·금지 import·toolchain/lock 증거 검사 PASS |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-008"></a>
 ### P0-TASK-008 — 빌드·모듈·기술버전 고정 — 저장·연계
@@ -548,12 +549,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-002, P0-IT-002 |
 | 완료 조건 | graph/import/lock·P3 인계 경로 검사 PASS, P0 schema/DB/headless 산출물 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-009"></a>
 ### P0-TASK-009 — 빌드·모듈·기술버전 고정 — UI·호출 경로
@@ -572,12 +573,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-002, P0-IT-002 |
 | 완료 조건 | :app → :core:simulation만으로 AppRoot assemble/smoke PASS, DB/save/headless 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-010"></a>
 ### P0-TASK-010 — 빌드·모듈·기술버전 고정 — Test·리뷰
@@ -596,12 +597,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-002, P0-BT-002, P0-FT-002, P0-CT-002, P0-IT-002 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-011"></a>
 ### P0-TASK-011 — 공통 타입·명령·오류·이벤트 계약 — 계약·Fixture
@@ -620,12 +621,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003 |
 | 완료 조건 | value object·Command/Event/Error·WorldSession/SavePort 계약과 fixture 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | 독립 리뷰 완료 / `local:714941d` / 승인 record `dacb508` 및 [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-012"></a>
 ### P0-TASK-012 — 공통 타입·명령·오류·이벤트 계약 — 핵심 규칙
@@ -644,12 +645,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — Gate 필수 항목 검증 및 독립 리뷰 완료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-003, P0-BT-003, P0-FT-003 |
 | 완료 조건 | type 경계·overflow·UnsupportedFeature·Command/Event field 검사 PASS |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-013"></a>
 ### P0-TASK-013 — 공통 타입·명령·오류·이벤트 계약 — 저장·연계
@@ -668,12 +669,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-003, P0-IT-003 |
 | 완료 조건 | codec golden·test-only in-memory SavePort PASS, production persistence 산출물 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-014"></a>
 ### P0-TASK-014 — 공통 타입·명령·오류·이벤트 계약 — UI·호출 경로
@@ -692,12 +693,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-003, P0-IT-003 |
 | 완료 조건 | :app 공개 API compile PASS, 저장 구현/DAO 직접 참조 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-015"></a>
 ### P0-TASK-015 — 공통 타입·명령·오류·이벤트 계약 — Test·리뷰
@@ -716,12 +717,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-003, P0-BT-003, P0-FT-003, P0-CT-003, P0-IT-003 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-016"></a>
 ### P0-TASK-016 — 최소 검증 하네스·공통 UI 껍데기 — 계약·Fixture
@@ -740,12 +741,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 |
 | 완료 조건 | AppShellState·AppRoot·placeholder 계약과 fixture 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | 독립 리뷰 완료 / `local:714941d` / 승인 record `dacb508` 및 [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-017"></a>
 ### P0-TASK-017 — 최소 검증 하네스·공통 UI 껍데기 — 핵심 규칙
@@ -764,12 +765,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-UT-004, P0-BT-004, P0-FT-004 |
 | 완료 조건 | AppRoot 5-state·기존 Screen ID placeholder 구현, 실제 gameplay navigation 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-018"></a>
 ### P0-TASK-018 — 최소 검증 하네스·공통 UI 껍데기 — 저장·연계
@@ -788,12 +789,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P0-CT-004, P0-IT-004 |
 | 완료 조건 | 사용하는 test source에만 fixture 생성, production adapter/DB fixture 0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-019"></a>
 ### P0-TASK-019 — 최소 검증 하네스·공통 UI 껍데기 — UI·호출 경로
@@ -812,12 +813,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-CT-004, P0-IT-004 |
 | 완료 조건 | 5-state·retry·unknown route·접근성 Compose test PASS |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-020"></a>
 ### P0-TASK-020 — 최소 검증 하네스·공통 UI 껍데기 — Test·리뷰
@@ -836,12 +837,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE — 코드 revision `714941d`; Gate 8개와 독립 리뷰로 종료 |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P0-UT-004, P0-BT-004, P0-FT-004, P0-CT-004, P0-IT-004 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | `local:714941d` / 승인 record `dacb508` / [cancellation Gate 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 <a id="p0-task-021"></a>
 ### P0-TASK-021 — Phase 0 통합 검증·인계 Gate
@@ -860,12 +861,12 @@ DB 변경 없음. P0는 Room entity/DAO/Database, schema JSON, `SaveCoordinator`
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C14 |
-| 현재 차단/상태 | ACCEPTED — 2026-09-11 revision `714941d`, Gate 8개 PASS, 독립 리뷰 ACCEPT |
+| 현재 차단/상태 | DONE — 2026-09-11 코드 revision `714941d`, Gate 8개 PASS, 독립 리뷰 ACCEPT |
 | 담당 역할/담당자 | QA/독립 리뷰 / Codex |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | **Gate 8개:** P0-UT-001, P0-UT-002, P0-BT-002, P0-BT-003, P0-CT-003, P0-CN-001, P0-CT-004, P0-IT-002. 나머지 P0 Test는 중복되지 않는 결함을 검증할 때만 실행하는 보조 계획이며 Gate를 막지 않는다. |
 | 완료 조건 | Gate 8개 PASS·C01/C02/C03 적용·C14 빌드 증거·인계 contract/fixture·미해결 P0/P1 결함 0 |
-| 리뷰/PR/증거 | 독립 코드 리뷰 ACCEPT / local revision `714941d` / [2026-09-11 P0 cancellation 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
+| 리뷰/PR/증거 | 독립 코드 리뷰 ACCEPT / `local:714941d` / 승인 record `dacb508` 및 [2026-09-11 P0 cancellation 재검증](검증증거/2026-09-11_Phase0_Cancellation_Gate_재검증.md) |
 
 
 ## 10. Phase 내부 Task Dependency
@@ -1438,7 +1439,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 조건부이월 | 문구/선택표정/비필수장식/원문 선택 확장 | 담당자/대체동작/목표 Phase/승인기록필수 |
 | 이월불가 | 저장손상·중복자원·숨은정보노출·핵심소프트락·미지원 schema 파괴 | 출시및관련후속 Gate 차단 |
 
-Phase Gate Task 는 **P0-TASK-021**이며, 결과상태 DESIGN_REVIEW→IMPLEMENTED→TESTED→REVIEWED→ACCEPTED를 revision `714941d`에서 완료했다.
+Phase Gate Task는 **P0-TASK-021**이다. 독립 검토 결정 `ACCEPT`를 거쳐 관리 생명주기 `DONE`으로 종료했으며, 코드 revision은 `714941d`, 승인·증거 record는 `dacb508`이다. Gate 외 P0 Test 19개는 별도 결함 검증용 보조 계획으로 현재 `NOT_RUN`이며 PASS로 간주하지 않는다.
 
 ## 14. Phase 리스크 관리
 

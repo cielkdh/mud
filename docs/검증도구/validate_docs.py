@@ -144,7 +144,7 @@ def screen_contract_checks(screen_contract: str, expected_functions: set[str], m
 
 
 def test_detail_failures(case: dict, markers: tuple[str, ...]) -> list[str]:
-    text = '\n'.join(str(case.get(key, '')) for key in ('precondition', 'steps', 'db', 'logs', 'success'))
+    text = '\n'.join(str(case.get(key, '')) for key in ('title', 'input', 'expected', 'precondition', 'steps', 'db', 'logs', 'state', 'success'))
     failures = [f'범용 템플릿 잔존: {fragment}' for fragment in GENERIC_TEST_FRAGMENTS if fragment in text]
     failures += [f'실행 증거 marker 누락: {marker}' for marker in markers if marker not in text]
     return failures
@@ -232,6 +232,42 @@ def sql_checks() -> None:
                 fk_errors = list(con.execute('PRAGMA foreign_key_check'))
                 integrity = con.execute('PRAGMA integrity_check').fetchone()[0]
                 record(f'SQL-{store}: DDL 구문·FK 대상·무결성', missing + [str(x) for x in fk_errors] + ([] if integrity == 'ok' else [str(integrity)]), f'SQLite {sqlite3.sqlite_version}; {len(tables)}개 테이블 생성. Room/KSP/Android 실행은 아님.')
+                if store == 'content':
+                    valid_sha='a'*64
+                    con.execute("INSERT INTO content_manifest(id,content_version,balance_version,schema_version,source_hash,bundle_hash,profile) VALUES('CONTENT-MANIFEST','c1','b1',1,'s','l','PROTOTYPE')")
+                    con.execute("INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,definition_json,definition_version) VALUES('WPN-0001','WPN','Name','Name','[]','{}',1)")
+                    con.execute("INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('img','ok.png','PORTRAIT',1,1,1,?)", (valid_sha,))
+                    probes = (
+                        ('manifest id 고정', "INSERT INTO content_manifest(id,content_version,balance_version,schema_version,source_hash,bundle_hash,profile) VALUES('OTHER','c2','b1',1,'s','l','PROTOTYPE')"),
+                        ('profile code', "UPDATE content_manifest SET profile='OTHER' WHERE id='CONTENT-MANIFEST'"),
+                        ('REMAP target 필수', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a1','OLD',NULL,'REMAP','test')"),
+                        ('TOMBSTONE target 금지', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a2','OLD','NEW','TOMBSTONE','test')"),
+                        ('self alias 금지', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a3','WPN-0001','WPN-0001','REMAP','test')"),
+                        ('alias missing target FK', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a4','OLD2','MISSING','REMAP','test')"),
+                        ('content kind code', "INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,definition_json,definition_version) VALUES('BAD','NPC','Name','Name','[]','{}',1)"),
+                        ('effective display name', "INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,definition_json,definition_version) VALUES('WPN-0002','WPN','Source','Other','[]','{}',1)"),
+                        ('asset category code', f"INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('bad','bad.png','OTHER',1,1,1,'{valid_sha}')"),
+                        ('asset byte size', f"INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('empty','empty.png','PORTRAIT',1,1,0,'{valid_sha}')"),
+                        ('asset sha256 형식', "INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('hash','hash.png','PORTRAIT',1,1,1,'BAD')"),
+                        ('focal pair 필수', f"INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256,focal_x_ppm) VALUES('focal-pair','pair.png','PORTRAIT',1,1,1,'{valid_sha}',500000)"),
+                        ('focal range', f"INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256,focal_x_ppm,focal_y_ppm) VALUES('focal-range','range.png','PORTRAIT',1,1,1,'{valid_sha}',1000001,500000)"),
+                        ('fallback matcher code', "INSERT INTO asset_fallback(id,usage_type,matcher_type,matcher_value,asset_id,priority) VALUES('f1','LIST_FACE','OTHER','X','img',0)"),
+                        ('fallback default value 금지', "INSERT INTO asset_fallback(id,usage_type,matcher_type,matcher_value,asset_id,priority) VALUES('f2','LIST_FACE','CATEGORY_DEFAULT','X','img',0)"),
+                        ('fallback matcher value 필수', "INSERT INTO asset_fallback(id,usage_type,matcher_type,matcher_value,asset_id,priority) VALUES('f3','LIST_FACE','SEX',NULL,'img',0)"),
+                    )
+                    failures = [label for label,sql in probes if not assert_constraint(con,sql)]
+                    if not assert_constraint(con,"INSERT INTO asset_binding(id,template_id,usage_type,asset_id,priority) VALUES('b0','MISSING','LIST_FACE','img',0)"):
+                        failures.append('template FK')
+                    if not assert_constraint(con,"INSERT INTO asset_binding(id,template_id,usage_type,asset_id,priority) VALUES('b1','WPN-0001','OTHER','img',0)"):
+                        failures.append('usage code')
+                    if not assert_constraint(con,"INSERT INTO asset_binding(id,template_id,usage_type,asset_id,priority) VALUES('b3','WPN-0001','LIST_FACE','img',-1)"):
+                        failures.append('negative priority')
+                    con.execute("INSERT INTO asset_fallback(id,usage_type,matcher_type,matcher_value,asset_id,priority) VALUES('valid-fallback','LIST_FACE','SEX','F','img',0)")
+                    if not assert_constraint(con,"INSERT INTO asset_fallback(id,usage_type,matcher_type,matcher_value,asset_id,priority) VALUES('duplicate-fallback','LIST_FACE','SEX','F','img',0)"):
+                        failures.append('fallback order unique')
+                    record('SQL-content: manifest·물리 FK·cheap semantic·asset code 제약', failures,
+                           '두 번째 manifest ID, dangling alias/template FK, ContentKind/effective display, asset size/SHA, focal/category/matcher/value/usage/priority/중복 fallback을 실제 SQLite가 거절')
+                    continue
                 if store != 'save':
                     continue
                 # 1. Conditional debit + exactly-once receipt modeled with the proposed constraints.
@@ -304,6 +340,7 @@ def main() -> int:
         if not f['sources'] and not f.get('related_sources'): failures.append(f['id']+': no source evidence')
     record('기능별 작업·테스트·근거 연결',failures)
     contract=(ROOT/'84_전체_Command_Event_계약서.md').read_text(encoding='utf-8')
+    content_ddl=(ROOT/'설계부록/02_제안_content_schema.sql').read_text(encoding='utf-8')
     save_ddl=(ROOT/'설계부록/03_제안_save_schema.sql').read_text(encoding='utf-8')
     expected_functions={x['id'] for x in features}
     event_contract_checks(contract, save_ddl)
@@ -349,6 +386,170 @@ def main() -> int:
     persistence_failures=[f'{function_id}: {actual_classes.get(function_id)} != {expected}' for function_id,expected in sorted(expected_classes.items()) if actual_classes.get(function_id)!=expected]
     record('State Registry PersistenceClass→Command/Event 동기화',persistence_failures,
            'AUTHORITATIVE/PROJECTION/READ/TOOL/LIFECYCLE/BUILD_ARTIFACT 6종을 84 계약에서 파생')
+    p1_body=(ROOT/by_phase[1]['file']).read_text(encoding='utf-8').split('## 16. 원문 상세 규칙·카탈로그·화면 부록',1)[0]
+    p3_handoff=(ROOT/by_phase[3]['file']).read_text(encoding='utf-8').split('## 4.',1)[0]
+    p22_asset=(ROOT/by_phase[22]['file']).read_text(encoding='utf-8')
+    schema_registry=(ROOT/'관리데이터/schema_registry.json').read_text(encoding='utf-8')
+    schema_objects=json.loads(schema_registry)
+    dictionary=(ROOT/'81_전체_데이터사전.md').read_text(encoding='utf-8')
+    p1_feature_rows={row['id']:row for row in by_phase[1]['features']}
+    p1_expected_kinds={'FUNC-P1-001':'tool','FUNC-P1-002':'tool','FUNC-P1-003':'read','FUNC-P1-004':'compute'}
+    p1_failures=[]
+    for function_id,kind in p1_expected_kinds.items():
+        if by_func[function_id].get('kind') != kind:
+            p1_failures.append(f'functions.json {function_id}: {by_func[function_id].get("kind")} != {kind}')
+        if p1_feature_rows[function_id].get('kind') != kind:
+            p1_failures.append(f'phases.json {function_id}: {p1_feature_rows[function_id].get("kind")} != {kind}')
+    p1_markers=(
+        'P1-TASK-021',
+        'ACCEPTED',
+        'phases.json.active_function_ids',
+        ':app -> :core:image -> :core:content',
+        'P3의 `:core:data`',
+        'OPEN_READONLY',
+        'CSV dialect v1',
+        'STAGING_NOT_EMPTY',
+        'version별 새 파일',
+        "id='CONTENT-MANIFEST'",
+        'logicalContentHash',
+        'artifactFileSha256',
+        'v1:<manifestVersion>:<generatedByVersion>:<artifactFileSha256>:<assetManifestSha256>',
+        'idempotent success',
+        'build output 전용',
+        'matcher_type',
+        'focalXppm',
+        'exactAssetKeys',
+        'findAssetBindings',
+        'findAsset',
+        'listAssetFallbacks',
+        'ContentId`는',
+        'ContentKind.v1',
+        'EntityKind.v1',
+        ':core:simulation -> :core:content',
+        'logical_content_hash',
+        'ContentRepositoryClosed',
+        'license-registry.json',
+        '"licenses":[...]',
+        'maxPixelCount=16,777,216',
+        'category별 정적 page',
+        'findTemplate',
+        'listTemplates',
+        'findAlias',
+        'CDB-Q01',
+        'PreparedStatement',
+        'journal_mode=DELETE',
+        'post-build semantic audit',
+        'sidecar',
+        'EXIF orientation',
+        'LIST_FACE, DETAIL_PORTRAIT, DIALOG_PORTRAIT, BATTLE_TOKEN, CHRONICLE_THUMB, ICON, EMBLEM',
+        '후보 assetId는 한 번만',
+        'AssetUnavailable',
+        'ASSET_UNAVAILABLE',
+        'memoryCacheKey',
+        'asset-preview.html',
+        'contentDescription',
+        'unresolved 0',
+        'PROTOTYPE_ACCEPTED',
+        'FULL_CONTENT_READY',
+        'P3/P25의 별도 승인 command',
+    )
+    p1_failures += ['P1 상세설계 marker 누락: '+marker for marker in p1_markers if marker not in p1_body]
+    p1_failures += ['P1 상세설계 폐기 계약 잔존: '+marker for marker in ('용병 목록·상세·대화·연대기 | `ARCHETYPE → SEX', 'TEXT decode 0') if marker in p1_body]
+    p1_failures += ['데이터사전 content 계약 누락: '+marker for marker in ('findTemplate','listTemplates','findAlias','prepared parameter','journal_mode=delete','post-build semantic audit','sidecar 0개','id` = canonical sourceId','logical_content_hash','license-registry.json','kind,id','new_id TEXT REFERENCES content_template') if marker not in dictionary]
+    p1_failures += ['P3 content adapter handoff 누락: '+marker for marker in ('ContentRepository','findTemplate','listTemplates','findAlias','findAssetBindings','findAsset','listAssetFallbacks','CDB-Q01','prepared parameter','AutoCloseable','OPEN_READONLY','query_only=ON') if marker not in p3_handoff]
+    p1_failures += ['P22 asset UI handoff 누락: '+marker for marker in ('ResolvedAsset','Loading','TEXT','terminal layout','contentDescription','asset_image` DDL을 재정의하지 않는다') if marker not in p22_asset]
+    if re.search(r'CREATE TABLE(?: IF NOT EXISTS)? asset_image', p22_asset):
+        p1_failures.append('P22에 P1 소유 asset_image DDL 중복 잔존')
+    key_task_markers={
+        'P1-TASK-001':('CSV dialect v1','JSON v1','messageKey'),
+        'P1-TASK-003':('catalog_rows.json','catalog-manifest.json','roundtrip'),
+        'P1-TASK-004':('architecture verifier','Build Spike','P3 :core:data','ContentSnapshot'),
+        'P1-TASK-006':('fresh DDL','CDB-Q01','journal_mode=delete','sidecar','build output 전용','asset-preview.html','참조 license registry entry','idempotent publish'),
+        'P1-TASK-007':('post-build semantic audit','definitionVersion','SHA-256'),
+        'P1-TASK-008':('fresh staging','STAGING_NOT_EMPTY','PreparedStatement','resource close','sidecar 0','read-only 재오픈','current.json','ATOMIC_MOVE'),
+        'P1-TASK-011':('AssetResolveRequest','exactAssetKeys','findTemplate','listTemplates','findAlias','findAssetBindings','CDB-Q01','TEXT usage allowlist','후보 assetId 1회','focal','memoryCacheKey','파생한 category/crop','cancel/join/close'),
+        'P1-TASK-012':('magic MIME','단일 frame','EXIF orientation','실제 alpha','sRGB','license registry','maxPixelCount'),
+        'P1-TASK-013':('AssetManifest','asset-preview.html','BLOCKED_ASSET','category별 정적 page','500 asset'),
+        'P1-TASK-014':('ContentRepository','findTemplate','listTemplates','findAlias','findAssetBindings','findAsset','listAssetFallbacks','CDB-Q01','OPEN_READONLY','cancel/join','TEXT usage별 표시/생략','terminal text layout','contentDescription'),
+        'P1-TASK-018':('terminal 한 hop','cycle','missing target'),
+        'P1-TASK-019':('P3/P22/P25','InstalledBundle','ContentSnapshot','logicalContentHash','findTemplate','findAssetBindings','CDB-Q01','query_only','TEXT usage별 표시/생략','terminal text layout','contentDescription'),
+        'P1-TASK-021':('CSV dialect v1','physical FK','semantic audit','PreparedStatement','sidecar 0','CDB-Q01','coverage unresolved 0','asset-preview.html','license registry','physical image metadata','idempotent publish','화면별 fallback 유한 종료','TEXT usage별 표시/생략','terminal text layout'),
+    }
+    for task_id,markers in key_task_markers.items():
+        task_text=by_task[task_id]['detail']+' '+by_task[task_id]['done']
+        p1_failures += [f'{task_id}: {marker} 누락' for marker in markers if marker not in task_text]
+    p1_tests=[test for test in tests if test.get('phase')==1]
+    p1_failures += [test['id']+': live save.db hash 불변 oracle 누락' for test in p1_tests if 'live save.db hash 불변' not in test.get('db','')]
+    p1_failures += [test['id']+': 범용 Command/RNG/receipt template 잔존' for test in p1_tests
+                    if re.search(r'sourceCommandId|seed42|ScriptedRng|동일 commandId|receipt', '\n'.join(str(test.get(key,'')) for key in ('precondition','steps','db','logs','success')))]
+    key_test_markers={
+        'P1-FT-002':('WAL','열린 handle','sidecar'),
+        'P1-IT-002':('PreparedStatement','미지원 kind','foreign_keys=1','journal_mode=delete','semantic audit','sidecar 0','read-only','license registry entry','idempotent'),
+        'P1-UT-003':('findTemplate','listTemplates','findAlias','CDB-Q01','templateId=MON-0001','entityKind=MONSTER'),
+        'P1-IT-003':('CDB-Q01','6개 read query','query plan','category별 정적 page'),
+        'P1-REC-001':('DB close','sidecar'),
+        'P1-PT-001':('CDB-Q01','EXPLAIN QUERY PLAN','full scan','10,000 asset','분할 preview'),
+        'P1-IT-005':('sealed content.db','6-query','DB sealing','ContentSnapshot','idempotent'),
+    }
+    for test_id,markers in key_test_markers.items():
+        test_text=' '.join(str(by_test[test_id].get(key,'')) for key in ('input','expected','steps','db','state','success'))
+        p1_failures += [f'{test_id}: {marker} 누락' for marker in markers if marker not in test_text]
+    ddl_markers=(
+        'PRAGMA journal_mode=DELETE',
+        "CHECK(id='CONTENT-MANIFEST')",
+        "kind TEXT NOT NULL CHECK(kind IN ('ACC'",
+        'source_display_name TEXT NOT NULL',
+        'display_name_override TEXT',
+        'CHECK(display_name=COALESCE(display_name_override,source_display_name))',
+        'new_id TEXT REFERENCES content_template(id) ON DELETE RESTRICT',
+        "policy IN ('REMAP','TOMBSTONE')",
+        'byte_size INTEGER NOT NULL CHECK(byte_size>0)',
+        "sha256 TEXT NOT NULL CHECK(length(sha256)=64 AND sha256 NOT GLOB '*[^0-9a-f]*')",
+        'template_id TEXT NOT NULL REFERENCES content_template(id) ON DELETE RESTRICT',
+        'ix_content_template_kind_id ON content_template(kind,id)',
+        "usage_type IN ('LIST_FACE'",
+        "matcher_type IN ('SEX'",
+        'focal_x_ppm INTEGER',
+        'focal_y_ppm INTEGER',
+        "COALESCE(matcher_value,'')",
+        'CHECK(priority>=0)',
+        "profile IN ('PROTOTYPE','ALPHA','FULL')",
+    )
+    p1_failures += ['content DDL marker 누락: '+marker for marker in ddl_markers if marker not in content_ddl]
+    for redundant in ('source_id TEXT NOT NULL','entity_kind TEXT NOT NULL','crop_profile TEXT NOT NULL','category TEXT NOT NULL CHECK(category IN'):
+        if redundant in content_ddl and redundant != 'category TEXT NOT NULL CHECK(category IN':
+            p1_failures.append('파생/중복 content DDL 필드 잔존: '+redundant)
+    if content_ddl.count('category TEXT NOT NULL CHECK(category IN') != 1:
+        p1_failures.append('asset_image 외 category 저장이 존재하거나 asset_image category가 누락')
+    if 'CREATE TABLE IF NOT EXISTS' in content_ddl or 'CREATE INDEX IF NOT EXISTS' in content_ddl:
+        p1_failures.append('fresh staging 계약과 충돌하는 IF NOT EXISTS 잔존')
+    if 'UNIQUE(content_version)' in content_ddl or 'ix_content_manifest' in content_ddl:
+        p1_failures.append('content_manifest 단일행 계약과 중복된 다중 version/index DDL 잔존')
+    if 'row_version' in content_ddl:
+        p1_failures.append('immutable content DDL에 갱신용 row_version 잔존')
+    for obsolete_index in ('ix_content_template_1','ix_content_template_2','ix_asset_image_1','ix_asset_binding_1','ix_asset_fallback_1'):
+        if obsolete_index in content_ddl:
+            p1_failures.append('query inventory 근거 없는 index 잔존: '+obsolete_index)
+    expected_content_indexes={
+        'content_template':['kind,id'],
+        'content_alias':[],
+        'asset_image':[],
+        'asset_binding':[],
+        'asset_fallback':[],
+    }
+    for table,indexes in expected_content_indexes.items():
+        if schema_objects.get(table,{}).get('indexes') != indexes:
+            p1_failures.append(f'schema_registry {table} indexes: {schema_objects.get(table,{}).get("indexes")} != {indexes}')
+    registry_field_markers={
+        'content_alias':('new_id TEXT REFERENCES content_template(id) ON DELETE RESTRICT',),
+        'asset_image':('byte_size INTEGER NOT NULL CHECK(byte_size>0)',"sha256 TEXT NOT NULL CHECK(length(sha256)=64 AND sha256 NOT GLOB '*[^0-9a-f]*')"),
+        'asset_binding':('template_id TEXT NOT NULL REFERENCES content_template(id) ON DELETE RESTRICT',),
+    }
+    for table,markers in registry_field_markers.items():
+        fields=schema_objects.get(table,{}).get('fields',[])
+        p1_failures += [f'schema_registry {table}: {marker} 누락' for marker in markers if marker not in fields]
+    record('P1 Build Artifact·Read-only·BindingPlan 계약 동기화', p1_failures,
+           'functions/phases/task/test/DDL/Phase 본문을 P1 tool·read·compute 경계와 교차 검사')
     screen_contract=(ROOT/'88_화면_ID_상태_Action_전이_Matrix.md').read_text(encoding='utf-8')
     screen_report=(ROOT/'99_전역기준문서_추가_정합성_검증보고서.md').read_text(encoding='utf-8')
     nfr=(ROOT/'85_NFR_성능_용량_단말_기준서.md').read_text(encoding='utf-8')
@@ -395,9 +596,6 @@ def main() -> int:
     p21_body=(ROOT/by_phase[21]['file']).read_text(encoding='utf-8')
     p22_body=(ROOT/by_phase[22]['file']).read_text(encoding='utf-8')
     p25_body=(ROOT/by_phase[25]['file']).read_text(encoding='utf-8')
-    schema_registry=(ROOT/'관리데이터/schema_registry.json').read_text(encoding='utf-8')
-    schema_objects=json.loads(schema_registry)
-    dictionary=(ROOT/'81_전체_데이터사전.md').read_text(encoding='utf-8')
     data_contract_markers=('Meaning','Unit','Enum/code set','Range/check','Default/nullability','Writer','Reader','Lifecycle/delete rule','Retention/hash/codec scope')
     alias_failures=[f'{alias}: {schema_objects.get(alias,{}).get("alias")} != {target}' for alias,target in (('storage','storage_location'),('wallet','money_account')) if schema_objects.get(alias,{}).get('alias')!=target]
     alias_failures += [marker+' 누락' for marker in data_contract_markers if marker not in dictionary]
@@ -451,11 +649,11 @@ def main() -> int:
         '| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 |',
         '| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 |',
     )
-    expected_responsibility_rows=len(features)-len(by_phase[0]['features'])
+    expected_responsibility_rows=len(features)-len(by_phase[0]['features'])-len(by_phase[1]['features'])
     component_failures=[pattern for pattern in obsolete_patterns if re.search(pattern, phase_text, re.M)]
     component_failures += [f'{row}: {phase_text.count(row)} != {expected_responsibility_rows}' for row in responsibility_rows if phase_text.count(row)!=expected_responsibility_rows]
     record('기능별 기계적 Port/Validator/Projection 제거', component_failures,
-           f'P0 기반 기능 4개를 제외한 {expected_responsibility_rows}개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용')
+           f'P0 기반 4개와 P1 build/read/compute 4개를 제외한 {expected_responsibility_rows}개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용')
     allowlist_sources={
         '마스터': master,
         'P0 상세설계': p0_body,
@@ -537,8 +735,25 @@ def main() -> int:
     p0_baseline_failures=[]
     if by_phase[0]['modules'] != 'Gradle root / :app / :core:simulation':
         p0_baseline_failures.append('P0 물리 module 집합 불일치')
+    if by_phase[0]['status'] != 'DONE' or any(task['status'] != 'DONE' for task in tasks if task['phase']==0):
+        p0_baseline_failures.append('P0 Phase/Task 관리 생명주기가 DONE으로 통일되지 않음')
+    if by_phase[0].get('owner') != '사용자':
+        p0_baseline_failures.append('P0 Phase 책임자가 사용자로 기록되지 않음')
+    if any('714941d' not in str(task.get('pr')) for task in tasks if task['phase']==0):
+        p0_baseline_failures.append('P0 Task 코드 revision 증거 누락')
+    if any(marker not in str(by_task['P0-TASK-021'].get('pr')) for marker in ('dacb508','2026-09-11_Phase0_Cancellation_Gate_재검증.md')):
+        p0_baseline_failures.append('P0-TASK-021 승인 record/재검증 증거 누락')
     if set(by_phase[0].get('active_function_ids', [])) != {'FUNC-P0-001','FUNC-P0-002'}:
         p0_baseline_failures.append('P0 active_function_ids 불일치')
+    if set(by_phase[1].get('active_function_ids', [])) != {'FUNC-P1-001','FUNC-P1-002','FUNC-P1-003','FUNC-P1-004'}:
+        p0_baseline_failures.append('P1 active_function_ids 불일치')
+    if 'P0-TASK-021 DONE' not in by_phase[1]['gate'] or any(marker in p1_body for marker in ('P0-TASK-021=NOT_STARTED','P0-TASK-021=ACCEPTED')):
+        p0_baseline_failures.append('P1 착수 Gate의 P0-TASK-021 DONE 계약 불일치')
+    for task_id in (task['id'] for task in tasks if task['phase']==0):
+        heading='### '+task_id
+        section=p0_body.split(heading,1)[1].split('\n### ',1)[0] if heading in p0_body else ''
+        if '| 현재 차단/상태 | DONE' not in section:
+            p0_baseline_failures.append(task_id+': 상세설계 상태가 DONE이 아님')
     if set(by_task['P0-TASK-021']['tests']) != expected_p0_gate or len(by_task['P0-TASK-021']['tests']) != len(expected_p0_gate):
         p0_baseline_failures.append('P0 Gate Test가 정확히 8개가 아님')
     p0_task_plan_lines=task_plan.splitlines()
@@ -581,6 +796,18 @@ def main() -> int:
         'P0-CN-001': ('submissionSequence', 'capacity 64'),
         'P0-CT-004': ('semantics', '48dp'),
         'P0-IT-002': ('applicationId', 'Room schema'),
+        'P1-CT-001': ('CSV dialect v1', 'duplicate key', 'live save.db hash 불변'),
+        'P1-IT-001': ('catalog-manifest.json', 'CSV dialect v1', 'live save.db hash 불변'),
+        'P1-FT-002': ('STAGING_NOT_EMPTY', 'PUBLISH_ATOMIC_UNSUPPORTED', 'live save.db hash 불변'),
+        'P1-IT-002': ('IF NOT EXISTS 없는 fresh DDL', 'content_manifest 1행', 'integrity_check=ok', 'artifactFileSha256', 'bundleId', 'idempotent existing target'),
+        'P1-BT-003': ('fallbackContext', 'LIST/DETAIL/DIALOG=SEX', 'BATTLE=CLASS', 'CHRONICLE=CATEGORY_DEFAULT', 'assetId 1회', 'AssetUnavailable', 'live save.db hash 불변'),
+        'P1-FT-003': ('../save.db', 'INVALID_ASSET_PATH', '32MiB', 'license-registry.json', 'EXIF', 'VALIDATION_FAILED', 'artifact 발행 0'),
+        'P1-CT-003': ('floor/clamp', 'TEXT 허용 usage는 정상 decode', '금지 usage는 repository/file/decode 0', 'terminal text layout'),
+        'P1-IT-003': ('asset-preview.html', 'category별 정적 page', 'physical metadata', 'SQLite query oracle', 'in-memory repository', 'contentDescription', '외부 요청', 'stale cache'),
+        'P1-IT-004': ('logicalContentHash', 'BindingPlan', 'P3/P25', 'save write는 0'),
+        'P1-PT-001': ('10,000 asset', '분할 preview', 'bounded Coil cache', 'TEXT 금지 usage repository/file/decode 0', '허용 usage 정상 decode', 'stale asset 0'),
+        'P1-ET-001': ('STAGING_NOT_EMPTY', 'INVALID_ASSET_PATH', 'ASSET_DECODE_FAILED', 'AssetUnavailable terminal failure', 'assetId별 open 1회', 'InstalledBundle'),
+        'P1-IT-005': ('asset-preview.html', 'ContentSnapshot', 'InstalledBundle', 'P3/P22/P25', 'PROTOTYPE_ACCEPTED', 'FULL_CONTENT_READY'),
         'P3-FT-001': ('BEFORE_RNG_WRITE', '새 connection'),
         'P3-IT-004': ('sourceSchemaHash', ':core:save'),
         'P6-IT-007': ('WorldSession.execute', '같은 commandId'),
@@ -662,9 +889,14 @@ def main() -> int:
             sync_failures.append(test['id']+': Phase anchor missing')
             continue
         block=body.split(marker,1)[1].split('<a id=',1)[0]
-        for key in (*required_fields,'status'):
+        keys=() if test['phase']==1 else (*required_fields,'status')
+        for key in keys:
             if compact(test[key]) not in compact(block):
                 sync_failures.append(test['id']+f': Phase {key} mismatch')
+        if test['phase']==1 and '`NOT_RUN`' not in body:
+            sync_failures.append(test['id']+': Phase compact status baseline missing')
+        if test['phase']==1 and '관리데이터/tests.json' not in body:
+            sync_failures.append(test['id']+': Phase compact test detail source missing')
     plan=(ROOT/'91_전체_Test_계획서.md').read_text(encoding='utf-8')
     plan_rows={}
     plan_counts=Counter()

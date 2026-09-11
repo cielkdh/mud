@@ -225,7 +225,7 @@ Overflow는 오류로 처리하며 clamp로 overflow를 은폐하지 않는다.
 - `content_template.definition_json`에 타입별 AST를 저장한다.
 - `definition_version`과 최상위 `schemaVersion`을 함께 검증한다.
 - 저장 게임은 content/balance version binding을 기록하며, 미지원 AST는 migration 없이 임의 실행하지 않는다.
-- 표시명/설명 문구 수정은 계산 AST hash가 같으면 balance semantic 변경으로 보지 않을 수 있으나 bundle hash 정책은 명확히 분리한다.
+- 표시명/설명 문구도 canonical content record에 포함되므로 변경 시 `logicalContentHash(=content_manifest.bundle_hash)`는 바뀐다. 계산 AST가 같으면 `balanceVersion`은 유지할 수 있지만, 완성 DB bytes의 `artifactFileSha256`는 외부 bundle manifest에서 별도로 검증한다.
 
 ## 13. 테스트 전략
 

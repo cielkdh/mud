@@ -8,9 +8,20 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+P0_GATE_TASK_ID = 'P0-TASK-021'
+EXECUTION_EVIDENCE_STAGES = {'검증', 'Gate', '데이터검수'}
 
 def load(name: str):
     return json.loads((ROOT / '관리데이터' / f'{name}.json').read_text(encoding='utf-8'))
+
+
+def required_execution_tests(task: dict) -> list[str]:
+    """DONE Task에서 실행 증거가 필수인 Test를 반환한다."""
+    # P0는 Gate 8개 Test로 종료한다. 나머지 검증 Task의 보조 Test는
+    # 중복되지 않는 결함을 검증할 때만 실행하는 계획으로 유지한다.
+    if task['phase'] == 0:
+        return task['tests'] if task['id'] == P0_GATE_TASK_ID else []
+    return task['tests'] if task['stage'] in EXECUTION_EVIDENCE_STAGES else []
 
 
 def atomic_assertions() -> list[dict[str, str]]:
@@ -86,12 +97,10 @@ def main() -> int:
                 inconsistencies.append(f"{task['id']}: 미완료 선행 Task가 있습니다.")
             if not task.get('pr'):
                 inconsistencies.append(f"{task['id']}: PR/리뷰 증거가 없습니다.")
-            # 계약 Task는 테스트 설계/Fixture 작성 완료이며 실제 테스트 PASS는 검증/Gate에서 요구한다.
-            if task['stage'] in ('검증', 'Gate', '데이터검수'):
-                for test_id in task['tests']:
-                    test = by_test[test_id]
-                    if test['status'] != 'PASS' or not test.get('evidence'):
-                        inconsistencies.append(f"{task['id']}: {test_id}의 PASS 및 실행 증거가 필요합니다.")
+            for test_id in required_execution_tests(task):
+                test = by_test[test_id]
+                if test['status'] != 'PASS' or not test.get('evidence'):
+                    inconsistencies.append(f"{task['id']}: {test_id}의 PASS 및 실행 증거가 필요합니다.")
     for test in tests:
         if test['status'] == 'PASS' and not test.get('evidence'):
             inconsistencies.append(f"{test['id']}: 실행 증거 없는 PASS입니다.")

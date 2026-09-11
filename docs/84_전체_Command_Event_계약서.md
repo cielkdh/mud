@@ -230,7 +230,7 @@ ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVers
 | `FUNC-P0-004` 최소 검증 하네스·공통 UI 껍데기 | `ui/local` | 아니오 | AppRoot 로컬 state/semantics만 검증; 권위 저장 없음 |
 | `FUNC-P1-001` 정적 카탈로그 스키마와 ID 보존 | `tool` | content build 산출물만 | live save.db와 command receipt를 사용하지 않음 |
 | `FUNC-P1-002` 콘텐츠 검증·사전 DB 빌드 | `tool` | content build 산출물만 | live save.db와 command receipt를 사용하지 않음 |
-| `FUNC-P1-003` 로컬 이미지·AssetResolver·크롭 | `read/tool` | asset build 산출물만 | 런타임 `resolve`는 읽기 전용이며 command receipt를 만들지 않음 |
+| `FUNC-P1-003` 정적 콘텐츠 조회·로컬 AssetResolver·크롭 | `read/tool` | content/asset build 산출물만 | 런타임 조회·`resolve`는 읽기 전용이며 command receipt를 만들지 않음 |
 | `FUNC-P1-004` 콘텐츠·이미지 버전 교체와 호환 | `compute` | 아니오 | `resolve`는 BindingPlan만 반환하고 적용은 별도 승인된 migration command가 수행 |
 | `FUNC-P2-005` 세션·생명주기·작업 종료 | `lifecycle` | 런타임 자원만 | 새 명령 차단·drain·close를 수행하되 gameplay command receipt를 만들지 않음 |
 | `FUNC-P4-005` 초기 정보 비대칭·인물 조회 계약 | `read` | 아니오 | live save.db hash 불변, 필요한 경우 artifact 저장소에만 결과 기록 |
