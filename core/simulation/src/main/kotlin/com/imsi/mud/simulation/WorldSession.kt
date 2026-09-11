@@ -85,9 +85,25 @@ class WorldSession private constructor(
     private val aggregateStates = linkedMapOf<EntityId, AggregateState>()
     private var closeCompletion: CompletableDeferred<Unit>? = null
 
+    init {
+        sessionJob.invokeOnCompletion { cause ->
+            val cancellation = cause as? kotlinx.coroutines.CancellationException ?: return@invokeOnCompletion
+            queue.close(cancellation)
+            while (true) {
+                val queued = queue.tryReceive().getOrNull() ?: break
+                queued.reply.completeExceptionally(cancellation)
+            }
+        }
+    }
+
     private val consumer = scope.launch {
         for (queued in queue) {
-            queued.reply.complete(process(queued.envelope, queued.accepted.await()))
+            try {
+                queued.reply.complete(process(queued.envelope, queued.accepted.await()))
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                queued.reply.completeExceptionally(error)
+                if (!sessionJob.isActive) throw error
+            }
         }
     }
 
@@ -123,12 +139,14 @@ class WorldSession private constructor(
             } to true
         }
         if (startsDrain) {
-            try {
-                withContext(NonCancellable) { consumer.join() }
-            } finally {
-                lifecycleMutex.withLock { lifecycle = Lifecycle.CLOSED }
-                sessionJob.cancel()
-                completion.complete(Unit)
+            withContext(NonCancellable) {
+                try {
+                    consumer.join()
+                } finally {
+                    lifecycleMutex.withLock { lifecycle = Lifecycle.CLOSED }
+                    sessionJob.cancel()
+                    completion.complete(Unit)
+                }
             }
         }
         completion.await()
@@ -246,31 +264,78 @@ class WorldSession private constructor(
         val receipt = try {
             savePort.commit(envelope, delta)
         } catch (error: kotlinx.coroutines.CancellationException) {
+            recoverCancelledCommit(
+                envelope = envelope,
+                delta = delta,
+                receiptKey = receiptKey,
+                candidateAcceptedVersion = candidateAcceptedVersion,
+                nextAggregateStates = nextAggregateStates
+            )
             throw error
         } catch (error: Exception) {
             return CommandResult.Rejected(DomainError.PersistenceFailure(error.message ?: error::class.simpleName.orEmpty()), submissionSequence)
         }
-        if (receipt.result != delta.result) {
-            return CommandResult.Rejected(DomainError.PersistenceFailure("commit receipt result mismatch"), submissionSequence)
-        }
+        applyCommittedReceipt(receipt, envelope, delta, receiptKey, candidateAcceptedVersion, nextAggregateStates)
+            ?.let { reason ->
+                return CommandResult.Rejected(DomainError.PersistenceFailure(reason), submissionSequence)
+            }
+        return receipt.result
+    }
 
+    private suspend fun recoverCancelledCommit(
+        envelope: CommandEnvelope<out WorldCommandPayload>,
+        delta: DomainDelta,
+        receiptKey: ReceiptKey,
+        candidateAcceptedVersion: StateVersion,
+        nextAggregateStates: Map<EntityId, AggregateState>
+    ) {
+        val persistedReceipt = try {
+            withContext(NonCancellable) { savePort.findReceipt(envelope.sessionEpoch, envelope.commandId) }
+        } catch (_: Exception) {
+            stopAfterUncertainCommit()
+            return
+        }
+        if (persistedReceipt == null) return
+        if (persistedReceipt.payloadHash != envelope.payloadHash ||
+            applyCommittedReceipt(
+                CommitReceipt(persistedReceipt.stateVersion, persistedReceipt.result),
+                envelope,
+                delta,
+                receiptKey,
+                candidateAcceptedVersion,
+                nextAggregateStates
+            ) != null
+        ) {
+            stopAfterUncertainCommit()
+        }
+    }
+
+    private fun applyCommittedReceipt(
+        receipt: CommitReceipt,
+        envelope: CommandEnvelope<out WorldCommandPayload>,
+        delta: DomainDelta,
+        receiptKey: ReceiptKey,
+        candidateAcceptedVersion: StateVersion,
+        nextAggregateStates: Map<EntityId, AggregateState>
+    ): String? {
+        if (receipt.result != delta.result) return "commit receipt result mismatch"
         when (delta.result) {
             is CommandResult.Accepted -> {
-                if (receipt.stateVersion != candidateAcceptedVersion) {
-                    return CommandResult.Rejected(DomainError.PersistenceFailure("commit receipt state version mismatch"), submissionSequence)
-                }
+                if (receipt.stateVersion != candidateAcceptedVersion) return "commit receipt state version mismatch"
                 aggregateStates.clear()
                 aggregateStates.putAll(nextAggregateStates)
                 rngState = delta.rngState
                 stateVersion = receipt.stateVersion
             }
 
-            is CommandResult.Rejected -> if (receipt.stateVersion != stateVersion) {
-                return CommandResult.Rejected(DomainError.PersistenceFailure("rejected receipt changed state version"), submissionSequence)
-            }
+            is CommandResult.Rejected -> if (receipt.stateVersion != stateVersion) return "rejected receipt changed state version"
         }
         receipts[receiptKey] = PersistedReceipt(envelope.payloadHash, receipt.stateVersion, receipt.result)
-        return receipt.result
+        return null
+    }
+
+    private fun stopAfterUncertainCommit() {
+        sessionJob.cancel(kotlinx.coroutines.CancellationException("commit outcome cannot be reconciled"))
     }
 
     private fun sameAggregateState(actual: AggregateState?, expected: AggregateState?): Boolean =

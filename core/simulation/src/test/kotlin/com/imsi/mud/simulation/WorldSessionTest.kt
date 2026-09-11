@@ -1,9 +1,13 @@
 package com.imsi.mud.simulation
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -132,6 +136,108 @@ class WorldSessionTest {
             firstClose.await()
             secondClose.await()
             assertEquals(listOf("command-a", "command-b"), savePort.commandIds)
+        }
+    }
+
+    @Test
+    fun `save port cancellation completes the current reply and preserves the consumer`() = runBlocking {
+        withTimeout(5_000) {
+            CancellationPoint.entries.forEach { point ->
+                val savePort = CancellingSavePort(point)
+                val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined)
+
+                val cancellation = runCatching {
+                    session.execute(unsupportedEnvelope("command-cancelled-$point", "phase-cancelled"))
+                }.exceptionOrNull()
+
+                assertTrue(cancellation is CancellationException)
+                assertUnsupported(
+                    session.execute(unsupportedEnvelope("command-after-cancel-$point", "phase-after-cancel")),
+                    2
+                )
+                assertEquals(listOf("command-after-cancel-$point"), savePort.commandIds)
+                session.close()
+            }
+        }
+    }
+
+    @Test
+    fun `cancelled commit restores its durable receipt before propagating cancellation`() = runBlocking {
+        withTimeout(5_000) {
+            val savePort = CommitThenCancellingSavePort()
+            val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined, testDeltaFactory())
+            val envelope = mutationEnvelope("command-cancelled-commit", "aggregate-a", "a", rngState(42, 1))
+            val before = session.inMemoryStateHash()
+
+            val cancellation = runCatching { session.execute(envelope) }.exceptionOrNull()
+
+            assertTrue(cancellation is CancellationException)
+            assertNotEquals(before, session.inMemoryStateHash())
+            assertAccepted(session.execute(envelope), 1)
+            assertUnsupported(
+                session.execute(unsupportedEnvelope("command-after-cancelled-commit", "phase-after", StateVersion(1))),
+                3
+            )
+            assertEquals(listOf("command-cancelled-commit", "command-after-cancelled-commit"), savePort.commandIds)
+            session.close()
+        }
+    }
+
+    @Test
+    fun `unresolved cancelled commit stops the session without changing in memory state`() = runBlocking {
+        withTimeout(5_000) {
+            val session = WorldSession(
+                SessionEpoch(1),
+                CommitThenFailingReceiptLookupSavePort(),
+                this,
+                Dispatchers.Unconfined,
+                testDeltaFactory()
+            )
+            val before = session.inMemoryStateHash()
+
+            val cancellation = runCatching {
+                session.execute(mutationEnvelope("command-unresolved-commit", "aggregate-a", "a", rngState(42, 1)))
+            }.exceptionOrNull()
+
+            assertTrue(cancellation is CancellationException)
+            assertEquals(before, session.inMemoryStateHash())
+            assertTrue(
+                withTimeout(5_000) {
+                    runCatching {
+                        session.execute(unsupportedEnvelope("command-after-unresolved-commit", "phase-after"))
+                    }.exceptionOrNull() is CancellationException
+                }
+            )
+            session.close()
+        }
+    }
+
+    @Test
+    fun `parent scope cancellation completes replies that were queued but not started`() = runBlocking {
+        withTimeout(5_000) {
+            val parentJob = SupervisorJob()
+            val requestScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+            val dispatcher = PausedDispatcher()
+            val session = WorldSession(
+                SessionEpoch(1),
+                RecordingSavePort(),
+                CoroutineScope(parentJob + Dispatchers.Unconfined),
+                dispatcher
+            )
+            val first = requestScope.async(start = CoroutineStart.UNDISPATCHED) {
+                session.execute(unsupportedEnvelope("command-parent-cancel-a", "phase-a"))
+            }
+            val second = requestScope.async(start = CoroutineStart.UNDISPATCHED) {
+                session.execute(unsupportedEnvelope("command-parent-cancel-b", "phase-b"))
+            }
+
+            parentJob.cancel()
+            dispatcher.runUntilIdle()
+
+            assertTrue(runCatching { first.await() }.exceptionOrNull() is CancellationException)
+            assertTrue(runCatching { second.await() }.exceptionOrNull() is CancellationException)
+            session.close()
+            requestScope.cancel()
         }
     }
 
@@ -437,6 +543,76 @@ class WorldSessionTest {
             envelope: CommandEnvelope<out WorldCommandPayload>,
             delta: DomainDelta
         ): CommitReceipt = error("in-memory persistence failure")
+    }
+
+    private enum class CancellationPoint { FIND_RECEIPT, COMMIT }
+
+    private class CancellingSavePort(private val point: CancellationPoint) : SavePort {
+        private val delegate = RecordingSavePort()
+        private var cancelled = false
+
+        val commandIds: List<String> get() = delegate.commandIds
+
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? {
+            cancelIfNeeded(CancellationPoint.FIND_RECEIPT)
+            return delegate.findReceipt(sessionEpoch, commandId)
+        }
+
+        override suspend fun commit(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            delta: DomainDelta
+        ): CommitReceipt {
+            cancelIfNeeded(CancellationPoint.COMMIT)
+            return delegate.commit(envelope, delta)
+        }
+
+        private fun cancelIfNeeded(actualPoint: CancellationPoint) {
+            if (!cancelled && point == actualPoint) {
+                cancelled = true
+                throw CancellationException("test $point cancellation")
+            }
+        }
+    }
+
+    private class CommitThenCancellingSavePort : SavePort {
+        private val delegate = RecordingSavePort()
+        private var cancelled = false
+
+        val commandIds: List<String> get() = delegate.commandIds
+
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? =
+            delegate.findReceipt(sessionEpoch, commandId)
+
+        override suspend fun commit(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            delta: DomainDelta
+        ): CommitReceipt {
+            val receipt = delegate.commit(envelope, delta)
+            if (!cancelled) {
+                cancelled = true
+                throw CancellationException("test cancellation after commit")
+            }
+            return receipt
+        }
+    }
+
+    private class CommitThenFailingReceiptLookupSavePort : SavePort {
+        private val delegate = RecordingSavePort()
+        private var commitCancelled = false
+
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? {
+            if (commitCancelled) throw CancellationException("test receipt lookup cancellation")
+            return delegate.findReceipt(sessionEpoch, commandId)
+        }
+
+        override suspend fun commit(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            delta: DomainDelta
+        ): CommitReceipt {
+            delegate.commit(envelope, delta)
+            commitCancelled = true
+            throw CancellationException("test cancellation after commit")
+        }
     }
 
     private class PausedDispatcher : CoroutineDispatcher() {
