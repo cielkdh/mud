@@ -21,6 +21,7 @@ CREATE TABLE content_template (
   grade TEXT,
   min_level INTEGER,
   tags_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
   definition_json TEXT NOT NULL,
   definition_version INTEGER NOT NULL,
   CHECK(display_name=COALESCE(display_name_override,source_display_name))

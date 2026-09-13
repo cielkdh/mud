@@ -1,5 +1,6 @@
 package com.imsi.mud.simulation
 
+import com.imsi.mud.content.ContentSnapshot
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -94,7 +95,7 @@ class WorldSessionTest {
     fun `world session serializes rejected receipts stale requests and close draining`() = runBlocking {
         repeat(100) {
             val savePort = RecordingSavePort()
-            val session = WorldSession(SessionEpoch(1), savePort, this)
+            val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest())
             val firstEnvelope = unsupportedEnvelope("command-a", "phase-a")
             val secondEnvelope = unsupportedEnvelope("command-b", "phase-b")
             val first = async(start = CoroutineStart.UNDISPATCHED) { session.execute(firstEnvelope) }
@@ -118,7 +119,7 @@ class WorldSessionTest {
         withTimeout(5_000) {
             val savePort = RecordingSavePort()
             val dispatcher = PausedDispatcher()
-            val session = WorldSession(SessionEpoch(1), savePort, this, dispatcher)
+            val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), dispatcher)
             val first = async(start = CoroutineStart.UNDISPATCHED) {
                 session.execute(unsupportedEnvelope("command-a", "phase-a"))
             }
@@ -144,7 +145,7 @@ class WorldSessionTest {
         withTimeout(5_000) {
             CancellationPoint.entries.forEach { point ->
                 val savePort = CancellingSavePort(point)
-                val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined)
+                val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined)
 
                 val cancellation = runCatching {
                     session.execute(unsupportedEnvelope("command-cancelled-$point", "phase-cancelled"))
@@ -165,7 +166,7 @@ class WorldSessionTest {
     fun `cancelled commit restores its durable receipt before propagating cancellation`() = runBlocking {
         withTimeout(5_000) {
             val savePort = CommitThenCancellingSavePort()
-            val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined, testDeltaFactory())
+            val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory())
             val envelope = mutationEnvelope("command-cancelled-commit", "aggregate-a", "a", rngState(42, 1))
             val before = session.inMemoryStateHash()
 
@@ -190,6 +191,7 @@ class WorldSessionTest {
                 SessionEpoch(1),
                 CommitThenFailingReceiptLookupSavePort(),
                 this,
+                ContentSnapshot.emptyForTest(),
                 Dispatchers.Unconfined,
                 testDeltaFactory()
             )
@@ -222,6 +224,7 @@ class WorldSessionTest {
                 SessionEpoch(1),
                 RecordingSavePort(),
                 CoroutineScope(parentJob + Dispatchers.Unconfined),
+                ContentSnapshot.emptyForTest(),
                 dispatcher
             )
             val first = requestScope.async(start = CoroutineStart.UNDISPATCHED) {
@@ -243,7 +246,7 @@ class WorldSessionTest {
 
     @Test
     fun `pre enqueue cancellation does not consume a submission sequence`() = runBlocking {
-        val session = WorldSession(SessionEpoch(1), RecordingSavePort(), this)
+        val session = WorldSession(SessionEpoch(1), RecordingSavePort(), this, ContentSnapshot.emptyForTest())
         val cancelled = async(start = CoroutineStart.LAZY) {
             session.execute(unsupportedEnvelope("command-cancelled", "phase-cancelled"))
         }
@@ -258,7 +261,7 @@ class WorldSessionTest {
     @Test
     fun `rejected command does not persist or advance state version`() = runBlocking {
         val savePort = RecordingSavePort()
-        val session = WorldSession(SessionEpoch(1), savePort, this)
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest())
 
         assertUnsupported(session.execute(unsupportedEnvelope("command-a", "phase-a")), 1)
         assertUnsupported(session.execute(unsupportedEnvelope("command-b", "phase-b")), 2)
@@ -270,7 +273,7 @@ class WorldSessionTest {
     @Test
     fun `accepted delta commits before publishing state and a failed commit rolls back`() = runBlocking {
         val savePort = RecordingSavePort()
-        val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined, testDeltaFactory())
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory())
         val before = session.inMemoryStateHash()
 
         val result = session.execute(mutationEnvelope("command-accepted", "aggregate-a", "a", rngState(42, 1)))
@@ -289,7 +292,7 @@ class WorldSessionTest {
         assertTrue(session.execute(unsupportedEnvelope("stale", "phase", StateVersion(0))) is CommandResult.Rejected)
         session.close()
 
-        val failed = WorldSession(SessionEpoch(1), FailingSavePort(), this, Dispatchers.Unconfined, testDeltaFactory())
+        val failed = WorldSession(SessionEpoch(1), FailingSavePort(), this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory())
         val failedBefore = failed.inMemoryStateHash()
         val failure = failed.execute(mutationEnvelope("command-failed", "aggregate-a", "a", rngState(42, 1)))
         assertTrue((failure as CommandResult.Rejected).error is DomainError.PersistenceFailure)
@@ -300,7 +303,7 @@ class WorldSessionTest {
     @Test
     fun `invalid event metadata is rejected before persistence`() = runBlocking {
         val savePort = RecordingSavePort()
-        val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined, testDeltaFactory(validEventMetadata = false))
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory(validEventMetadata = false))
         val before = session.inMemoryStateHash()
 
         val result = session.execute(mutationEnvelope("command-invalid-event", "aggregate-a", "a", rngState(42, 1)))
@@ -319,6 +322,7 @@ class WorldSessionTest {
                 SessionEpoch(1),
                 savePort,
                 this,
+                ContentSnapshot.emptyForTest(),
                 Dispatchers.Unconfined
             ) { envelope, receiptVersion, currentRngState, _ ->
                 testDeltaFactory()(envelope, receiptVersion, currentRngState, 0L).copy(
@@ -346,7 +350,7 @@ class WorldSessionTest {
         repeat(100) {
             val dispatcher = PausedDispatcher()
             val savePort = RecordingSavePort()
-            val session = WorldSession(SessionEpoch(1), savePort, this, dispatcher, testDeltaFactory())
+            val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), dispatcher, testDeltaFactory())
             val a = async(start = CoroutineStart.UNDISPATCHED) {
                 session.execute(mutationEnvelope("command-a", "aggregate-a", "a", rngState(1, 1)))
             }
@@ -391,7 +395,7 @@ class WorldSessionTest {
     @Test
     fun `durable receipt lookup restores an evicted accepted command before version validation`() = runBlocking {
         val savePort = RecordingSavePort()
-        val session = WorldSession(SessionEpoch(1), savePort, this, Dispatchers.Unconfined, testDeltaFactory())
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory())
         val first = mutationEnvelope("command-0", "aggregate-0", "a", rngState(1, 1))
 
         assertAccepted(session.execute(first), 1)

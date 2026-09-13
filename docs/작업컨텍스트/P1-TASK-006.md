@@ -25,6 +25,8 @@
 - C10: 승인·기준선 반영 — unit=RATIO/BASIS_POINT/FLAT, typed effect AST; description-only effect를임의숫자로출시하지않음.
 - C13: 승인·기준선 반영 — NFC·대소문자·공백 정규화 후 exact/prefix index를 기본으로 하고 한글 부분검색은 결정적 2-gram shadow token table을 사용한다. FTS5 추가는 P0 가용성과 품질 우위가 실측될 때만 허용한다.
 - C18: 승인·기준선 반영 / 실물 NOT_RUN — 고정 실물 초상 M/W 각5000장, 512x640 opaque sRGB WebP, install-time portraits_v1 asset pack, pack 512MiB/전체 install-time 768MiB 이하. Full 활성 catalog는 미정 효과·깨진 참조·배포권 미확인 0건. 실제 파일/검수는 NOT_RUN.
+- C23: 승인·기준선 반영 — 117개 자동 후보를 개별 검토했다. P0 강제 항목은 AR-S0123-001, AR-S3023-001·002·003·008·015, AR-S3024-001~004·007·008·011, AR-S3025-003~004, AR-S3027-005, AR-S3030-003, AR-S3031-001·004, AR-S3032-002, AR-S3126-002, AR-S3135-001~004·012·013·019·021~023이다. 나머지 AR-S0124-001~032, AR-S0127-003, 위 범위 밖 AR-S3023/3024/3031/3135, AR-S3046-004, AR-S3095-001은 P0 구현으로 주장하지 않고 콘텐츠·RNG·저장·UI·성능·통합의 실제 Owner Phase에서 IMPLEMENTED/VERIFIED로 전환한다. APPROVED_REQUIREMENT는 원문 요구와 Owner를 승인했다는 뜻이며 P0 구현 완료를 뜻하지 않는다.
+- C24: 기술책임자 승인·기준선 반영 — ContentSnapshot.v1은 immutable content identity와 template map만 보유하고 WorldSession에 필수 주입한다. ContentCompatibilitySnapshot.v1은 save가 실제 참조하는 (kind,id,definitionVersion,definitionHash)를 보존하며 승인된 legacy provenance 없이는 같은 ID의 의미 변경도 자동 수용하지 않는다. portraitImageKey와 exact key는 확장자 없는 canonical AssetId이며 path는 검증된 root-relative PNG/WebP다. P1은 pure/in-memory 계약, builder JVM SQLite oracle, debug fixture gallery만 소유하고 Android SQLite adapter는 P3, production Loading/copy/semantics는 P22가 소유한다. Android memory 기준은 steady 384MiB, transient 512MiB이며 768MiB는 install-time compressed size다.
 
 ## 관련 Test
 
@@ -36,14 +38,14 @@
 
 ## REQUIRED/DATA Atomic Assertions
 
-- AR-S3049-004 / REQUIRED / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3049` §3049 content.db L63029: 앱 실행 중 일반적으로 수정하지 않는다.
-- AR-S3076-001 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63513: 단계=원본; 기술=CSV/JSON; 설명=대량 아이템/몬스터/이벤트 편집
-- AR-S3076-002 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63514: 단계=Schema Validation; 기술=Kotlin validator; 설명=필수 필드/ID/FK/범위
-- AR-S3076-003 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63515: 단계=Cross Validation; 기술=ContentValidator; 설명=드롭/레시피/스킬/이미지 참조
-- AR-S3076-004 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63516: 단계=Build; 기술=Gradle task; 설명=content.db + asset-manifest 생성
-- AR-S3076-005 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63517: 단계=Package; 기술=assets/; 설명=content.db + 이미지
-- AR-S3076-006 / DATA / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63518: 단계=Runtime; 기술=Read-only ContentRepository; 설명=정적 콘텐츠 조회
-- AR-S3077-003 / REQUIRED / AUTO_EXTRACTED_REVIEW_REQUIRED / `REQ-S3077` §3077 Content Source Format L63537: 런타임에 CSV를 직접 읽지 않는다.
+- AR-S3049-004 / REQUIRED / APPROVED_REQUIREMENT / `REQ-S3049` §3049 content.db L63029: 앱 실행 중 일반적으로 수정하지 않는다.
+- AR-S3076-001 / DATA / APPROVED_REQUIREMENT / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63513: 단계=원본; 기술=CSV/JSON; 설명=대량 아이템/몬스터/이벤트 편집
+- AR-S3076-002 / DATA / APPROVED_REQUIREMENT / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63514: 단계=Schema Validation; 기술=Kotlin validator; 설명=필수 필드/ID/FK/범위
+- AR-S3076-003 / DATA / APPROVED_REQUIREMENT / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63515: 단계=Cross Validation; 기술=ContentValidator; 설명=드롭/레시피/스킬/이미지 참조
+- AR-S3076-004 / DATA / APPROVED_REQUIREMENT / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63516: 단계=Build; 기술=Gradle task; 설명=content.db + asset-manifest 생성
+- AR-S3076-005 / DATA / APPROVED_REQUIREMENT / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63517: 단계=Package; 기술=assets/; 설명=content.db + 이미지
+- AR-S3076-006 / DATA / APPROVED_REQUIREMENT / `REQ-S3076` §3076 정적 콘텐츠 제작 Pipeline L63518: 단계=Runtime; 기술=Read-only ContentRepository; 설명=정적 콘텐츠 조회
+- AR-S3077-003 / REQUIRED / APPROVED_REQUIREMENT / `REQ-S3077` §3077 Content Source Format L63537: 런타임에 CSV를 직접 읽지 않는다.
 
 ## Command/Event 계약
 

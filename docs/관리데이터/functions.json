@@ -425,8 +425,8 @@
     ],
     "rules": [
       "AssetCatalogCompiler는 input 상한과 magic bytes/hash/크기/단일 frame/EXIF orientation/alpha/sRGB/license registry/focal 좌표를 검증하고 참조 registry entry를 assetManifestSha256에 포함한다",
-      "ContentRepository는 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 read method만 제공하며 InstalledBundle 하나에 고정되고 CDB-Q01..Q06 prepared query와 owner cancel/join/close lifecycle을 사용한다",
-      "AssetResolver는 nullable templateId의 binding을 ordered exactAssetKeys 뒤에 붙이고 entityKind/usage별 공개 fallbackContext matcher를 유한 순회하며 후보 assetId를 한 번만 열고 source key를 바꾸지 않는다",
+      "ContentRepository는 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 read method만 제공하며 InstalledBundle 하나에 고정되고 CDB-Q01..Q06 prepared query와 owner cancel/join/close lifecycle을 사용한다. P1은 in-memory contract와 builder JVM SQLite oracle만 구현하고 Android SQLite adapter는 P3가 소유한다",
+      "AssetResolver는 nullable templateId의 binding을 ordered exactAssetKeys: List<AssetId> 뒤에 붙이고 entityKind/usage별 공개 fallbackContext matcher를 유한 순회하며 후보 assetId를 한 번만 열고 source key를 바꾸지 않는다. portraitImageKey와 exact key는 확장자 없는 canonical AssetId다",
       "ResolvedAsset은 Exact/Fallback/SkippedByQualityMode를 구분하고 TEXT usage allowlist, usage에서 유일하게 파생한 category/crop과 정수 crop geometry·target decode 상한을 반환한다",
       "core:image는 local-only Coil을 사용하고 memoryCacheKey=bundleId|assetId|sha256|usage|targetBucket|qualityMode로 bounded cache를 재사용한다"
     ],
@@ -571,10 +571,10 @@
       "asset_image"
     ],
     "rules": [
-      "save content/balance/generator/RNG 버전과 설치 bundle/alias/legacy를 입력으로 immutable BindingPlan만 계산한다",
+      "save content/balance/generator/RNG 버전, ContentCompatibilitySnapshot.v1 required definitions와 설치 bundle/alias/legacySnapshotIndex.v1을 입력으로 immutable BindingPlan만 계산한다",
       "alias는 same-kind terminal 한 hop 또는 TOMBSTONE만 허용하고 self/cycle/chain/missing target을 build time에 거절한다",
-      "필수 ID가 alias/legacy에 없으면 Unsupported이며 의미가 다른 template으로 자동 치환하지 않는다",
-      "Android는 세션 시작 시 검증된 InstalledBundle을 immutable snapshot으로 고정하며 P1은 BindingPlan을 적용하거나 save를 쓰지 않고 실제 적용은 P3/P25가 소유한다"
+      "logical hash가 다를 때 각 (kind,id,definitionVersion,definitionHash)는 동일 tuple/hash 또는 승인 provenance가 있는 terminal REMAP/same-ID legacy entry로 증명해야 한다. 미증명 필수 ID나 같은 ID의 의미 변경은 Unsupported이며 자동 치환하지 않는다",
+      "Android는 세션 시작 시 검증된 InstalledBundle을 ContentSnapshot.v1로 고정해 WorldSession 필수 생성자에 주입하며 P1은 BindingPlan을 적용하거나 save를 쓰지 않고 실제 적용은 P3/P25가 소유한다"
     ],
     "normal": [
       "옛 ID alias OLD-WPN→WPN-0001",

@@ -8,6 +8,10 @@ coroutines = "1.10.2"
 junit = "4.13.2"
 kotlin = "2.4.20"
 lifecycle = "2.9.4"
+coil = "3.5.0"
+sqlite-jdbc = "3.53.1.0"
+jna = "5.16.0"
+webp-imageio = "0.1.6"
 
 [libraries]
 androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
@@ -18,10 +22,15 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 androidx-material3 = { module = "androidx.compose.material3:material3" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-ext-junit" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 junit4 = { module = "junit:junit", version.ref = "junit" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
+jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
+webp-imageio = { module = "org.sejda.imageio:webp-imageio", version.ref = "webp-imageio" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

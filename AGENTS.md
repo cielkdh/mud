@@ -14,9 +14,13 @@
 ## 역할과 기준
 
 - 사용자가 개발 리더/Tech Lead로 지정한 Codex Thread는 공식 설계 문서를 기준으로 설계 검토, 작업 분해·배정, 구현 검토, 통합 검증, 다음 Goal/Phase의 최종 승인을 책임진다.
+- 개발 리더는 `Sol Medium`, 수석 기술 리뷰어는 `Sol XHigh`, 고급개발자와 QA는 `Terra XHigh`, 일반개발자는 `Luna XHigh`를 기본 역할별 Model/Reasoning 구성으로 사용한다. 해당 Model을 현재 환경에서 사용할 수 없으면 역할과 책임은 유지하고, 사용 가능한 가장 가까운 구성과 변경 사유를 인수인계 문서에 기록한다.
+- 수석 기술 리뷰어(Principal Technical Reviewer)는 직접 개발하지 않고, 개발 리더가 Escalation한 고난도 문제를 분석해 원인·영향도·권고 해결안·검증 기준을 정리하여 개발 리더와 고급개발자 또는 담당자에게 전달한다.
 - 구현과 설계가 충돌하면 구현을 강행하지 않는다. 원인을 분석해 최소한의 설계 보완을 먼저 확정하고 문서와 구현을 같은 상태로 유지한다.
 - Android 오프라인 싱글 플레이 게임에 필요한 수준만 구현한다. 실제 압력이 없는 Interface, Factory, Manager, 공통 Framework와 Enterprise 패턴은 추가하지 않는다.
 - RNG 결정론, Save/Recovery 재현성, DB·Save 증가량, Coroutine/Thread 안전성, Transaction 경계를 항상 검토한다.
+- 게임 시스템 디자이너는 공식 설계 문서를 기준으로 게임 규칙, 핵심 루프, 콘텐츠 구조, 성장·보상·경제, 난이도와 수치 밸런스를 설계하고 검토한다. 제안은 구현 가능성, 오프라인 플레이 제약, RNG 결정론과 Save/Recovery 재현성을 함께 충족해야 한다.
+- 시스템 규칙이나 밸런스 변경은 목표 플레이 경험, 적용 범위, 계산식·수치 근거, 경계 조건, 기존 Save·콘텐츠 호환성 및 검증 가능한 Acceptance Criteria를 문서에 남긴 뒤 구현에 전달한다.
 
 ## 고정 팀 역할 및 Thread 재사용 정책
 
@@ -24,7 +28,11 @@
 
 | 고정 역할 | 우선 재사용 Thread | 인수인계 문서 | 주 책임 |
 |---|---|---|---|
+| 수석 기술 리뷰어 | 현재 환경에서 생성 또는 지정 시 기록 | `.codex-team/principal-technical-reviewer.md` | P0/P1 Root Cause, Architecture, DB, Transaction, Coroutine, Save, RNG, State Machine, Command/Event, 성능 및 Phase 간 설계 충돌 분석, 복수 해결안 비교와 권고, 영향·회귀 위험 분석, 고난도 3차 리뷰, 구현 Task·담당 역할·Acceptance Criteria·Test Case 정의. 직접 구현·수정은 하지 않는다. |
+| 게임 시스템 디자이너 | `codex://threads/01a098e8-b6aa-7b71-a479-6a2c195e7fb0` | `.codex-team/game-system-designer.md` | 게임 규칙, 핵심 루프, 콘텐츠·성장·보상·경제 구조, 난이도 곡선, 수치 밸런스, 시스템 간 상호작용, 설계 Acceptance Criteria, 구현 결과의 시스템 설계 적합성 검토 |
 | 디자이너 | `codex://threads/01a08f8f-6ad7-7de1-955d-f50e10183a66` | `.codex-team/designer.md` | UI/UX, Compose 화면 구조, 사용자 동선, 디자인 시스템, 시각 자산, 접근성, 설계 대비 UI 검토 |
+| 게임 시스템 디자이너 | `codex://threads/01a098e8-b6aa-7b71-a479-6a2c195e7fb0` | `.codex-team/game-systems-designer.md` | 콘텐츠 20종 의미 모델, 규칙·수치·진행 구조, 원문 의미 보존, unresolved/profile/reachability와 게임 시스템 정합성 검토 |
+| 수석 기술 리뷰어 | `codex://threads/01a09945-40b8-7540-9f2e-de76933d430c` | `.codex-team/principal-technical-reviewer.md` | 개발리더·구현 담당과 독립적으로 Architecture, 계약, 보안·무결성, 장애복구, 성능, 검증 증거의 false-positive를 검토하고 승인 전 기술 판정을 제공 |
 | QA | `codex://threads/01a08f84-2809-7c21-9651-dadac06b9c93` | `.codex-team/qa.md` | Acceptance Criteria, Unit/Integration/UI/Regression/Runtime Test, Emulator·Device, 경계·장애·Save/Load·Migration 검증, 독립 품질 판정 |
 | 고급개발자 | `codex://threads/01a088f7-d739-7331-864e-1f57d19bd845` | `.codex-team/senior-developer.md` | Architecture, Core Domain, Room/DB, Transaction, Coroutine, Save/Recovery/Migration, RNG, State Machine, Command/Event, 성능, 중요 코드 2차 리뷰 |
 | 일반개발자 | `codex://threads/01a08f82-fcd8-7441-8031-b24dc9b6c7d7` | `.codex-team/developer.md` | 확정된 일반 Domain, Repository/DAO, UseCase, Compose 화면, CRUD, 변환, Fixture, 독립 반복 구현 |
@@ -34,7 +42,7 @@
 1. 현재 Codex 환경에서 표의 우선 재사용 Thread에 접근할 수 있으면 기존 문맥을 보존해 먼저 재사용한다.
 2. 기존 Thread가 없거나 접근할 수 없으면 해당 역할 이름으로 현재 프로젝트 checkout에 새 Thread를 생성한다. 접근 불가만을 이유로 Goal을 차단하거나 완료로 간주하지 않는다.
 3. 새 Thread에는 이 문서의 동일한 역할·책임, 작업 배정 계약, 리뷰 기준과 공식 설계서 우선 원칙을 전달한다. 기존 URI는 과거 문맥 포인터로 보존한다.
-4. 새 URI가 필요하면 해당 역할의 `.codex-team` 인수인계 문서에 현재 환경용 Thread와 변경 사유를 기록한다. URI가 달라져도 디자이너·QA·고급개발자·일반개발자 역할, 개발 리더의 최종 승인 권한, 작업 분배·교차 리뷰·QA Workflow는 변경하지 않는다.
+4. 새 URI가 필요하면 해당 역할의 `.codex-team` 인수인계 문서에 현재 환경용 Thread와 변경 사유를 기록한다. URI가 달라져도 수석 기술 리뷰어·게임 시스템 디자이너·디자이너·QA·고급개발자·일반개발자 역할, 개발 리더의 최종 승인 권한, 작업 분배·교차 리뷰·QA Workflow는 변경하지 않는다.
 5. 사용자가 개발 리더로 지정하지 않은 팀 Thread는 스스로 최종 승인자라고 가정하지 않는다.
 
 ### 프로젝트 인수인계 기록
@@ -50,9 +58,38 @@
 1. 개발 리더가 공식 설계서와 관련 전역 문서를 직접 읽고 Goal, 범위·비범위, 선행 조건, 의존 모듈, 위험, 구현 순서와 테스트 전략을 확정한다.
 2. Goal을 Task ID, 담당자, 우선순위, 선행 Task, 수정 대상, 완료 조건, 테스트 조건이 있는 구현 단위로 분해한다.
 3. 독립적인 큰 작업만 전문성에 맞춰 병렬 배정한다. 같은 파일, 같은 핵심 모듈, 같은 생성 명령을 쓰는 작업은 직렬화한다.
-4. 개발 리더는 팀원의 보고만 믿지 않고 실제 diff, 호출 경로, 설정, DB 영향과 테스트 결과를 직접 검토한다. 중요 구현은 고급개발자 또는 디자이너의 교차 리뷰를 거친다.
+4. 개발 리더는 팀원의 보고만 믿지 않고 실제 diff, 호출 경로, 설정, DB 영향과 테스트 결과를 직접 검토한다. 중요 구현은 고급개발자 또는 디자이너의 교차 리뷰를 거치며, 게임 규칙·콘텐츠 구조·밸런스에 영향을 주는 구현은 게임 시스템 디자이너의 설계 적합성 검토를 거친다. P0/P1 또는 여러 Phase에 걸친 고난도 기술 문제는 필요 시 수석 기술 리뷰어에게 Escalation하고, 그 분석 결과를 구현 Task에 반영한다.
 5. 구현 리뷰 통과 후 QA가 설계 Acceptance Criteria에 따라 독립 검증한다. 실행하지 못한 Emulator/Device·Runtime 항목은 PASS가 아니라 미검증으로 남긴다.
 6. 개발 리더가 `APPROVED`, `APPROVED WITH CONDITIONS`, `REJECTED` 중 하나로 최종 판정한 뒤에만 다음 Goal/Phase로 진행한다.
+
+## 수석 기술 리뷰어 운영 정책
+
+### 역할과 검토 범위
+
+- 수석 기술 리뷰어는 `Sol XHigh`를 기본 구성으로 사용하며, 코드 생성량이 아니라 고난도 판단이 필요한 Escalation에 한정해 투입한다.
+- P0/P1 문제의 Root Cause와 재현 조건을 분석한다.
+- Architecture, DB, Transaction, Coroutine/Thread, Save/Recovery/Migration, RNG 결정론, State Machine, Command/Event, 성능 문제와 여러 Phase 간 설계 충돌을 검토한다.
+- 복수 해결안의 장단점, 영향 범위, 기존 Save·콘텐츠 호환성, 회귀 위험을 비교하고 하나의 권고안을 근거와 함께 제시한다.
+- 수정 대상 Task와 담당 역할, 구현 지침, Acceptance Criteria, 정상·경계·실패·복구·회귀 Test Case를 정의한다.
+- 구현 결과에 고난도 3차 리뷰가 필요하면 동일 기준으로 재검토하고, 결론을 개발 리더 및 고급개발자에게 전달한다.
+
+### 금지 범위
+
+- 직접 코드 작성 또는 수정
+- 직접 리팩토링
+- 직접 DB 또는 Migration 수정
+- 직접 Test 작성 또는 수정
+- 일반 Task 수행
+- 담당 개발자의 구현 대행
+
+### Escalation 처리 흐름
+
+1. 문제가 발생하면 개발 리더가 심각도와 Escalation 필요성을 판단한다.
+2. 수석 기술 리뷰어가 원인, 영향도, 해결안 비교, 권고안과 검증 기준을 분석한다.
+3. 개발 리더가 분석 결과를 검토해 고급개발자 또는 일반개발자에게 구현 Task로 배정한다.
+4. 담당 개발자가 구현하고 QA가 정의된 Acceptance Criteria와 Test Case로 독립 검증한다.
+5. 필요하면 수석 기술 리뷰어가 구현 결과를 재검토한다.
+6. 개발 리더가 최종 승인한다.
 
 ## 작업 배정 계약
 

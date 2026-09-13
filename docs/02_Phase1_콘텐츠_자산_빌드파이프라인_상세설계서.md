@@ -38,6 +38,8 @@
 | `PROTOTYPE_ACCEPTED` | fixture의 모든 요청 usage가 exact 또는 승인 fallback으로 resolve되고 unresolved 0, resolver·패키징·메모리·preview 검증 통과 | 기능 개발 |
 | `FULL_CONTENT_READY` | 실물 10,000개와 권리·해시·패키징 검수, entity kind×usage별 unresolved 0 및 승인된 fallback coverage 완료 | P23/P25 Full Gate |
 
+적용 결정은 C09·C10·C13·C18·C23과 Phase 1 보완 기준선 C24다. C23의 `APPROVED_REQUIREMENT`는 요구·Owner 승인 상태이며 실제 구현·검증 완료는 P1 Gate 증거로 별도 판정한다.
+
 ## 4. 기능 범위와 권한 분류
 
 | 기능 | kind | 주요 계약 | durable output | 금지 |
@@ -61,7 +63,9 @@ P1 전체에는 `CommandEnvelope`, `WorldSession`, `SaveCoordinator`, `DomainEve
 | `:core:simulation` | 기존 순수 Kotlin simulation; session용 immutable content snapshot 소비 | `:core:content` | Android, Room, Coil, 네트워크 |
 | `:app` | fixture gallery/smoke entry만 조립 | `:core:image`, `:core:content`, 기존 `:core:simulation` | content 관리 UI, DAO 직접 접근 |
 
-의존 방향은 `:app -> :core:image -> :core:content`, `:app -> :core:simulation -> :core:content`, `:app -> :core:content`, `:tools:content-builder -> :core:content`만 허용한다. 앱의 background session bootstrap이 검증된 `ContentRepository` 조회 결과를 `:core:content`의 immutable `ContentSnapshot`으로 조립해 `WorldSession` 생성자에 한 번 전달하며 simulation은 SQLite·repository·asset을 직접 열지 않는다. 실제 자산이 오기 전 빈 `:asset-pack` module은 만들지 않는다. Play Asset Delivery module/plugin은 실물 pack spike가 시작될 때 C18 증거와 함께 추가한다.
+의존 방향은 `:app -> :core:image -> :core:content`, `:app -> :core:simulation -> :core:content`, `:app -> :core:content`, `:tools:content-builder -> :core:content`만 허용한다. 앱의 background session bootstrap이 검증된 `ContentRepository` 조회 결과를 `:core:content`의 immutable `ContentSnapshot.v1`으로 조립해 `WorldSession` 생성자에 한 번 전달하며 simulation은 SQLite·repository·asset을 직접 열지 않는다. 실제 자산이 오기 전 빈 `:asset-pack` module은 만들지 않는다. Play Asset Delivery module/plugin은 실물 pack spike가 시작될 때 C18 증거와 함께 추가한다.
+
+`ContentSnapshot.v1`은 `identity(contentVersion,balanceVersion,logicalContentHash,schemaVersion)`와 `templatesById: Map<ContentId,ContentTemplate>`만 가진다. 생성 시 입력 record를 `ContentId`로 정렬해 방어 복사하고 duplicate ID, map key와 template ID 불일치, 비 NFC ID, 지원하지 않는 kind/definitionVersion을 거절한다. 생성 뒤 collection과 template은 불변이며 repository handle, SQLite cursor, asset bytes/path, wall-clock을 보유하지 않는다. `WorldSession`은 이 snapshot을 필수 생성자 인자로 받아 session 동안 같은 identity를 유지하고, 기존 P0 fixture는 명시적인 `ContentSnapshot.emptyForTest()`만 사용한다.
 
 P1에는 Android SQLite adapter용 새 Gradle module을 만들지 않는다. `ContentRepository` interface와 query DTO는 `:core:content`가 소유하고, P1의 Android fixture는 builder가 만든 manifest/index를 읽는다. 실제 `content.db` Android adapter는 P3의 기존 `:core:data` 논리 package가 `:core:save` 안에서 구현하며 독립 build 필요가 입증될 때만 물리 module로 분리한다.
 
@@ -73,9 +77,10 @@ Phase1 Build Spike는 Gradle resolve, Kotlin/JVM compile, Android library compil
 ### 6.1. FUNC-P1-001 — 정적 카탈로그 스키마와 ID 보존
 
 - 입력은 manifest에 열거된 UTF-8 canonical source뿐이다. 디렉터리 glob 순서는 사용하지 않는다.
-- `ContentId`는 trim·대소문자 보정 없이 원문 `sourceId`와 byte-for-byte 같은 non-blank NFC 문자열이며 `content_template.id`에 한 번만 저장한다. 진단용 `sourceFile/row`는 source locator이고 런타임 ID나 DB 컬럼이 아니다. 원문 `sourceDisplayName`, 등급, 태그, 수치, 단위를 보존하며 표기 교정은 nullable `displayNameOverride`, effective `displayName`은 `override ?: sourceDisplayName`이다.
+- `ContentId`는 trim·대소문자 보정 없이 원문 `sourceId`와 byte-for-byte 같은 non-blank NFC 문자열이며 `content_template.id`에 한 번만 저장한다. 진단용 `sourceFile/row`는 source locator이고 런타임 ID나 DB 컬럼이 아니다. 원문 `sourceDisplayName`, 등급, 태그, 수치, 단위를 보존하며 표기 교정은 nullable `displayNameOverride`, effective `displayName`은 `override ?: sourceDisplayName`이다. 원문의 권장 레벨은 `recommendedLevel`이고 실제 제한인 `minLevel`로 임의 승격하지 않는다.
 - `ContentKind.v1` 직렬화 코드는 `ACC, ARM, BOS, CHAIN, CTR, DNG-EVT, EPRE, ESUF, EVT, ITM, LEG, MON, MPRE, MSUF, REL, SET, SKL, SPRE, SSUF, WPN`으로 닫는다. `EntityKind.v1`은 runtime fallback 문맥의 `MERCENARY, MONSTER, DUNGEON, ROOM, ITEM, FACILITY`로 닫고 `ContentKind`와 혼용하지 않는다. 코드 추가·이름 변경은 `schemaVersion` 상승과 migration/compatibility fixture 없이는 허용하지 않는다.
-- 설명만 있고 수치가 없는 효과는 `UNRESOLVED`로 남겨 출시 profile에서 거절한다.
+- 20종 원천 열과 kind별 sealed definition의 단일 기준은 [공통계약의 P1 ContentKind.v1 matrix](설계부록/04_공통계약_및_콘텐츠_스키마.md#p1-contentkind-v1-matrix)다. `EVT`,`DNG-EVT`,`CHAIN`은 원천 c2가 category, c3가 `sourceDisplayName`이며 모든 kind를 같은 `fields[]/rawRow` definition으로 발행하지 않는다.
+- 설명만 있고 수치·단위·참조 의미가 완결되지 않은 효과는 `definition.unresolved[]`에 보존한다. `PROTOTYPE`에서는 해당 row가 `enabled=false`이고 활성 row에서 reachable하지 않을 때만 허용하고, `ALPHA` reachable row와 `FULL` 전체 row에서는 unresolved를 거절한다.
 - 중복 ID는 두 source locator를 모두 가진 `DuplicateContentId`로 거절한다.
 - importer는 메모리 `CatalogDraft`와 diagnostics만 반환한다. DB/파일을 발행하지 않는다.
 
@@ -104,10 +109,11 @@ Phase1 Build Spike는 Gradle resolve, Kotlin/JVM compile, Android library compil
 <a id="func-p1-004"></a>
 ### 6.4. FUNC-P1-004 — 콘텐츠·이미지 버전 교체와 호환
 
-- 입력: save의 `contentVersion, balanceVersion, logicalContentHash, generatorVersion, rngVersion`, 설치 bundle manifest, alias map, legacy snapshot index.
+- 입력: save의 `contentVersion, balanceVersion, logicalContentHash, generatorVersion, rngVersion, compatibilitySnapshot`, 설치 bundle manifest, alias map, legacy snapshot index.
 - 출력: `Compatible`, `MigrationRequired(steps)`, `Unsupported(missingIds)` 중 하나인 immutable `BindingPlan`.
 - resolver는 순수 계산이다. 파일·DB·save를 쓰지 않고 같은 입력에 같은 plan을 반환한다.
 - save 호환성의 콘텐츠 identity는 `logicalContentHash`다. 자산만 바뀌어 `bundleId`/`assetManifestSha256`가 달라도 logical hash가 같으면 `Compatible`이며, logical hash가 다를 때만 ID/alias/legacy 검사를 수행한다. `artifactFileSha256`와 `bundleId`는 설치 무결성 값이지 save 호환성 값이 아니다.
+- `ContentCompatibilitySnapshot.v1`은 `snapshotVersion`, saved `logicalContentHash`, 그리고 save가 실제로 참조하는 항목을 `(kind,id,definitionVersion,definitionHash)`로 정렬한 `requiredDefinitions`를 가진다. `DefinitionHash.v1`은 해당 template의 `kind,id,definitionVersion,grade,minLevel,sorted tags,enabled,canonical definition`을 canonical JSON으로 직렬화한 UTF-8 bytes의 SHA-256이며 표시명·provenance·asset 정보는 포함하지 않는다. `legacySnapshotIndex.v1`은 old tuple/hash, terminal new tuple/hash 또는 TOMBSTONE, provenance, 승인 revision을 보존한다. logical hash가 다를 때 각 required definition이 설치 bundle에서 같은 tuple/hash로 유지되거나 승인된 terminal REMAP/same-ID legacy entry로 증명되어야 하며, 하나라도 증명되지 않으면 `Unsupported(missingIds, changedDefinitions)`다. 증명된 변경이 하나 이상이면 `MigrationRequired(steps)`, 모두 동일하면 `Compatible`이다. alias만으로 definition 의미 동치를 추정하거나 같은 ID라는 이유로 변경된 definition을 자동 수용하지 않는다.
 - P3 `content_binding.logical_content_hash`가 이 값을 저장한다. 과거 모호한 `source_bundle_hash` 이름은 사용하지 않는다.
 - 의미가 다른 template으로 자동 대체하지 않는다. 필수 ID가 alias/legacy에 없으면 `Unsupported`이며 원본 save는 그대로 둔다.
 - P3/P25의 별도 승인 command만 plan을 적용하고 migration history를 기록한다.
@@ -119,6 +125,8 @@ Phase1 Build Spike는 Gradle resolve, Kotlin/JVM compile, Android library compil
 `content/source/catalog-manifest.json`이 파일 목록과 순서를 소유한다. 각 entry는 `path, kind, schemaVersion, exactFileSha256, rowCount`를 가진다. 데이터 파일은 UTF-8/NFC CSV 또는 versioned JSON AST이며 manifest에 없는 파일은 빌드 입력이 아니다. 절대경로, 수정시각, OS directory order는 결과에 영향을 주지 않는다. build input 상한은 파일당 64MiB·100,000행, 전체 1,000,000행이며 읽기 전에 크기를, parse 중 행 수를 검사해 `SOURCE_INVALID`로 중단한다.
 
 `CSV dialect v1`은 UTF-8 BOM 선택 허용, comma delimiter, RFC 4180 double-quote escape, CRLF/LF 허용, header 이름·순서 schema 고정, 빈 unquoted field=`null`, quoted empty=`""`, field 외곽 공백 보존, 10진 정수 ASCII 표기만 허용으로 고정한다. 중복/미지 header, 열 수 불일치, locale 숫자, 잘못 닫힌 quote는 오류다. JSON v1은 duplicate key·미지 field·NaN/Infinity를 거절하고 key 순서는 의미에 영향을 주지 않는다. dialect 변경은 `schemaVersion`을 올린다.
+
+`CSV dialect v1`의 header는 다음 12개 열을 정확히 이 순서로 사용한다: `id,sourceDisplayName,displayNameOverride,grade,minLevel,tagsJson,enabled,definitionVersion,definitionJson,provenanceSection,provenanceRow,provenanceRawRow`. `kind`와 `sourceVersion`은 manifest/file entry가 소유하고 `sourceFile`은 manifest의 root-relative `path`에서 파생한다. `displayNameOverride,grade,minLevel`만 unquoted empty를 `null`로 허용하며 quoted empty는 빈 문자열 값으로 보존한 뒤 field validator가 허용 여부를 판정한다. `tagsJson`은 JSON string array, `definitionJson`은 JSON object를 담은 RFC 4180 quoted field이고 두 JSON 조각에도 duplicate key·unknown field·NaN/Infinity·NFC 규칙을 동일 적용한다. `enabled`는 ASCII `true|false`, `definitionVersion,provenanceSection,provenanceRow`는 부호 없는 ASCII 10진 정수다. JSON source의 document key는 `definitionVersion,kind,records,schemaVersion,sourceVersion`, record key는 `definition,definitionVersion,displayNameOverride,enabled,grade,id,kind,minLevel,provenance,sourceDisplayName,tags`, provenance key는 `rawRow,row,section`으로 닫으며 unknown/missing key를 거절한다. dialect 오류는 `SOURCE_INVALID`, duplicate JSON key는 `JSON_DUPLICATE_KEY`, unknown key/header는 `SOURCE_UNKNOWN_FIELD`, UTF-8/NFC 오류는 `SOURCE_ENCODING_INVALID`로 고정하고 source file·row·column·field를 diagnostic에 남긴다.
 
 ### 7.2. 세 종류의 hash
 
@@ -145,7 +153,7 @@ Gradle packaging은 `current.json`이 가리키는 immutable bundle 하나만 �
 | 객체 | 불변식 |
 |---|---|
 | `content_manifest` | `id='CONTENT-MANIFEST'` 한 행만 허용; DB 하나에 content version 하나 |
-| `content_template` | PK `id`가 canonical `sourceId`; `ContentKind.v1` CHECK; `display_name=COALESCE(display_name_override,source_display_name)`; JSON/definition version post-build audit |
+| `content_template` | PK `id`가 canonical `sourceId`; `ContentKind.v1` CHECK; `display_name=COALESCE(display_name_override,source_display_name)`; `enabled`은 0/1; JSON/definition version/profile post-build audit |
 | `content_alias` | `REMAP`은 terminal `new_id` 물리 FK 필수, `TOMBSTONE`은 null; self/cycle/chain 금지 |
 | `asset_image` | canonical relative path unique; `byte_size>0`; lower-case 64 hex SHA-256; width/height/size/file hash 일치; focal 좌표는 둘 다 null 또는 0..1,000,000 |
 | `asset_binding` | `template_id`/`asset_id` 물리 FK; usage code set 및 `template_id/usage/priority` unique; category/crop은 usage에서 파생 |
@@ -176,7 +184,7 @@ relative path는 NFC, `/` separator, root-relative만 허용한다. 빈 segment,
 
 ### 9.2. asset manifest
 
-각 entry 필수 필드: `assetId, relativePath, exactFileSha256, mimeType, width, height, byteSize, alphaMode, colorSpace, category, poolVersion, licenseId, validationStatus`. 선택 필드 `focalXppm/focalYppm`은 반드시 함께 존재하며 각각 0..1,000,000이다. 허용값은 다음과 같다.
+각 entry 필수 필드: `assetId, relativePath, exactFileSha256, mimeType, width, height, byteSize, alphaMode, colorSpace, category, poolVersion, licenseId, validationStatus`. 선택 필드 `focalXppm/focalYppm`은 반드시 함께 존재하며 각각 0..1,000,000이다. V1에서 runtime의 `portraitImageKey`와 resolver의 exact key는 별도 namespace가 아니라 canonical `AssetId`다. 따라서 `exactAssetKeys`의 타입은 `List<AssetId>`이고 C18의 `NPC-M-00001..05000`, `NPC-W-00001..05000` 값도 확장자를 제외한 `assetId`다. key→assetId 보조 조회나 runtime 파일명 조합은 만들지 않는다. 허용값은 다음과 같다.
 
 - `mimeType`: `image/png`, `image/webp`
 - `alphaMode`: `OPAQUE`, `STRAIGHT`
@@ -227,11 +235,11 @@ resolver는 exact와 fallback을 합친 유한한 후보 목록을 먼저 만들
 
 ### 9.4. UI 상태·cache·디자이너 preview
 
-- P1은 `ResolvedAsset.Exact/Fallback/SkippedByQualityMode`와 typed failure만 제공한다. P22는 `Loading placeholder → Content` 전이, crossfade, 재시도 버튼, semantics를 소유한다.
-- `memoryCacheKey`는 `bundleId|assetId|sha256|usage|targetBucket|qualityMode`다. custom cache는 만들지 않으며 Coil memory cache를 C19 범위로 제한한다. 패키지/PAD의 immutable 원본은 별도 disk cache에 복제하지 않는다.
+- P1 production API는 `ResolvedAsset.Exact/Fallback/SkippedByQualityMode`와 typed failure만 제공한다. P1 debug fixture gallery는 이 상태 매핑, crop, cache identity와 접근성 handoff를 검증하기 위한 test surface이며 production Screen Registry에 등록하지 않는다. P22는 실제 `Loading placeholder → Content` 전이, crossfade, 재시도 버튼, copy와 production semantics를 소유한다.
+- `memoryCacheKey`는 `bundleId|assetId|sha256|usage|targetBucket|qualityMode`다. custom cache는 만들지 않으며 Coil memory cache의 P1 초기 상한은 `64 MiB`로 두고 weak-reference cache와 disk cache는 사용하지 않는다. immutable bundle이 전환되면 이전 bundle의 memory cache를 즉시 비운다. 이 상한은 C19 PSS `384/512 MiB`를 계속 만족하는 범위에서 ADR-LIMIT-05 절차로 조정할 수 있다. 패키지/PAD의 immutable 원본은 별도 disk cache에 복제하지 않는다.
 - `asset-preview.html`은 외부 서버·JavaScript build 없이 생성되는 정적 index다. 요약·필터·category link만 두고, 실제 thumbnail·모든 usage crop·exact/fallback 단계·reason·누락·중복·미사용·라이선스·entity kind×usage coverage는 `asset-preview/<category>-<page>.html`에 category별 정적 page, 페이지당 최대 500 asset으로 분할한다. 이미지는 고정 width/height와 `loading=lazy`를 사용해 10,000개를 한 DOM/bitmap set으로 열지 않는다.
 - preview renderer는 모든 source/diagnostic 문자열을 HTML text/attribute escape하고 검증된 relative asset path만 사용한다. 원문 문자열을 markup이나 script에 직접 연결하지 않으며 외부 URL을 생성하지 않는다.
-- preview의 alt text는 공개 fixture 이름에서 만들고 파일명/assetId/숨은 수치를 노출하지 않는다. 실제 앱 `contentDescription`은 P22가 같은 원칙으로 생성한다.
+- preview의 alt text는 공개 fixture 이름에서 만들고 파일명/assetId/숨은 수치를 노출하지 않는다. debug gallery는 호출자가 준 공개 fixture 이름을 사용하며 Exact/Fallback에 같은 entity label을 부여하고 fallback reason·파일명·assetId를 읽지 않는다. Loading 안내는 한 번만 노출하고 `TEXT` skip/terminal failure에서는 이미지 semantics node를 제거하되 이름·설명·행동 텍스트를 유지한다. 이 fixture 문자열과 traversal order는 P1 smoke에 고정하지만 production copy로 승격하지 않으며 실제 앱 `contentDescription`은 P22가 같은 원칙으로 생성한다.
 
 ## 10. alias·legacy 계약
 
@@ -269,7 +277,7 @@ self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. sour
 | <a id="p1-task-011"></a>`P1-TASK-011` | asset schema·path·crop 계약 | `:core:content / :core:image` | canonical type·파생 category/crop·6 read API·query plan·정수 crop/focal/fallback/TEXT/cache/UI fixture 승인 |
 | <a id="p1-task-012"></a>`P1-TASK-012` | asset validator/compiler | `:tools:content-builder` | path/hash/입력 상한/physical metadata/license registry/focal/coverage 검사 |
 | <a id="p1-task-013"></a>`P1-TASK-013` | asset row·manifest 산출 | `:tools:content-builder` | DB row·manifest·분할 asset-preview 일치 및 10,000개 bounded 생성 |
-| <a id="p1-task-014"></a>`P1-TASK-014` | Android 읽기 전용 resolver | `:core:image / :app` | 6 read method P3 adapter contract fixture, 동시 read/close lifecycle·유한 후보·crop/cache/Exact/Fallback/Loading/semantics smoke |
+| <a id="p1-task-014"></a>`P1-TASK-014` | Android 읽기 전용 resolver | `:core:image / :app` | in-memory 6-read contract와 builder JVM SQLite oracle, 동시 read/close lifecycle·유한 후보·crop/cache/Exact/Fallback/debug Loading/semantics smoke; Android DB adapter 0 |
 | <a id="p1-task-015"></a>`P1-TASK-015` | asset 검증·리뷰 | 동일 | P1-003 Test 5개와 query plan/screenshot/memory/cache 증거 |
 | <a id="p1-task-016"></a>`P1-TASK-016` | BindingPlan·alias 계약 | `:core:content` | 결과 타입과 P3/P25 적용 경계 승인 |
 | <a id="p1-task-017"></a>`P1-TASK-017` | 순수 compatibility resolver | `:core:content` | 같은 입력/같은 plan, write 0 |
@@ -282,7 +290,7 @@ self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. sour
 
 ## 13. Test 설계
 
-모든 P1 Test는 `live save.db hash 불변`을 공통 oracle로 사용한다. seed, commandId, receipt, WorldSession은 fixture에 넣지 않는다. 상태는 구현 전이므로 모두 `NOT_RUN`이다. 아래 표는 검토용 요약이며 실행 가능한 사전조건·절차·DB/로그 oracle의 단일 원천은 `관리데이터/tests.json`, 전역 목록은 `91_전체_Test_계획서.md`다.
+모든 P1 Test는 `live save.db hash 불변`을 공통 oracle로 사용한다. seed, commandId, receipt는 fixture에 넣지 않으며 `WorldSession`이 필요한 graph test는 `ContentSnapshot.emptyForTest()`를 명시적으로 주입한다. 상태는 구현 전이므로 모두 `NOT_RUN`이다. 아래 표는 검토용 요약이며 실행 가능한 사전조건·절차·DB/로그 oracle의 단일 원천은 `관리데이터/tests.json`, 전역 목록은 `91_전체_Test_계획서.md`다.
 
 | Test | 핵심 입력 | 독립 oracle |
 |---|---|---|
@@ -314,7 +322,16 @@ self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. sour
 | <a id="p1-et-001"></a>`P1-ET-001` | build/runtime 오류·전체 후보 손상 fixture | build 차단·runtime 유한 fallback WARN·terminal failure·Blocked 분리 |
 | <a id="p1-it-005"></a>`P1-IT-005` | source→sealed DB/preview→InstalledBundle→resolver→handoff | artifact/hash/query/coverage/UX/P3·P22·P25 인계 일치 |
 
-`P1-PT-001`은 현재 수치가 없는 지표를 PASS로 만들지 않는다. FULL fixture에서 `CDB-Q01..Q06`의 query plan과 p50/p95, builder wall/heap/DB size를 기록하고 Android 대표 단말의 자산 fixture는 85/C19의 정상 목표 512MiB, 저사양 상한 768MiB와 비교한다. resolver/decode p50/p95와 함께 baseline 값 자체를 P24에 인계한다. `TEXT`는 금지 usage의 repository/file/decode 0과 허용 usage의 정상 Exact/Fallback decode를 각각 측정하며 전체 decode 0을 요구하지 않는다.
+`P1-PT-001`은 현재 수치가 없는 지표를 PASS로 만들지 않는다. 최대 cardinality의 deterministic synthetic manifest/preview fixture에서 `CDB-Q01..Q06`의 query plan과 p50/p95, builder wall/heap/DB size를 기록하고, 승인된 대표 PNG/WebP fixture로 resolver/decode를 측정한다. synthetic 10,000 entry는 DOM/query/cache 상한 검증용이며 실물 C18 자산·라이선스 승인을 대체하지 않는다. Android fixture의 steady PSS는 C19 MIN `384 MiB`, 일시 peak는 `512 MiB`와 비교한다. `768 MiB`는 전체 install-time 압축 용량 상한이지 PSS 상한이 아니다. Emulator/debug 결과는 P1 회귀 기준으로 기록할 수 있으나 실제 MIN/STD 단말 승인은 `NFR_MEASURE_REQUIRED`로 P24/P25에 남긴다. resolver/decode p50/p95와 함께 baseline 값을 인계한다. `TEXT`는 금지 usage의 repository/file/decode 0과 허용 usage의 정상 Exact/Fallback decode를 각각 측정하며 전체 decode 0을 요구하지 않는다.
+
+### 13.1. 실행·증거 계약
+
+- 단일 Gate 명령은 Windows에서 `.\gradlew.bat phase1Gate --no-daemon --console=plain`이며 `:core:content:test`, `:tools:content-builder:test`, `:core:image:testDebugUnitTest`, `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:assembleRelease`, 문서 validator를 포함한다. Emulator가 필요한 fixture gallery는 `.\gradlew.bat :app:connectedDebugAndroidTest --no-daemon --console=plain`으로 별도 실행한다.
+- 각 executable test 이름은 27개 Test ID 중 하나를 포함하고, `build/reports/phase1/phase1-test-evidence.json`은 `testId, command, fixtureProfile, startedAt, durationMs, result, artifactPaths, beforeSaveSha256, afterSaveSha256`를 가진다. JUnit XML, validation JSON/Markdown, DB/query-plan, preview, screenshot/semantics, memory/latency artifact 경로를 누락하지 않는다.
+- test-owned 입력의 고정 root는 `phase1-fixtures/<TestId>/`, 공통 불변 sentinel은 `phase1-fixtures/common/save-sentinel.db`, 격리 출력은 `build/phase1-fixtures/<TestId>/`다. 각 case의 실제 module test resource는 이 ID 경로를 가리키며 임시 디렉터리는 실행마다 새로 만든다.
+- 공통 save sentinel은 test resource의 불변 bytes와 선택적인 빈 `-wal/-shm` 부재를 실행 전후 SHA-256·파일 목록으로 비교한다. P1 코드가 save path를 open/write한 기록이 한 건이라도 있거나 before/after가 다르면 해당 Test와 Gate를 실패시킨다.
+- fault/kill/atomic-move/network 테스트는 test-owned adapter와 temp root만 사용하고 active 설치 경로·사용자 save를 건드리지 않는다. 개별 JVM test timeout은 60초, concurrency/recovery/performance suite는 10분, connected Android suite는 15분이며 timeout도 FAIL이다.
+- `P1-IT-003`의 SQLite 비교는 builder JVM의 CDB-Q01..Q06 read-only oracle와 `:core:content` in-memory contract를 대조한다. Android `OPEN_READONLY/query_only` DB adapter와 production Loading/semantics는 P3/P22 소유이며 P1에는 구현하지 않는다. P1 debug gallery는 전달 DTO·state·접근성 fixture가 후속 계약과 맞는지만 검증한다.
 
 ## 14. 완료 기준
 

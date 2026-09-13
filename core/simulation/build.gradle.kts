@@ -11,6 +11,7 @@ dependencyLocking {
 }
 
 dependencies {
+    implementation(project(":core:content"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit4)
 }

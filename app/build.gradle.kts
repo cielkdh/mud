@@ -27,6 +27,8 @@ dependencyLocking {
 
 dependencies {
     implementation(project(":core:simulation"))
+    implementation(project(":core:content"))
+    implementation(project(":core:image"))
     implementation(libs.androidx.activity)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)

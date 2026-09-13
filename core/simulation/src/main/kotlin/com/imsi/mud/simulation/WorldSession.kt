@@ -1,5 +1,6 @@
 package com.imsi.mud.simulation
 
+import com.imsi.mud.content.ContentSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
@@ -19,6 +20,7 @@ import java.security.MessageDigest
 import java.util.LinkedHashMap
 
 class WorldSession private constructor(
+    private val contentSnapshot: ContentSnapshot,
     private val epoch: SessionEpoch,
     private val savePort: SavePort,
     parentScope: CoroutineScope,
@@ -35,8 +37,10 @@ class WorldSession private constructor(
         epoch: SessionEpoch,
         savePort: SavePort,
         parentScope: CoroutineScope,
+        contentSnapshot: ContentSnapshot,
         dispatcher: CoroutineDispatcher = Dispatchers.Default
     ) : this(
+        contentSnapshot,
         epoch,
         savePort,
         parentScope,
@@ -61,6 +65,7 @@ class WorldSession private constructor(
         epoch: SessionEpoch,
         savePort: SavePort,
         parentScope: CoroutineScope,
+        contentSnapshot: ContentSnapshot,
         dispatcher: CoroutineDispatcher,
         deltaFactory: (
             CommandEnvelope<out WorldCommandPayload>,
@@ -68,7 +73,7 @@ class WorldSession private constructor(
             RngState,
             Long
         ) -> DomainDelta
-    ) : this(epoch, savePort, parentScope, dispatcher, deltaFactory, Unit)
+    ) : this(contentSnapshot, epoch, savePort, parentScope, dispatcher, deltaFactory, Unit)
 
     private val sessionJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + sessionJob + dispatcher)

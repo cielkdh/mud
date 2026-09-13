@@ -15,5 +15,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "IMSI"
-include(":app", ":core:simulation")
+include(":app", ":core:content", ":core:image", ":core:simulation", ":tools:content-builder")
 

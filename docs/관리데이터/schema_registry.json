@@ -415,7 +415,7 @@
       "content_version,balance_version"
     ],
     "indexes": [],
-    "note": "logical_content_hash는 save가 참조한 canonical record의 logicalContentHash다. assetManifestSha256, artifactFileSha256, bundleId와 혼용하지 않는다.",
+    "note": "logical_content_hash는 save가 참조한 canonical record의 logicalContentHash다. compatibility_json은 ContentCompatibilitySnapshot.v1(snapshotVersion, saved logicalContentHash, 정렬된 requiredDefinitions(kind,id,definitionVersion,definitionHash)) canonical JSON이며 assetManifestSha256, artifactFileSha256, bundleId를 포함하거나 혼용하지 않는다.",
     "store": "save"
   },
   "mercenary": {

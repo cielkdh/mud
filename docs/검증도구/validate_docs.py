@@ -235,7 +235,7 @@ def sql_checks() -> None:
                 if store == 'content':
                     valid_sha='a'*64
                     con.execute("INSERT INTO content_manifest(id,content_version,balance_version,schema_version,source_hash,bundle_hash,profile) VALUES('CONTENT-MANIFEST','c1','b1',1,'s','l','PROTOTYPE')")
-                    con.execute("INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,definition_json,definition_version) VALUES('WPN-0001','WPN','Name','Name','[]','{}',1)")
+                    con.execute("INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,enabled,definition_json,definition_version) VALUES('WPN-0001','WPN','Name','Name','[]',1,'{}',1)")
                     con.execute("INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('img','ok.png','PORTRAIT',1,1,1,?)", (valid_sha,))
                     probes = (
                         ('manifest id 고정', "INSERT INTO content_manifest(id,content_version,balance_version,schema_version,source_hash,bundle_hash,profile) VALUES('OTHER','c2','b1',1,'s','l','PROTOTYPE')"),
@@ -244,8 +244,8 @@ def sql_checks() -> None:
                         ('TOMBSTONE target 금지', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a2','OLD','NEW','TOMBSTONE','test')"),
                         ('self alias 금지', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a3','WPN-0001','WPN-0001','REMAP','test')"),
                         ('alias missing target FK', "INSERT INTO content_alias(id,old_id,new_id,policy,reason) VALUES('a4','OLD2','MISSING','REMAP','test')"),
-                        ('content kind code', "INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,definition_json,definition_version) VALUES('BAD','NPC','Name','Name','[]','{}',1)"),
-                        ('effective display name', "INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,definition_json,definition_version) VALUES('WPN-0002','WPN','Source','Other','[]','{}',1)"),
+                        ('content kind code', "INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,enabled,definition_json,definition_version) VALUES('BAD','NPC','Name','Name','[]',1,'{}',1)"),
+                        ('effective display name', "INSERT INTO content_template(id,kind,source_display_name,display_name,tags_json,enabled,definition_json,definition_version) VALUES('WPN-0002','WPN','Source','Other','[]',1,'{}',1)"),
                         ('asset category code', f"INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('bad','bad.png','OTHER',1,1,1,'{valid_sha}')"),
                         ('asset byte size', f"INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('empty','empty.png','PORTRAIT',1,1,0,'{valid_sha}')"),
                         ('asset sha256 형식', "INSERT INTO asset_image(id,relative_path,category,width,height,byte_size,sha256) VALUES('hash','hash.png','PORTRAIT',1,1,1,'BAD')"),
@@ -315,7 +315,8 @@ def main() -> int:
     manifest, phases, features, tasks, tests, reqs = (load(n) for n in ('document_manifest','phases','functions','tasks','tests','requirements'))
     by_phase={x['n']:x for x in phases}; by_func={x['id']:x for x in features}; by_task={x['id']:x for x in tasks}; by_test={x['id']:x for x in tests}
     source=(ROOT/manifest['source_file']).read_bytes()
-    record('원본 SHA-256 보존', [] if hashlib.sha256(source).hexdigest()==manifest['source_sha256'] else ['원본 해시 변경'])
+    source_hashes={hashlib.sha256(source).hexdigest(), hashlib.sha256(source.replace(b'\r\n', b'\n')).hexdigest()}
+    record('원본 SHA-256 보존', [] if manifest['source_sha256'] in source_hashes else ['원본 해시 변경'])
     section_ids=[int(x) for x in re.findall(r'^# (\d+)\. ',source.decode('utf-8'),re.M)]
     record('원문 절 전체 매핑', [] if sorted(section_ids)==sorted(r['section'] for r in reqs)==list(range(1,3136)) else ['절 번호 누락/중복'], f'{len(reqs)}개 절 묶음. 하위규칙 의미 검토는 포함하지 않음.')
     for items,key,title in ((phases,'n','Phase ID 고유성'),(features,'id','기능 ID 고유성'),(tasks,'id','Task ID 고유성'),(tests,'id','Test ID 고유성'),(reqs,'id','요구 묶음 ID 고유성')):

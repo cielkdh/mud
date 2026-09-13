@@ -877,7 +877,11 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25",
+      "C26"
     ]
   },
   {
@@ -918,7 +922,11 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25",
+      "C26"
     ]
   },
   {
@@ -958,7 +966,11 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25",
+      "C26"
     ]
   },
   {
@@ -967,7 +979,7 @@
     "name": "Phase1 Gradle 경계·Build Spike",
     "function": "FUNC-P1-001",
     "stage": "빌드경계",
-    "detail": "P0 승인 뒤 :core:content, :core:image, :tools:content-builder와 :core:simulation→:core:content graph 및 plugin/dependency/import allowlist를 추가하고 기존 architecture verifier를 먼저 갱신한다. app bootstrap은 ContentRepository 결과를 immutable ContentSnapshot으로 조립해 WorldSession에 주입한다. P1은 새 Android DB 모듈을 만들지 않고 P3 :core:data 논리 package가 ContentRepository adapter를 소유하도록 handoff한다. compile·builder 실행·SQLite integrity·app debug/release compile을 증거화한다.",
+    "detail": "P0 승인 뒤 :core:content, :core:image, :tools:content-builder와 :core:simulation→:core:content graph 및 plugin/dependency/import allowlist를 추가하고 기존 architecture verifier를 먼저 갱신한다. app bootstrap은 ContentRepository 결과를 immutable ContentSnapshot.v1으로 조립해 WorldSession 필수 생성자 인자로 주입한다. P0 fixture는 명시적 emptyForTest()만 사용한다. P1은 새 Android DB 모듈을 만들지 않고 P3 :core:data 논리 package가 ContentRepository adapter를 소유하도록 handoff한다. compile·builder 실행·SQLite integrity·app debug/release compile을 증거화한다.",
     "module": "Gradle root / :app / :core:content / :core:image / :tools:content-builder",
     "depends": [
       "P1-TASK-001"
@@ -998,7 +1010,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1043,7 +1058,11 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25",
+      "C26"
     ]
   },
   {
@@ -1088,7 +1107,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1129,7 +1151,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1169,7 +1194,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1209,7 +1237,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1254,7 +1285,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1263,7 +1297,7 @@
     "name": "asset schema·path·crop 계약",
     "function": "FUNC-P1-003",
     "stage": "계약",
-    "detail": "licenseId를 가진 AssetManifest entry, closed EntityKind.v1과 nullable templateId/ordered exactAssetKeys를 가진 category 없는 AssetResolveRequest/ResolvedAsset, findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 read method와 CDB-Q01..Q06 prepared query allowlist, canonical path/usage에서 유일하게 파생한 category/crop, 정수 floor/clamp crop geometry, target decode/input 상한/focal 좌표와 화면별 fallback matcher 순서를 고정한다. listTemplates는 id 순이며 alias는 terminal 한 hop/TOMBSTONE만 반환한다. TEXT usage allowlist, 후보 assetId 1회·유한 종료, memoryCacheKey와 ContentRepository owner cancel/join/close, Exact/Fallback/SkippedByQualityMode/Loading 표시 계약을 포함해 FUNC-P1-003 REQUIRED/DATA Assertion과 PNG/WebP fixture를 승인하거나 결정 근거로 재분류한다.",
+    "detail": "licenseId를 가진 AssetManifest entry, closed EntityKind.v1과 nullable templateId/ordered exactAssetKeys: List<AssetId>를 가진 category 없는 AssetResolveRequest/ResolvedAsset, findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 read method와 CDB-Q01..Q06 prepared query allowlist, canonical path/usage에서 유일하게 파생한 category/crop, 정수 floor/clamp crop geometry, target decode/input 상한/focal 좌표와 화면별 fallback matcher 순서를 고정한다. portraitImageKey와 C18 NPC-M/W key는 확장자 없는 canonical AssetId이며 별도 key namespace/파일명 조합은 없다. listTemplates는 id 순이며 alias는 terminal 한 hop/TOMBSTONE만 반환한다. TEXT usage allowlist, 후보 assetId 1회·유한 종료, memoryCacheKey와 ContentRepository owner cancel/join/close, Exact/Fallback/SkippedByQualityMode와 debug gallery Loading 표시 계약을 포함해 FUNC-P1-003 REQUIRED/DATA Assertion과 PNG/WebP fixture를 승인하거나 결정 근거로 재분류한다.",
     "module": ":core:content / :core:image / :tools:content-builder",
     "depends": [
       "P0-TASK-021"
@@ -1299,7 +1333,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1340,7 +1377,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1380,7 +1420,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1389,7 +1432,7 @@
     "name": "Android 읽기 전용 AssetResolver",
     "function": "FUNC-P1-003",
     "stage": "런타임",
-    "detail": ":core:content의 ContentRepository가 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 method와 CDB-Q01..Q06 prepared query allowlist만 제공하고 :core:image AssetResolver가 AssetResolveRequest(bundleId, templateId?, exactAssetKeys, entityKind, usage, fallbackContext, targetPx, qualityMode)를 instance key→template binding→fallback 유한 후보의 ResolvedAsset/로컬 URI/usage 파생 category·crop request로 변환한다. repository는 InstalledBundle 하나에 고정된 AutoCloseable이고 P3 :core:data adapter는 OPEN_READONLY/query_only를 사용한다. session owner가 child job cancel/join 뒤 idempotent close하고 OPEN 동시 read·불법 read/close 경합·close 뒤 read를 검증한다. index/file/decode는 Main 밖에서 수행하고 후보 assetId를 한 번만 열며 Coil bounded cache key를 고정한다. :app fixture gallery에서 TEXT usage별 표시/생략, Exact/Fallback/Loading/terminal text layout과 공개 이름 contentDescription을 확인한다.",
+    "detail": ":core:content의 ContentRepository가 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage) 6개 method와 CDB-Q01..Q06 prepared query allowlist만 제공하고 :core:image AssetResolver가 AssetResolveRequest(bundleId, templateId?, exactAssetKeys: List<AssetId>, entityKind, usage, fallbackContext, targetPx, qualityMode)를 instance key→template binding→fallback 유한 후보의 ResolvedAsset/로컬 URI/usage 파생 category·crop request로 변환한다. repository는 InstalledBundle 하나에 고정된 AutoCloseable이며 P1은 in-memory implementation과 builder JVM SQLite oracle만 구현한다. P3 :core:data가 OPEN_READONLY/query_only Android adapter를 구현하도록 contract fixture를 인계한다. session owner가 child job cancel/join 뒤 idempotent close하고 OPEN 동시 read·불법 read/close 경합·close 뒤 read를 검증한다. index/file/decode는 Main 밖에서 수행하고 후보 assetId를 한 번만 열며 Coil bounded cache key를 고정한다. :app debug fixture gallery에서 TEXT usage별 표시/생략, Exact/Fallback/debug Loading/terminal text layout과 공개 이름 contentDescription을 확인하되 production Screen Registry에 등록하지 않는다.",
     "module": ":core:image / :app",
     "depends": [
       "P1-TASK-011"
@@ -1402,7 +1445,7 @@
     "optimistic": 0.65,
     "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "6개 read method의 in-memory/SQLite 결과와 CDB-Q01..Q06 query plan 동일, network/save write/Main-thread I/O 0, OPEN_READONLY/query_only 및 owner cancel/join/close adapter contract fixture 승인, 유한 후보/TEXT/파생 category·crop/cache/Exact/Fallback/Loading/terminal text layout/contentDescription smoke PASS",
+    "done": "6개 read method의 in-memory/builder JVM SQLite 결과와 CDB-Q01..Q06 query plan 동일, network/save write/Main-thread I/O 0, P3 OPEN_READONLY/query_only 및 owner cancel/join/close adapter contract fixture 승인, 유한 후보/TEXT/파생 category·crop/cache/Exact/Fallback/debug Loading/terminal text layout/contentDescription smoke PASS, Android SQLite adapter와 production route 0",
     "tests": [
       "P1-UT-003",
       "P1-CT-003",
@@ -1421,7 +1464,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1466,7 +1512,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1475,7 +1524,7 @@
     "name": "BindingPlan·alias 계약",
     "function": "FUNC-P1-004",
     "stage": "계약",
-    "detail": "save의 logicalContentHash를 유일한 콘텐츠 호환 identity로 사용하는 Compatible/MigrationRequired/Unsupported BindingPlan, REMAP/TOMBSTONE alias와 legacy snapshot 입력을 고정한다. assetManifestSha256/artifactFileSha256/bundleId는 설치 무결성 값이며 save 호환 판정에서 제외한다. 적용 owner가 P3/P25임을 명시하고 FUNC-P1-004 REQUIRED/DATA Assertion을 승인하거나 결정 근거로 재분류한다.",
+    "detail": "save의 logicalContentHash를 콘텐츠 호환 identity로 사용하는 Compatible/MigrationRequired/Unsupported BindingPlan, REMAP/TOMBSTONE alias와 ContentCompatibilitySnapshot.v1/legacySnapshotIndex.v1 입력을 고정한다. compatibility snapshot은 save가 실제 참조하는 (kind,id,definitionVersion,definitionHash)를 정렬 보존하며, 같은 ID의 definition 변경도 승인 provenance가 있는 terminal legacy entry 없이는 Unsupported다. assetManifestSha256/artifactFileSha256/bundleId는 설치 무결성 값이며 save 호환 판정에서 제외한다. 적용 owner가 P3/P25임을 명시하고 FUNC-P1-004 REQUIRED/DATA Assertion을 승인하거나 결정 근거로 재분류한다.",
     "module": ":core:content",
     "depends": [
       "P0-TASK-021"
@@ -1511,7 +1560,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1520,7 +1572,7 @@
     "name": "순수 compatibility resolver",
     "function": "FUNC-P1-004",
     "stage": "알고리즘",
-    "detail": "save/installed logicalContentHash와 terminal alias/legacy를 비교해 immutable BindingPlan만 계산한다. logical hash가 같으면 asset bundle 차이와 무관하게 Compatible이며, 같은 입력은 같은 plan을 반환하고 의미가 다른 template 자동치환과 I/O를 금지한다.",
+    "detail": "save/installed logicalContentHash와 ContentCompatibilitySnapshot.v1의 required definition, terminal alias/legacy를 비교해 immutable BindingPlan만 계산한다. logical hash가 같으면 asset bundle 차이와 무관하게 Compatible이다. hash가 다르면 같은 tuple/hash 또는 승인된 terminal REMAP/same-ID legacy provenance로 각 definition을 증명하며, 미증명·의미 변경은 Unsupported다. 같은 입력은 같은 plan을 반환하고 의미가 다른 template 자동치환과 I/O를 금지한다.",
     "module": ":core:content",
     "depends": [
       "P1-TASK-016"
@@ -1552,7 +1604,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1592,7 +1647,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1601,7 +1659,7 @@
     "name": "P3/P22/P25 계약 인계",
     "function": "FUNC-P1-004",
     "stage": "인계",
-    "detail": "logicalContentHash 기반 BindingPlan DTO/codec와 immutable InstalledBundle/ContentSnapshot을 P3/P25와 WorldSession bootstrap에, ContentRepository의 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage)·CDB-Q01..Q06 prepared query·AutoCloseable owner cancel/join/close·OPEN_READONLY/query_only 구현을 P3 :core:data에, TEXT usage별 표시/생략·Loading·terminal text layout·contentDescription 책임을 P22에 인계한다. P1에 apply command, migration history, SavePort, editable 관리 UI를 추가하지 않는다.",
+    "detail": "logicalContentHash 기반 BindingPlan DTO/codec, ContentCompatibilitySnapshot.v1/legacySnapshotIndex.v1과 immutable InstalledBundle/ContentSnapshot.v1을 P3/P25와 WorldSession bootstrap에 인계한다. ContentRepository의 findTemplate/listTemplates/findAlias/findAssetBindings(templateId,usage)/findAsset/listAssetFallbacks(usage)·CDB-Q01..Q06 prepared query·AutoCloseable owner cancel/join/close·OPEN_READONLY/query_only Android 구현은 P3 :core:data에, TEXT usage별 표시/생략·Loading·terminal text layout·copy·contentDescription production 책임은 P22에 인계한다. P1에 Android SQLite adapter, production Screen Registry route, apply command, migration history, SavePort, editable 관리 UI를 추가하지 않는다.",
     "module": ":core:content / docs",
     "depends": [
       "P1-TASK-016"
@@ -1632,7 +1690,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1677,7 +1738,10 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25"
     ]
   },
   {
@@ -1686,7 +1750,7 @@
     "name": "Phase 1 통합 검증·인계 Gate",
     "function": "PHASE-1",
     "stage": "Gate",
-    "detail": "27개 P1 Test, Gradle graph/build spike와 immutable ContentSnapshot handoff, CSV dialect v1/JSON v1/canonical ID·kind/input 상한 roundtrip, fresh staging DDL, content.db manifest 1행/physical FK/integrity/독립 semantic audit/PreparedStatement/journal·close·sidecar 0/read-only reopen/hash·동일 target idempotent publish, CDB-Q01..Q06 query plan, entity kind×usage exact/approved fallback coverage unresolved 0, 10,000 asset 분할 asset-preview.html, license registry/physical image metadata, 화면별 fallback 유한 종료, TEXT usage별 표시/생략, Android Exact/Fallback/Loading/terminal text layout 및 접근성 smoke, ContentRepository 6개 read method/lifecycle과 logicalContentHash 기반 BindingPlan write 0을 증거로 심의한다. 실물 부족은 PROTOTYPE_ACCEPTED/BLOCKED_ASSET로 분리한다.",
+    "detail": "27개 P1 Test, Gradle graph/build spike와 immutable ContentSnapshot.v1/ContentCompatibilitySnapshot.v1 handoff, CSV dialect v1/JSON v1/canonical ID·kind/input 상한 roundtrip, fresh staging DDL, content.db manifest 1행/physical FK/integrity/독립 semantic audit/PreparedStatement/journal·close·sidecar 0/read-only reopen/hash·동일 target idempotent publish, CDB-Q01..Q06 query plan, entity kind×usage exact/approved fallback coverage unresolved 0, synthetic 10,000 asset 분할 asset-preview.html, license registry/physical image metadata, 화면별 fallback 유한 종료, TEXT usage별 표시/생략, Android debug fixture Exact/Fallback/Loading/terminal text layout 및 접근성 smoke, ContentRepository 6개 read method/lifecycle과 same-ID definition 변경까지 검증하는 logicalContentHash 기반 BindingPlan write 0을 증거로 심의한다. 단일 gate는 phase1Gate이고 각 Test ID의 JSON/JUnit/DB/query/preview/screenshot/performance 증거와 immutable save sentinel hash를 남긴다. 실물 부족은 PROTOTYPE_ACCEPTED/BLOCKED_ASSET로 분리한다.",
     "module": ":app / :core:content / :core:image / :tools:content-builder / docs",
     "depends": [
       "P1-TASK-005",
@@ -1769,7 +1833,11 @@
       "C09",
       "C10",
       "C13",
-      "C18"
+      "C18",
+      "C23",
+      "C24",
+      "C25",
+      "C26"
     ]
   },
   {

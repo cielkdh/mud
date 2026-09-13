@@ -470,7 +470,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | balance_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | logical_content_hash TEXT NOT NULL | save가 참조한 canonical content record의 `logicalContentHash`; asset/artifact/bundle hash와 혼용하지 않음 |
-| compatibility_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| compatibility_json TEXT NOT NULL | `ContentCompatibilitySnapshot.v1`: `snapshotVersion`, saved `logicalContentHash`, `(kind,id,definitionVersion,definitionHash)`로 정렬된 실제 required definition 목록. P1 codec으로 canonical roundtrip하며 asset/artifact/bundle hash는 포함하지 않음 |
 #### `dialogue_session` 필드 및 관계
 
 | 필드/제약 | 용도 |
