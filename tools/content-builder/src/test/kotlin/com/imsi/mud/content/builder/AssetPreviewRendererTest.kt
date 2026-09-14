@@ -90,7 +90,7 @@ class AssetPreviewRendererTest {
             licenseRegistry = listOf(LicenseRegistryEntry("fixture", "PROJECT_OWNED_FIXTURE", "phase1-fixtures/P1-PT-001", "APPROVED", setOf("ANDROID_APP"))),
             aliases = listOf(ContentAliasEntry("alias-pt", "WPN-PT-LEGACY", "WPN-PT-00001", "REMAP", "performance fixture", "WPN", 1, 1, "p1-pt")),
             assetBindings = listOf(AssetBindingEntry("binding-pt", "WPN-PT-00001", "LIST_FACE", entries.first().id, 0)),
-            assetFallbacks = listOf(AssetFallbackEntry("fallback-pt", "LIST_FACE", "GLOBAL_DEFAULT", null, entries.first().id, 0)),
+            assetFallbacks = listOf(AssetFallbackEntry("fallback-pt", "LIST_FACE", "GLOBAL_DEFAULT", null, entries[1].id, 0)),
         ))
         val builderWallMs = (System.nanoTime() - builderStarted) / 1_000_000
         val builderPeakHeap = heapPools.sumOf { it.peakUsage.used.coerceAtLeast(0L) }
@@ -139,6 +139,49 @@ class AssetPreviewRendererTest {
             "staleAssetCount" to JsonNumber(java.math.BigDecimal(runtimeMetrics.staleAssetCount)),
             "decodedFormats" to JsonArray(listOf(JsonString("PNG"), JsonString("WEBP")))
         )).render())
+    }
+
+    @Test
+    fun `P1-CT-003 preview derives shared crop and category page denominator`() {
+        val root = Files.createTempDirectory("asset-preview-crop")
+        val exact = AssetPreviewEntry(
+            id = "asset-exact",
+            category = "PORTRAIT",
+            relativePath = "portrait/exact<&.png",
+            width = 11,
+            height = 4,
+            byteSize = 1,
+            sha256 = "a".repeat(64),
+            licenseId = "fixture",
+            usageType = "LIST_FACE",
+            cropProfile = "SQUARE_FACE",
+            resolutionReason = "EXACT",
+            sourceDisplayName = "Exact <portrait>"
+        )
+        val fallback = exact.copy(
+            id = "asset-fallback",
+            relativePath = "portrait/fallback.png",
+            resolutionReason = "FALLBACK:GLOBAL_DEFAULT"
+        )
+        val icon = exact.copy(
+            id = "asset-icon",
+            category = "ICON",
+            relativePath = "icon/test.png",
+            usageType = "ICON",
+            cropProfile = "SQUARE_CENTER",
+            resolutionReason = "EXACT"
+        )
+
+        AssetPreviewRenderer.render(listOf(exact, fallback, icon), root, pageSize = 1)
+
+        val portrait = root.resolve("PORTRAIT-001.html").readText()
+        assertTrue(portrait.contains("Asset page PORTRAIT 1/ 2"))
+        assertTrue(portrait.contains("data-crop-left=\"3\" data-crop-top=\"0\" data-crop-width=\"4\" data-crop-height=\"4\" data-crop-profile=\"SQUARE_FACE\""))
+        assertTrue(portrait.contains("FALLBACK:GLOBAL_DEFAULT") || root.resolve("PORTRAIT-002.html").readText().contains("FALLBACK:GLOBAL_DEFAULT"))
+        assertTrue(portrait.contains("src=\"../assets/portrait/exact&lt;&amp;.png\"") && portrait.contains("loading=\"lazy\""))
+        assertTrue(portrait.contains("width:4px;height:4px;overflow:hidden") && portrait.contains("left:-3px;top:-0px"))
+        assertTrue(runCatching { AssetPreviewRenderer.render(listOf(exact.copy(category = "ICON")), root.resolve("bad-category")) }.isFailure)
+        assertTrue(runCatching { AssetPreviewRenderer.render(listOf(exact.copy(cropProfile = "FIT_INSIDE")), root.resolve("bad-crop")) }.isFailure)
     }
 
     private fun measureQueries(database: Path, queryPlan: Path): List<JsonObject> {

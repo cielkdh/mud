@@ -504,9 +504,9 @@
     "logs": "testId=P1-UT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "ContentId=sourceId, closed ContentKind.v1, 원문 필드/source locator 보존, effective displayName만 override",
     "success": "ContentId=sourceId이고 별도 source_id 저장이 없으며 closed ContentKind.v1과 원문 필드/source locator가 보존되고 effective displayName만 override를 반영한다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-UT-001/evidence.json"
   },
   {
     "id": "P1-BT-001",
@@ -527,9 +527,9 @@
     "logs": "testId=P1-BT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "DuplicateContentId가 두 source locator를 모두 포함",
     "success": "DuplicateContentId가 두 source locator를 모두 포함; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-BT-001/evidence.json"
   },
   {
     "id": "P1-FT-001",
@@ -550,9 +550,9 @@
     "logs": "testId=P1-FT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "VALIDATION_FAILED이며 builder/writer 호출과 발행 artifact가 0",
     "success": "VALIDATION_FAILED이며 builder/writer 호출과 발행 artifact가 0; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-FT-001/evidence.json"
   },
   {
     "id": "P1-CT-001",
@@ -573,9 +573,9 @@
     "logs": "testId=P1-CT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "CSV dialect v1/JSON v1 허용 입력은 같은 CatalogDraft/hash, 금지 입력은 같은 diagnostic code와 source locator",
     "success": "CSV dialect v1/JSON v1 허용 입력은 같은 CatalogDraft/hash, 금지 입력은 같은 diagnostic code와 source locator; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-CT-001/evidence.json"
   },
   {
     "id": "P1-IT-001",
@@ -596,9 +596,9 @@
     "logs": "testId=P1-IT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "BOM/newline/null 포함 rowCount·sourceId roundtrip, 파일·행 상한 초과 조기 거절",
     "success": "BOM/newline/null 경계를 포함해 manifest rowCount=import count이고 모든 sourceId/원문 필드가 roundtrip하며 파일·행 상한 초과는 SOURCE_INVALID다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-IT-001/evidence.json"
   },
   {
     "id": "P1-UT-002",
@@ -619,9 +619,9 @@
     "logs": "testId=P1-UT-002, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "logicalContentHash와 정렬 row가 같고 진단 metadata만 다를 수 있음",
     "success": "logicalContentHash와 정렬 row가 같고 진단 metadata만 다를 수 있음; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-UT-002/evidence.json"
   },
   {
     "id": "P1-BT-002",
@@ -642,9 +642,9 @@
     "logs": "testId=P1-BT-002, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "안정 정렬된 TAG_CONFLICT/RECIPE_CYCLE ERROR",
     "success": "안정 정렬된 TAG_CONFLICT/RECIPE_CYCLE ERROR; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-BT-002/evidence.json"
   },
   {
     "id": "P1-FT-002",
@@ -665,9 +665,9 @@
     "logs": "testId=P1-FT-002, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "기존 staging은 STAGING_NOT_EMPTY, journal은 DELETE로 정규화되고 열린 handle/sidecar 잔존은 안전 실패, current.json은 완전 이전/다음 bundle만 가리키며 미지원은 PUBLISH_ATOMIC_UNSUPPORTED, 혼합 active 0",
     "success": "기존 staging은 STAGING_NOT_EMPTY, journal은 DELETE로 정규화되고 열린 handle/sidecar 잔존은 안전 실패, current.json은 완전 이전/다음 bundle만 가리키며 미지원은 PUBLISH_ATOMIC_UNSUPPORTED, 혼합 active 0; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-FT-002/evidence.json"
   },
   {
     "id": "P1-CT-002",
@@ -688,9 +688,9 @@
     "logs": "testId=P1-CT-002, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "ERROR면 writer 0회, WARN-only면 staging writer 1회",
     "success": "ERROR면 writer 0회, WARN-only면 staging writer 1회; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-CT-002/evidence.json"
   },
   {
     "id": "P1-IT-002",
@@ -711,9 +711,9 @@
     "logs": "testId=P1-IT-002, contentVersion, sourceHash, logicalContentHash, artifactFileSha256, assetManifestSha256, bundleId, resultCode와 상대 evidence path를 기록한다.",
     "state": "PreparedStatement roundtrip, semantic fault 차단, 동일 build idempotent existing target, asset 차이 bundle 분리, sealed DB oracle PASS",
     "success": "PreparedStatement 경계 문자열이 roundtrip되고 dangling FK·미지원 kind·usage/category mismatch·semantic 오류가 차단된다. 동일 build는 동일 bundleId/idempotent existing target이며 변조 target은 INTEGRITY_FAILED, asset 차이는 다른 bundleId다. IF NOT EXISTS 없는 fresh DDL, foreign_keys=1, journal_mode=delete, content_manifest 1행, integrity_check=ok, semantic audit, sidecar 0, read-only 외부 hash가 일치한다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-IT-002/evidence.json"
   },
   {
     "id": "P1-UT-003",
@@ -734,9 +734,9 @@
     "logs": "testId=P1-UT-003, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "6개 read 결과·canonical EntityKind·usage 파생 category/crop·Exact/focal/decode/cache identity 동일",
     "success": "6개 read method의 정렬/미존재와 canonical EntityKind, usage 파생 category/crop, Exact ResolvedAsset, focal/decode/cache identity가 일치한다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-UT-003/evidence.json"
   },
   {
     "id": "P1-BT-003",
@@ -757,9 +757,9 @@
     "logs": "testId=P1-BT-003, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "용병은 LIST/DETAIL/DIALOG=SEX, BATTLE=CLASS, CHRONICLE=CATEGORY_DEFAULT 우선이고 다른 kind도 usage별 첫 승인 matcher를 사용하며 후보 assetId 1회·재귀 0·source key/identity 불변·유한 Fallback 또는 AssetUnavailable",
     "success": "용병은 LIST/DETAIL/DIALOG=SEX, BATTLE=CLASS, CHRONICLE=CATEGORY_DEFAULT 우선이고 다른 kind도 usage별 첫 승인 matcher를 사용하며 후보 assetId 1회·재귀 0·source key/identity 불변·유한 Fallback 또는 AssetUnavailable; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-BT-003/evidence.json"
   },
   {
     "id": "P1-FT-003",
@@ -780,9 +780,9 @@
     "logs": "testId=P1-FT-003, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "INVALID_ASSET_PATH·root 밖 read 0, 과대 decode 0, license/physical 오류 VALIDATION_FAILED, artifact 0",
     "success": "경로 공격은 INVALID_ASSET_PATH와 root 밖 read 0이고 input 상한·license registry·physical metadata 불일치는 VALIDATION_FAILED이며 과대 decode와 artifact 발행이 0이다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-FT-003/evidence.json"
   },
   {
     "id": "P1-CT-003",
@@ -803,9 +803,9 @@
     "logs": "testId=P1-CT-003, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "canonical usage, 파생 category/crop, 정수 floor/clamp golden, TEXT allow/skip와 UI 상태 일치",
     "success": "builder만 canonical usage로 변환하고 category/crop 파생과 정수 floor/clamp crop golden이 일치하며 TEXT 허용 usage는 정상 decode, 금지 usage는 repository/file/decode 0이고 Loading·Fallback·terminal text layout이 구분된다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-CT-003/evidence.json"
   },
   {
     "id": "P1-IT-003",
@@ -826,9 +826,9 @@
     "logs": "testId=P1-IT-003, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "분할 preview·manifest·6개 read query·repository/debug gallery category/crop/focal/metadata/semantics 일치, Android DB adapter·production route·외부 요청·DOM 주입·stale cache·Main-thread I/O 0",
     "success": "분할 asset-preview.html·manifest·builder JVM SQLite query oracle·in-memory repository·debug gallery의 binding/category/crop/focal/physical metadata가 일치하고 공개 이름 contentDescription을 제공한다. Android DB adapter·production route·외부 요청·DOM 주입·stale cache·Main-thread I/O가 0이다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-IT-003/evidence.json"
   },
   {
     "id": "P1-UT-004",
@@ -841,17 +841,17 @@
     "fixture": "phase1-fixtures/P1-UT-004/; common sentinel phase1-fixtures/common/save-sentinel.db; output build/phase1-fixtures/P1-UT-004/",
     "oracle": "독립 test-owned fixture의 JUnit XML과 build/reports/phase1/phase1-test-evidence.json을 대조하고 beforeSaveSha256=afterSaveSha256, 예상 밖 live write/open resource 0을 확인한다.",
     "timeout_seconds": 60,
-    "input": "OLD-WPN→WPN-0001 terminal REMAP",
-    "expected": "MigrationRequired step이 old/new ID와 provenance를 보존",
+    "input": "OLD-WPN→WPN-0001 terminal REMAP과 동일 logicalContentHash·불일치 tuple·승인된 legacy 증거",
+    "expected": "두 경우 모두 MigrationRequired step이 old/new ID와 provenance를 보존",
     "precondition": "read-only save bytes, 설치 bundle/alias/legacy matrix와 I/O probe가 준비되어 있다.",
-    "steps": "순수 ContentBinding.resolve를 호출해 plan DTO를 golden과 비교한다.",
+    "steps": "서로 다른 hash와 동일 hash·불일치 tuple 입력에서 순수 ContentBinding.resolve를 호출해 승인된 legacy plan DTO를 golden과 비교한다.",
     "db": "격리 temp root의 content.db/manifest만 필요 시 검사하고 live save.db hash 불변을 확인한다.",
     "logs": "testId=P1-UT-004, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
-    "state": "MigrationRequired step이 old/new ID와 provenance를 보존",
-    "success": "MigrationRequired step이 old/new ID와 provenance를 보존; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "state": "global hash만으로 우회하지 않고 MigrationRequired step이 old/new ID와 provenance를 보존",
+    "success": "동일 hash·불일치 tuple도 승인된 legacy 증거가 있으면 MigrationRequired이며 step이 old/new ID와 provenance를 보존한다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-UT-004/evidence.json"
   },
   {
     "id": "P1-BT-004",
@@ -864,17 +864,17 @@
     "fixture": "phase1-fixtures/P1-BT-004/; common sentinel phase1-fixtures/common/save-sentinel.db; output build/phase1-fixtures/P1-BT-004/",
     "oracle": "독립 test-owned fixture의 JUnit XML과 build/reports/phase1/phase1-test-evidence.json을 대조하고 beforeSaveSha256=afterSaveSha256, 예상 밖 live write/open resource 0을 확인한다.",
     "timeout_seconds": 60,
-    "input": "logicalContentHash 동일, assetManifestSha256/artifactFileSha256/bundleId만 다른 두 InstalledBundle",
+    "input": "logicalContentHash 동일, requiredDefinitions가 비어 있거나 설치 tuple과 정확히 일치하고 assetManifestSha256/artifactFileSha256/bundleId만 다른 두 InstalledBundle",
     "expected": "Compatible plan과 runtime fallback이며 save logical_content_hash/content identity 불변",
     "precondition": "read-only save bytes, 설치 bundle/alias/legacy matrix와 I/O probe가 준비되어 있다.",
     "steps": "binding calculator에 같은 logicalContentHash와 다른 asset/artifact/bundle hash를 넣어 asset-only 변경이 migration step이 아님을 확인한다.",
     "db": "격리 temp root의 content.db/manifest만 필요 시 검사하고 live save.db hash 불변을 확인한다.",
     "logs": "testId=P1-BT-004, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
-    "state": "logicalContentHash 동일이면 asset/artifact/bundle 차이와 무관하게 Compatible, save identity 불변",
-    "success": "logicalContentHash가 같으면 assetManifestSha256/artifactFileSha256/bundleId가 달라도 Compatible이고 save content identity가 불변이다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "state": "logicalContentHash와 required tuple이 일치하거나 빈 집합이면 asset/artifact/bundle 차이와 무관하게 Compatible, save identity 불변",
+    "success": "logicalContentHash와 required tuple이 일치하거나 빈 집합이면 assetManifestSha256/artifactFileSha256/bundleId가 달라도 Compatible이고 save content identity가 불변이다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-BT-004/evidence.json"
   },
   {
     "id": "P1-FT-004",
@@ -887,17 +887,17 @@
     "fixture": "phase1-fixtures/P1-FT-004/; common sentinel phase1-fixtures/common/save-sentinel.db; output build/phase1-fixtures/P1-FT-004/",
     "oracle": "독립 test-owned fixture의 JUnit XML과 build/reports/phase1/phase1-test-evidence.json을 대조하고 beforeSaveSha256=afterSaveSha256, 예상 밖 live write/open resource 0을 확인한다.",
     "timeout_seconds": 60,
-    "input": "필수 SKL ID에 alias와 legacy snapshot 없음",
-    "expected": "Unsupported(missingIds), 원본 save bytes/hash 불변",
+    "input": "필수 SKL ID에 alias와 legacy snapshot이 없거나 동일 logicalContentHash지만 required definition tuple이 불일치하고 legacy 증거가 없음",
+    "expected": "Unsupported(missingIds 또는 changedDefinitions), 원본 save bytes/hash 불변",
     "precondition": "read-only save bytes, 설치 bundle/alias/legacy matrix와 I/O probe가 준비되어 있다.",
-    "steps": "read-only save fixture와 installed manifest로 plan을 계산하고 before/after bytes를 비교한다.",
+    "steps": "read-only save fixture와 installed manifest로 누락 ID 및 동일 hash·불일치 tuple plan을 각각 계산하고 before/after bytes를 비교한다.",
     "db": "격리 temp root의 content.db/manifest만 필요 시 검사하고 live save.db hash 불변을 확인한다.",
     "logs": "testId=P1-FT-004, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
-    "state": "Unsupported(missingIds), 원본 save bytes/hash 불변",
-    "success": "Unsupported(missingIds), 원본 save bytes/hash 불변; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "state": "Unsupported(missingIds 또는 changedDefinitions), 원본 save bytes/hash 불변",
+    "success": "누락 ID는 Unsupported(missingIds), 동일 hash·불일치 tuple은 Unsupported(changedDefinitions)이며 원본 save bytes/hash가 불변이다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-FT-004/evidence.json"
   },
   {
     "id": "P1-CT-004",
@@ -918,9 +918,9 @@
     "logs": "testId=P1-CT-004, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "동일 BindingPlan이고 파일/DB open·write 0",
     "success": "동일 BindingPlan이고 파일/DB open·write 0; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-CT-004/evidence.json"
   },
   {
     "id": "P1-IT-004",
@@ -941,9 +941,9 @@
     "logs": "testId=P1-IT-004, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "세 BindingPlan DTO가 P3/P25 handoff codec roundtrip하며 적용·save write는 0",
     "success": "세 BindingPlan DTO가 P3/P25 handoff codec roundtrip하며 적용·save write는 0; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-IT-004/evidence.json"
   },
   {
     "id": "P1-RT-001",
@@ -964,9 +964,9 @@
     "logs": "testId=P1-RT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "P0 금지 import가 유지되고 선언된 Phase1 project/edge만 허용",
     "success": "P0 금지 import가 유지되고 선언된 Phase1 project/edge만 허용; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-RT-001/evidence.json"
   },
   {
     "id": "P1-CN-001",
@@ -987,9 +987,9 @@
     "logs": "testId=P1-CN-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "publish 충돌 격리, OPEN 동시 read, owner cancel/join/close, close 뒤 read 거절",
     "success": "publish는 하나만 성공하고 active 혼합이 없으며 repository OPEN 동시 read와 owner cancel/join/idempotent close가 완료되고 close 뒤 read는 ContentRepositoryClosed다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-CN-001/evidence.json"
   },
   {
     "id": "P1-REC-001",
@@ -1010,9 +1010,9 @@
     "logs": "testId=P1-REC-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "재실행 시 published bundle의 SQLite sidecar와 열린 resource는 0이고 current.json이 완전 이전 또는 완전 다음 bundle만 선택하며 orphan staging/bundle은 진단됨",
     "success": "재실행 시 published bundle의 SQLite sidecar와 열린 resource는 0이고 current.json이 완전 이전 또는 완전 다음 bundle만 선택하며 orphan staging/bundle은 진단됨; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-REC-001/evidence.json"
   },
   {
     "id": "P1-PT-001",
@@ -1033,9 +1033,9 @@
     "logs": "testId=P1-PT-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "CDB-Q01..Q06 EXPLAIN QUERY PLAN/full scan 0, synthetic 10,000 asset build/분할 preview와 대표 PNG/WebP resolve/decode·heap/PSS·bounded cache 기준 기록, C18 실물 상태 분리",
     "success": "6개 query가 의도한 PK/UNIQUE/index를 사용하고 허용되지 않은 full scan이 0이며 synthetic 10,000 asset build/분할 preview와 대표 PNG/WebP resolve/decode p50/p95, DB/heap/PSS가 기록된다. bounded Coil cache, TEXT I/O, stale asset 0, steady 384MiB/transient 512MiB 비교와 실기기 미검증, C18 BLOCKED_ASSET가 명시된다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-PT-001/evidence.json"
   },
   {
     "id": "P1-OP-001",
@@ -1056,9 +1056,9 @@
     "logs": "testId=P1-OP-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "필수 네트워크 요청 0이며 같은 local bundle/hash/result 유지",
     "success": "필수 네트워크 요청 0이며 같은 local bundle/hash/result 유지; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-OP-001/evidence.json"
   },
   {
     "id": "P1-ET-001",
@@ -1079,9 +1079,9 @@
     "logs": "testId=P1-ET-001, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "고정 error/CLI exit code와 build 차단·runtime 유한 fallback WARN·AssetUnavailable terminal failure·Blocked가 계약대로 분리되고 후보 assetId별 open 1회·기존 InstalledBundle 불변",
     "success": "고정 error/CLI exit code와 build 차단·runtime 유한 fallback WARN·AssetUnavailable terminal failure·Blocked가 계약대로 분리되고 후보 assetId별 open 1회·기존 InstalledBundle 불변; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-ET-001/evidence.json"
   },
   {
     "id": "P1-IT-005",
@@ -1102,9 +1102,9 @@
     "logs": "testId=P1-IT-005, contentVersion, sourceHash, logicalContentHash, resultCode와 상대 evidence path를 기록한다.",
     "state": "artifact/sealing/hash/6-query read-only contract/same-ID definition compatibility/coverage/debug UX/handoff가 일치하고 Android DB adapter·production route 0, Gate는 PROTOTYPE_ACCEPTED와 BLOCKED_ASSET 또는 FULL_CONTENT_READY를 명시",
     "success": "artifact/sealing/hash/6-query read-only contract/same-ID definition compatibility/coverage/debug UX/handoff가 일치하고 Android DB adapter·production route가 0이다. Gate는 PROTOTYPE_ACCEPTED와 BLOCKED_ASSET 또는 FULL_CONTENT_READY를 명시한다; 명시된 독립 oracle과 evidence가 존재하고 예상 밖 live write/열린 resource가 0건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-14: API 36 emulator에서 phase1Gate 전체 실행 성공, Test ID 계약과 격리·불변·증거 semantics를 충족했다.",
+    "evidence": "build/phase1-fixtures/P1-IT-005/evidence.json"
   },
   {
     "id": "P2-UT-001",

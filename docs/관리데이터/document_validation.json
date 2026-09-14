@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-13T23:12:35+09:00",
+  "executed_at": "2026-09-14T12:55:09+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -167,7 +167,7 @@
     {
       "name": "착수 가능 Task Context Pack",
       "status": "PASS",
-      "detail": "4개 ready Task에 계약·Test·Assertion·Schema·Command/Event 요약 제공",
+      "detail": "0개 ready Task에 계약·Test·Assertion·Schema·Command/Event 요약 제공",
       "failures": []
     },
     {
@@ -227,7 +227,7 @@
     {
       "name": "로컬 Markdown 링크·명시적 anchor",
       "status": "PASS",
-      "detail": "8088개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
+      "detail": "8084개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
       "failures": []
     },
     {
@@ -245,13 +245,13 @@
     {
       "name": "테스트 상태에 실행증거 요구",
       "status": "PASS",
-      "detail": "현재 Counter({'NOT_RUN': 743, 'PASS': 8}); 문서 검사 결과를 게임 Test에 전파하지 않음",
+      "detail": "현재 Counter({'NOT_RUN': 716, 'PASS': 35}); 문서 검사 결과를 게임 Test에 전파하지 않음",
       "failures": []
     },
     {
       "name": "SQL-content: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.49.1; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.45.3; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
@@ -263,7 +263,7 @@
     {
       "name": "SQL-save: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.49.1; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.45.3; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {

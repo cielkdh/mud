@@ -75,13 +75,41 @@ private fun phase1EvidenceSemanticValid(testId: String, content: Map<*, *>, arti
             phase1Sha256(content["queryPlanSha256"]) && content["integrity"] == "ok" &&
             content["foreignKeyCheck"] == true && content["semanticAudit"] == true &&
             (content["queries"] as? List<*>)?.toSet() == (1..6).map { "CDB-Q0$it" }.toSet()
-    "P1-IT-003" ->
+    "P1-IT-003" -> {
+        val artifactKeys = listOf("previewArtifact", "validationReportArtifact", "databaseArtifact", "queryPlanArtifact")
+        val artifacts = artifactKeys.associateWith { phase1ArtifactFile(artifactRoot, content[it]) }
+        val artifactsMatch = runCatching {
+            val preview = artifacts.getValue("previewArtifact")!!
+            val report = artifacts.getValue("validationReportArtifact")!!
+            val database = artifacts.getValue("databaseArtifact")!!
+            val queryPlan = artifacts.getValue("queryPlanArtifact")!!
+            val previewText = preview.readText()
+            val reportObject = JsonSlurper().parse(report) as Map<*, *>
+            val previewRows = (reportObject["previewRows"] as List<*>).map { it as Map<*, *> }
+            val reasons = previewRows.map { it["resolutionReason"] as String }
+            val planObject = JsonSlurper().parse(queryPlan) as Map<*, *>
+            val queryIds = (planObject["queries"] as List<*>).map { (it as Map<*, *>)["id"] }
+            val expectedBundleId = MessageDigest.getInstance("SHA-256").digest(
+                "v1:1:p1-content-builder.v2:${phase1FileSha256(database)}:${content["assetManifestSha256"]}".toByteArray()
+            ).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            artifactKeys.all { key ->
+                phase1Sha256(content["${key}Sha256"]) && content["${key}Sha256"] == phase1FileSha256(artifacts.getValue(key)!!)
+            } && content["generatedByVersion"] == "p1-content-builder.v2" &&
+                content["bundleHash"] == expectedBundleId && reportObject["bundleId"] == expectedBundleId &&
+                "data-crop-left=" in previewText && "data-crop-profile=" in previewText &&
+                "EXACT" in previewText && "FALLBACK:" in previewText &&
+                "EXACT" in reasons && reasons.any { it.startsWith("FALLBACK:") } &&
+                database.readBytes().take(16).toByteArray().contentEquals("SQLite format 3\u0000".toByteArray()) &&
+                queryIds.toSet() == (1..6).map { "CDB-Q0$it" }.toSet() &&
+                !queryPlan.readText().contains("SCAN ") && !queryPlan.readText().contains("USE TEMP B-TREE")
+        }.getOrDefault(false)
         phase1Sha256(content["bundleHash"]) && phase1Sha256(content["assetManifestSha256"]) &&
             phase1Sha256(content["assetSha256"]) &&
             ((content["bindingCount"] as? Number)?.toLong() ?: 0L) > 0L &&
             ((content["fallbackCount"] as? Number)?.toLong() ?: 0L) > 0L &&
             phase1SafeRelativePath(content["assetPath"], "assets/") &&
-            phase1SafeRelativePath(content["preview"], "asset-preview/")
+            phase1SafeRelativePath(content["preview"], "asset-preview/") && artifactsMatch
+    }
     "P1-REC-001" -> {
         val requiredStates = setOf(
             "CRASHED_STAGING", "ORPHAN_QUARANTINED", "CRASHED_BEFORE_BUNDLE_MOVE",
@@ -346,11 +374,11 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
             }
             fixtureDir.resolve("app/build.gradle.kts").apply {
                 writeText(readText()
-                    .replace("    implementation(project(\":core:content\"))\n", "")
-                    .replace("    implementation(project(\":core:image\"))\n", ""))
+                    .replace(Regex("(?m)^\\s*implementation\\(project\\(\":core:(content|image)\"\\)\\)\\r?\\n"), ""))
             }
             fixtureDir.resolve("core/simulation/build.gradle.kts").apply {
-                writeText(readText().replace("    implementation(project(\":core:content\"))\n", ""))
+                writeText(readText()
+                    .replace(Regex("(?m)^\\s*implementation\\(project\\(\":core:content\"\\)\\)\\r?\\n"), ""))
             }
             mutate(fixtureDir)
 
@@ -608,10 +636,20 @@ val phase1AndroidPerformanceEvidence = tasks.register("phase1AndroidPerformanceE
     group = "verification"
     description = "Captures a numeric emulator PSS baseline after connected Phase 1 tests."
     dependsOn(":app:assembleDebug")
+    dependsOn(phase1AndroidEvidenceStart)
     val output = layout.buildDirectory.file("reports/phase1/android-performance.json")
     outputs.file(output)
     outputs.upToDateWhen { false }
     doLast {
+        val androidRunFile = rootDir.resolve("build/reports/phase1/android-run.properties")
+        check(androidRunFile.isFile) { "Phase 1 Android run capture is missing" }
+        val androidRunProperties = androidRunFile.readLines().associate { line ->
+            line.substringBefore('=') to line.substringAfter('=')
+        }
+        val androidRunId = androidRunProperties["runId"].orEmpty()
+        val androidStartedAt = androidRunProperties["startedAtEpochMillis"]?.toLongOrNull()
+            ?: throw GradleException("Phase 1 Android run capture is invalid")
+        check(androidRunId.isNotBlank()) { "Phase 1 Android run capture is invalid" }
         val localProperties = rootDir.resolve("local.properties")
         val sdkDirectory = (if (localProperties.isFile) {
             Properties().apply { localProperties.inputStream().use { load(it) } }.getProperty("sdk.dir")
@@ -638,9 +676,12 @@ val phase1AndroidPerformanceEvidence = tasks.register("phase1AndroidPerformanceE
         check(serial.isNotBlank() && serial != "unknown") { "no adb target for Phase 1 PSS evidence" }
         val workloadLog = rootDir.resolve("app/build/outputs/androidTest-results/connected/debug")
             .walkTopDown()
-            .filter { it.isFile && it.name.startsWith("logcat-") && it.name.contains("p1Pt001_") }
+            .filter {
+                it.isFile && it.name.startsWith("logcat-") && it.name.contains("p1Pt001_") &&
+                    it.lastModified() >= androidStartedAt
+            }
             .maxByOrNull(File::lastModified)
-            ?: throw GradleException("P1-PT-001 instrumentation workload log is missing")
+            ?: throw GradleException("P1-PT-001 instrumentation workload log from the current Android run is missing")
         val workloadMatch = Regex(
             "P1_PT_METRICS\\s+steadyPssKb=(\\d+)\\s+transientPeakPssKb=(\\d+)\\s+" +
                 "sampleCount=(\\d+)\\s+decodeCombinationCount=(\\d+)\\s+" +
@@ -675,7 +716,7 @@ val phase1AndroidPerformanceEvidence = tasks.register("phase1AndroidPerformanceE
         file.parentFile.mkdirs()
         val workloadLogPath = rootDir.toPath().relativize(workloadLog.toPath()).toString().replace('\\', '/')
         file.writeText(
-            "{\"apiLevel\":${phase1Json(apiLevel)},\"deviceSerial\":${phase1Json(serial)}," +
+            "{\"androidRunId\":${phase1Json(androidRunId)},\"apiLevel\":${phase1Json(apiLevel)},\"deviceSerial\":${phase1Json(serial)}," +
                 "\"bundleCombinationCount\":$bundleCombinationCount,\"coilCacheMaxBytes\":$coilCacheMaxBytes," +
                 "\"decodeCombinationCount\":$decodeCombinationCount,\"environment\":\"EMULATOR_DEBUG\"," +
                 "\"measurementSource\":\"INSTRUMENTATION_DECODE_WORKLOAD\"," +
@@ -747,19 +788,48 @@ val verifyPhase1EvidenceSemantics = tasks.register("verifyPhase1EvidenceSemantic
         assertRejected("P1-IT-002", "query-set", integration + ("queries" to (1..5).map { "CDB-Q0$it" }))
         assertRejected("P1-IT-002", "sealed-db-hash", integration + ("sealedDbSha256" to "bad"))
 
+        val assetRoot = rootDir.resolve("build/tmp/verifyPhase1EvidenceSemantics/P1-IT-003")
+        assetRoot.deleteRecursively()
+        val assetArtifacts = assetRoot.resolve("artifacts").apply { mkdirs() }
+        val previewArtifact = assetArtifacts.resolve("PORTRAIT-001.html").apply {
+            writeText("<article data-crop-left=\"0\" data-crop-profile=\"SQUARE_FACE\">EXACT FALLBACK:GLOBAL_DEFAULT</article>")
+        }
+        val validationArtifact = assetArtifacts.resolve("validation-report.json").apply {
+            writeText("""{"bundleId":"$hashA","previewRows":[{"resolutionReason":"EXACT"},{"resolutionReason":"FALLBACK:GLOBAL_DEFAULT"}]}""")
+        }
+        val databaseArtifact = assetArtifacts.resolve("content.db").apply { writeBytes("SQLite format 3\u0000".toByteArray()) }
+        val queryPlanArtifact = assetArtifacts.resolve("query-plan.json").apply {
+            writeText("""{"queries":[${(1..6).joinToString(",") { "{\"id\":\"CDB-Q0$it\"}" }}]}""")
+        }
+        val assetManifestHash = hashB
+        val assetBundleHash = MessageDigest.getInstance("SHA-256").digest(
+            "v1:1:p1-content-builder.v2:${phase1FileSha256(databaseArtifact)}:$assetManifestHash".toByteArray()
+        ).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        validationArtifact.writeText(validationArtifact.readText().replace(hashA, assetBundleHash))
         val asset = mapOf<String, Any>(
-            "bundleHash" to hashA,
-            "assetManifestSha256" to hashB,
+            "bundleHash" to assetBundleHash,
+            "generatedByVersion" to "p1-content-builder.v2",
+            "assetManifestSha256" to assetManifestHash,
             "assetSha256" to "c".repeat(64),
             "bindingCount" to 1,
             "fallbackCount" to 1,
             "assetPath" to "assets/portrait/test.png",
             "preview" to "asset-preview/PORTRAIT-001.html",
+            "previewArtifact" to "artifacts/${previewArtifact.name}",
+            "previewArtifactSha256" to phase1FileSha256(previewArtifact),
+            "validationReportArtifact" to "artifacts/${validationArtifact.name}",
+            "validationReportArtifactSha256" to phase1FileSha256(validationArtifact),
+            "databaseArtifact" to "artifacts/${databaseArtifact.name}",
+            "databaseArtifactSha256" to phase1FileSha256(databaseArtifact),
+            "queryPlanArtifact" to "artifacts/${queryPlanArtifact.name}",
+            "queryPlanArtifactSha256" to phase1FileSha256(queryPlanArtifact),
         )
-        assertValid("P1-IT-003", asset)
-        assertRejected("P1-IT-003", "asset-path-containment", asset + ("assetPath" to "../save.db"))
-        assertRejected("P1-IT-003", "fallback-count", asset + ("fallbackCount" to 0))
-        assertRejected("P1-IT-003", "asset-hash", asset + ("assetSha256" to "bad"))
+        assertValid("P1-IT-003", asset, assetRoot)
+        assertRejected("P1-IT-003", "asset-path-containment", asset + ("assetPath" to "../save.db"), assetRoot)
+        assertRejected("P1-IT-003", "fallback-count", asset + ("fallbackCount" to 0), assetRoot)
+        assertRejected("P1-IT-003", "asset-hash", asset + ("assetSha256" to "bad"), assetRoot)
+        assertRejected("P1-IT-003", "preview-artifact-hash", asset + ("previewArtifactSha256" to hashA), assetRoot)
+        assertRejected("P1-IT-003", "artifact-containment", asset + ("databaseArtifact" to "../content.db"), assetRoot)
 
         val deterministic = mapOf<String, Any>(
             "sourceHash" to hashA,
@@ -985,18 +1055,21 @@ val phase1Evidence = tasks.register("phase1Evidence") {
                 }
             }.getOrElse { emptyList() }
         }
-        val verificationInputs = fileTree(rootDir) {
+        val verificationInputs = files(fileTree(rootDir) {
             include("build.gradle.kts", "settings.gradle.kts", "gradle/libs.versions.toml")
             include("app/build.gradle.kts", "core/*/build.gradle.kts", "tools/*/build.gradle.kts")
             include("**/gradle.lockfile", "settings-gradle.lockfile")
             include("app/src/**", "core/*/src/**", "tools/*/src/**")
             include("content/source/**", "phase1-fixtures/**", "docs/설계부록/**")
-        }
+        }, rootDir.resolve(".gitattributes"))
         check(verificationInputs.files.contains(rootDir.resolve("phase1-fixtures/P1-IT-003/README.md"))) {
             "Phase 1 freshness inputs must include fixture contracts"
         }
         check(verificationInputs.files.contains(rootDir.resolve("content/source/catalog-manifest.json"))) {
             "Phase 1 freshness inputs must include canonical content source"
+        }
+        check(verificationInputs.files.contains(rootDir.resolve(".gitattributes"))) {
+            "Phase 1 freshness inputs must include line-ending and binary identity policy"
         }
         val latestCodeModifiedAt = verificationInputs.files.maxOfOrNull(File::lastModified) ?: 0L
         val sourceManifest = rootDir.resolve("content/source/catalog-manifest.json")
@@ -1033,7 +1106,12 @@ val phase1Evidence = tasks.register("phase1Evidence") {
         )
         val requiredEvidenceArtifacts = mapOf(
             "P1-IT-002" to listOf("testId", "bundleHash", "sealedDbSha256", "queryPlanSha256", "integrity", "foreignKeyCheck", "semanticAudit", "queries"),
-            "P1-IT-003" to listOf("testId", "bundleHash", "assetManifestSha256", "assetPath", "assetSha256", "bindingCount", "fallbackCount", "preview"),
+            "P1-IT-003" to listOf(
+                "testId", "bundleHash", "generatedByVersion", "assetManifestSha256", "assetPath", "assetSha256",
+                "bindingCount", "fallbackCount", "preview", "previewArtifact", "previewArtifactSha256",
+                "validationReportArtifact", "validationReportArtifactSha256", "databaseArtifact", "databaseArtifactSha256",
+                "queryPlanArtifact", "queryPlanArtifactSha256"
+            ),
             "P1-REC-001" to listOf(
                 "testId", "states", "orphanDiagnosis", "currentPointer", "externalKillpoints",
                 "externalKillpointPointers", "sidecarCount", "currentPointerArtifact",
@@ -1095,7 +1173,18 @@ val phase1Evidence = tasks.register("phase1Evidence") {
                                     val decodeCombinationCount = (android["decodeCombinationCount"] as? Number)?.toLong() ?: -1L
                                     val bundleCombinationCount = (android["bundleCombinationCount"] as? Number)?.toLong() ?: -1L
                                     val memoryCacheHitCount = (android["memoryCacheHitCount"] as? Number)?.toLong() ?: -1L
-                                    android["testId"] == "P1-PT-001" && android["result"] == "PASS" &&
+                                    val workloadLogPath = android["workloadLog"]
+                                    val workloadLog = if (phase1SafeRelativePath(workloadLogPath, "app/build/outputs/androidTest-results/")) {
+                                        rootDir.resolve(workloadLogPath as String).canonicalFile
+                                    } else null
+                                    val currentWorkloadLog = workloadLog?.let { log ->
+                                        log.isFile && log.toPath().startsWith(rootDir.canonicalFile.toPath()) &&
+                                            log.lastModified() >= androidStartedAt &&
+                                            log.lastModified() + 2_000L >= latestCodeModifiedAt &&
+                                            "P1_PT_METRICS" in log.readText()
+                                    } == true
+                                    android["androidRunId"] == androidRunId &&
+                                        android["testId"] == "P1-PT-001" && android["result"] == "PASS" &&
                                         android["measurementSource"] == "INSTRUMENTATION_DECODE_WORKLOAD" &&
                                         !phase1ContainsPlaceholder(android) &&
                                         steadyPss in 1..steadyLimit && transientPss in 1..transientLimit &&
@@ -1103,7 +1192,7 @@ val phase1Evidence = tasks.register("phase1Evidence") {
                                         sampleCount >= 3L && decodeCombinationCount == 8L &&
                                         bundleCombinationCount == 16L && memoryCacheHitCount > 0L &&
                                         coilCacheMaxBytes == phase1CoilCacheMaxBytes &&
-                                        phase1SafeRelativePath(android["workloadLog"], "app/build/outputs/androidTest-results/")
+                                        currentWorkloadLog
                                 } == true
                             builderMetrics && androidMetrics
                         } else true
@@ -1118,10 +1207,32 @@ val phase1Evidence = tasks.register("phase1Evidence") {
                 matching.isNotEmpty() && hasRequiredCoverage && hasRequiredArtifact -> "PASS"
                 else -> "NOT_RUN"
             }
-            val requiredArtifactPaths = if (hasRequiredArtifact && requiredArtifactKeys.isNotEmpty()) {
-                (listOf(testArtifact) + if (testId == "P1-PT-001") listOf(androidPerformanceArtifact) else emptyList())
-                    .map { rootDir.toPath().relativize(it.toPath()).toString().replace('\\', '/') }
-            } else emptyList()
+            val requiredArtifactFiles = mutableListOf<File>()
+            if (hasRequiredArtifact && requiredArtifactKeys.isNotEmpty()) {
+                requiredArtifactFiles += testArtifact
+                if (testId == "P1-IT-003") {
+                    val content = phase1JsonObject(testArtifact)
+                    listOf("previewArtifact", "validationReportArtifact", "databaseArtifact", "queryPlanArtifact").forEach { key ->
+                        requiredArtifactFiles += requireNotNull(phase1ArtifactFile(testArtifact.parentFile, content[key])) {
+                            "P1-IT-003 $key is missing or unsafe"
+                        }
+                    }
+                }
+                if (testId == "P1-PT-001") {
+                    requiredArtifactFiles += androidPerformanceArtifact
+                    val workloadLogPath = phase1JsonObject(androidPerformanceArtifact)["workloadLog"]
+                    check(phase1SafeRelativePath(workloadLogPath, "app/build/outputs/androidTest-results/")) {
+                        "P1-PT-001 workload log path is unsafe"
+                    }
+                    val workloadLog = rootDir.resolve(workloadLogPath as String).canonicalFile
+                    check(workloadLog.isFile && workloadLog.toPath().startsWith(rootDir.canonicalFile.toPath())) {
+                        "P1-PT-001 workload log is missing"
+                    }
+                    requiredArtifactFiles += workloadLog
+                }
+            }
+            val requiredArtifactPaths = requiredArtifactFiles
+                .map { rootDir.toPath().relativize(it.toPath()).toString().replace('\\', '/') }
             val sourceArtifactPaths = (matching.map(Phase1JunitCase::path) + specialPaths + requiredArtifactPaths).distinct().sorted()
             val startedAt = matching.minOfOrNull(Phase1JunitCase::modifiedAt)?.let(Instant::ofEpochMilli)?.toString()
                 ?: if (specialPaths.isNotEmpty()) Instant.ofEpochMilli(architectureReport.lastModified()).toString() else ""

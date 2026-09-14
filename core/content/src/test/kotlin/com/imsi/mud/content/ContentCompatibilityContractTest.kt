@@ -34,6 +34,21 @@ class ContentCompatibilityContractTest {
     }
 
     @Test
+    fun `P1-UT-004 same logical hash with changed tuple uses approved legacy remap`() {
+        val old = definition(ContentKind.WEAPON, "OLD-WPN", "old")
+        val installed = snapshot(template("WPN-0001", ContentKind.WEAPON, "{\"damage\":11}"))
+        val new = requireNotNull(installed.definitionRefFor(ContentId("WPN-0001")))
+
+        val plan = ContentCompatibilityPlanner.plan(
+            ContentCompatibilitySnapshot.create(installed.identity.logicalContentHash, listOf(old)),
+            installed,
+            LegacySnapshotIndex.of(listOf(LegacySnapshotEntry.remap(old, new, "legacy-WPN", "rev-C25")))
+        ) as BindingPlan.MigrationRequired
+
+        assertEquals(BindingMigrationStep.Remap(old, new, "legacy-WPN", "rev-C25"), plan.steps.single())
+    }
+
+    @Test
     fun `P1-BT-004 asset only bundle change remains Compatible and save bytes are unchanged`() {
         val installed = snapshot(template("MON-1", ContentKind.MONSTER, "{\"hp\":10}"))
         val saved = ContentCompatibilitySnapshot.create(installed.identity.logicalContentHash, emptyList())
@@ -45,6 +60,31 @@ class ContentCompatibilityContractTest {
         assertNotEquals(firstBundle, secondBundle)
         assertEquals(BindingPlan.Compatible, ContentCompatibilityPlanner.plan(saved, installed, LegacySnapshotIndex.empty()))
         assertArrayEquals(beforeSave, afterSave)
+    }
+
+    @Test
+    fun `P1-FT-004 same logical hash with mismatched definition tuple is Unsupported without legacy proof`() {
+        val installed = snapshot(template("MON-1", ContentKind.MONSTER, "{\"hp\":10}"))
+        val exact = requireNotNull(installed.definitionRefFor(ContentId("MON-1")))
+        val mismatched = definition(ContentKind.MONSTER, "MON-1", "saved-definition")
+
+        assertEquals(
+            BindingPlan.Compatible,
+            ContentCompatibilityPlanner.plan(
+                ContentCompatibilitySnapshot.create(installed.identity.logicalContentHash, listOf(exact)),
+                installed,
+                LegacySnapshotIndex.empty()
+            )
+        )
+
+        val plan = ContentCompatibilityPlanner.plan(
+            ContentCompatibilitySnapshot.create(installed.identity.logicalContentHash, listOf(mismatched)),
+            installed,
+            LegacySnapshotIndex.empty()
+        ) as BindingPlan.Unsupported
+
+        assertTrue(plan.missingIds.isEmpty())
+        assertEquals(listOf(ContentId("MON-1")), plan.changedDefinitions)
     }
 
     @Test

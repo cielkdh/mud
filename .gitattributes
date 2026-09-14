@@ -1,0 +1,4 @@
+content/source/**/*.json text eol=lf
+content/source.c25.previous/**/*.json text eol=lf
+content/source.c25.tmp/**/*.json text eol=lf
+phase1-fixtures/common/save-sentinel.db -text

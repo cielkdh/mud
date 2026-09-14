@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,6 +75,27 @@ class CanonicalSourceConverterTest {
 
         assertEquals(20, result.fileCount)
         assertEquals(3448, result.rowCount)
+        val expectedRoot = projectRoot().resolve("content/source")
+        val expectedFiles = Files.walk(expectedRoot).use { stream ->
+            stream.filter(Files::isRegularFile)
+                .map { expectedRoot.relativize(it).toString().replace('\\', '/') }
+                .sorted()
+                .toList()
+        }
+        val actualFiles = Files.walk(output).use { stream ->
+            stream.filter(Files::isRegularFile)
+                .map { output.relativize(it).toString().replace('\\', '/') }
+                .sorted()
+                .toList()
+        }
+        assertEquals("canonical source relative file set mismatch", expectedFiles, actualFiles)
+        expectedFiles.forEach { relative ->
+            assertArrayEquals(
+                "canonical source bytes mismatch: $relative",
+                Files.readAllBytes(expectedRoot.resolve(relative)),
+                Files.readAllBytes(output.resolve(relative))
+            )
+        }
         val manifest = JsonParser.parse(output.resolve("catalog-manifest.json").readText()).asObject()
         assertEquals(20, manifest.value("files").asArray().values.size)
         assertEquals(

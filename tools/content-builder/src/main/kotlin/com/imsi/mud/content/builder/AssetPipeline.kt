@@ -9,6 +9,12 @@ import java.security.MessageDigest
 import java.text.Normalizer
 import java.util.Locale
 import javax.imageio.ImageIO
+import com.imsi.mud.content.AssetCategory
+import com.imsi.mud.content.AssetId
+import com.imsi.mud.content.AssetImage
+import com.imsi.mud.content.AssetResolver
+import com.imsi.mud.content.CropRect
+import com.imsi.mud.content.ImageUsage
 
 data class AssetPreviewEntry(
     val id: String,
@@ -376,17 +382,28 @@ object AssetValidator {
 
 object AssetPreviewRenderer {
     private data class Page(val category: String, val number: Int, val entries: List<AssetPreviewEntry>)
+    private data class PreviewCrop(val profile: String, val rect: CropRect)
 
-    fun render(entries: List<AssetPreviewEntry>, outputDirectory: Path, pageSize: Int = 500): AssetPreviewResult {
+    fun render(
+        entries: List<AssetPreviewEntry>,
+        outputDirectory: Path,
+        pageSize: Int = 500,
+        assetHrefPrefix: String = "../assets"
+    ): AssetPreviewResult {
         require(pageSize in 1..500) { "asset preview page size must be between 1 and 500" }
+        require(assetHrefPrefix.isNotBlank()) { "asset preview href prefix must not be blank" }
         Files.createDirectories(outputDirectory)
         val sorted = entries.sortedWith(compareBy(AssetPreviewEntry::category, AssetPreviewEntry::id))
         val pages = sorted.groupBy(AssetPreviewEntry::category).toSortedMap().flatMap { (category, categoryEntries) ->
             categoryEntries.chunked(pageSize).mapIndexed { index, page -> Page(category, index + 1, page) }
         }
-        pages.forEachIndexed { index, page ->
+        val pageCounts = pages.groupingBy(Page::category).eachCount()
+        pages.forEach { page ->
             val pageName = "${page.category}-${page.number.toString().padStart(3, '0')}.html"
-            Files.writeString(outputDirectory.resolve(pageName), renderPage(page.entries, page.number, pages.size, page.category))
+            Files.writeString(
+                outputDirectory.resolve(pageName),
+                renderPage(page.entries, page.number, pageCounts.getValue(page.category), page.category, assetHrefPrefix)
+            )
         }
         Files.writeString(outputDirectory.resolve("index.html"), renderIndex(sorted, pages))
         return AssetPreviewResult(pages.size, pages.maxOfOrNull { it.entries.size } ?: 0, outputDirectory)
@@ -406,21 +423,76 @@ object AssetPreviewRenderer {
         append("</nav></body></html>\n")
     }
 
-    private fun renderPage(entries: List<AssetPreviewEntry>, page: Int, pageCount: Int, category: String): String = buildString {
+    private fun renderPage(
+        entries: List<AssetPreviewEntry>,
+        page: Int,
+        pageCount: Int,
+        category: String,
+        assetHrefPrefix: String
+    ): String = buildString {
         append("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Asset page ").append(escapeHtml(category)).append(" ").append(page).append("</title><body>")
         append("<h1>Asset page ").append(escapeHtml(category)).append(" ").append(page).append("/ ").append(pageCount).append("</h1><table><thead><tr><th>ID</th><th>Preview</th><th>Category</th><th>Path</th><th>Size</th><th>Usage</th><th>Crop</th><th>Reason</th><th>Status</th></tr></thead><tbody>")
         entries.forEach { entry ->
             val publicName = entry.effectiveDisplayName ?: entry.sourceDisplayName ?: "Preview"
-            append("<tr data-missing=\"").append(entry.missing).append("\" data-duplicate=\"").append(entry.duplicate).append("\" data-unused=\"").append(entry.unused).append("\"><td>").append(escapeHtml(entry.id)).append("</td><td><img width=\"").append(entry.width).append("\" height=\"").append(entry.height).append("\" loading=\"lazy\" src=\"../assets/").append(escapeHtml(entry.relativePath)).append("\" alt=\"").append(escapeHtml(publicName)).append("\"></td><td>")
+            val previewCrop = previewCrop(entry)
+            append("<tr data-missing=\"").append(entry.missing).append("\" data-duplicate=\"").append(entry.duplicate).append("\" data-unused=\"").append(entry.unused).append("\"")
+            previewCrop?.let { crop ->
+                append(" data-crop-left=\"").append(crop.rect.left).append("\" data-crop-top=\"").append(crop.rect.top)
+                    .append("\" data-crop-width=\"").append(crop.rect.width).append("\" data-crop-height=\"").append(crop.rect.height)
+                    .append("\" data-crop-profile=\"").append(crop.profile).append("\"")
+            }
+            append("><td>").append(escapeHtml(entry.id)).append("</td><td>")
+            append(previewImage(entry, previewCrop, assetHrefPrefix, publicName))
+            append("</td><td>")
                 .append(escapeHtml(entry.category)).append("</td><td>")
                 .append(escapeHtml(entry.relativePath)).append("</td><td>")
                 .append(entry.byteSize).append("</td><td>")
                 .append(escapeHtml(entry.usageType.orEmpty())).append("</td><td>")
-                .append(escapeHtml(entry.cropProfile.orEmpty())).append("</td><td>")
+                .append(escapeHtml(previewCrop?.profile.orEmpty())).append("</td><td>")
                 .append(escapeHtml(entry.resolutionReason.orEmpty())).append("</td><td>")
                 .append(escapeHtml(entry.validationStatus)).append(" license=").append(escapeHtml(entry.licenseId)).append("</td></tr>")
         }
         append("</tbody></table></body></html>\n")
+    }
+
+    private fun previewCrop(entry: AssetPreviewEntry): PreviewCrop? {
+        val usageName = entry.usageType ?: return null
+        val usage = runCatching { ImageUsage.valueOf(usageName) }.getOrElse {
+            throw IllegalArgumentException("unsupported preview usage: $usageName")
+        }
+        val expectedCategory = AssetResolver.categoryFor(usage)
+        require(entry.category == expectedCategory.name) { "preview usage/category mismatch: $usageName" }
+        val profile = AssetResolver.profileFor(usage)
+        require(entry.cropProfile == null || entry.cropProfile == profile.name) { "preview usage/crop mismatch: $usageName" }
+        require(entry.resolutionReason == "EXACT" || entry.resolutionReason?.startsWith("FALLBACK:") == true) {
+            "preview resolution reason must be EXACT or FALLBACK:"
+        }
+        val asset = AssetImage(
+            id = AssetId(entry.id),
+            category = AssetCategory.valueOf(entry.category),
+            relativePath = entry.relativePath,
+            width = entry.width,
+            height = entry.height,
+            byteSize = entry.byteSize,
+            sha256 = entry.sha256,
+            focalXppm = entry.focalXppm,
+            focalYppm = entry.focalYppm
+        )
+        return PreviewCrop(profile.name, AssetResolver.crop(asset, profile))
+    }
+
+    private fun previewImage(
+        entry: AssetPreviewEntry,
+        previewCrop: PreviewCrop?,
+        assetHrefPrefix: String,
+        publicName: String
+    ): String {
+        val src = "${assetHrefPrefix.trimEnd('/')}/${entry.relativePath}"
+        val image = "<img width=\"${entry.width}\" height=\"${entry.height}\" loading=\"lazy\" src=\"${escapeHtml(src)}\" alt=\"${escapeHtml(publicName)}\""
+        if (previewCrop == null) return "$image>"
+        val crop = previewCrop.rect
+        return "<div style=\"position:relative;width:${crop.width}px;height:${crop.height}px;overflow:hidden\">" +
+            "$image style=\"position:absolute;left:-${crop.left}px;top:-${crop.top}px;max-width:none\"></div>"
     }
 
     internal fun escapeHtml(value: String): String = value

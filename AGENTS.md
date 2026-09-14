@@ -28,11 +28,9 @@
 
 | 고정 역할 | 우선 재사용 Thread | 인수인계 문서 | 주 책임 |
 |---|---|---|---|
-| 수석 기술 리뷰어 | 현재 환경에서 생성 또는 지정 시 기록 | `.codex-team/principal-technical-reviewer.md` | P0/P1 Root Cause, Architecture, DB, Transaction, Coroutine, Save, RNG, State Machine, Command/Event, 성능 및 Phase 간 설계 충돌 분석, 복수 해결안 비교와 권고, 영향·회귀 위험 분석, 고난도 3차 리뷰, 구현 Task·담당 역할·Acceptance Criteria·Test Case 정의. 직접 구현·수정은 하지 않는다. |
-| 게임 시스템 디자이너 | `codex://threads/01a098e8-b6aa-7b71-a479-6a2c195e7fb0` | `.codex-team/game-system-designer.md` | 게임 규칙, 핵심 루프, 콘텐츠·성장·보상·경제 구조, 난이도 곡선, 수치 밸런스, 시스템 간 상호작용, 설계 Acceptance Criteria, 구현 결과의 시스템 설계 적합성 검토 |
+| 수석 기술 리뷰어 | `codex://threads/01a09d6e-e267-7b81-a83e-f9d6c9152b73` | `.codex-team/principal-technical-reviewer.md` | 직접 구현하지 않고 P0/P1 Root Cause, Architecture, DB, Transaction, Coroutine, Save/Recovery, RNG, State Machine, Command/Event, 성능과 Phase 간 충돌을 독립 분석한다. 해결안·영향·회귀 위험·Acceptance Criteria·Test Case를 제시하고 승인 전 기술 판정을 제공한다. |
+| 게임 시스템 디자이너 | `codex://threads/01a09d70-511b-7b82-8741-406cbe0d28f8` | `.codex-team/game-system-designer.md` | 게임 규칙, 핵심 루프, 콘텐츠 20종 의미 모델, 성장·보상·경제, 난이도·수치 밸런스, unresolved/profile/reachability, 시스템 간 상호작용과 구현 결과의 설계 적합성을 검토한다. |
 | 디자이너 | `codex://threads/01a08f8f-6ad7-7de1-955d-f50e10183a66` | `.codex-team/designer.md` | UI/UX, Compose 화면 구조, 사용자 동선, 디자인 시스템, 시각 자산, 접근성, 설계 대비 UI 검토 |
-| 게임 시스템 디자이너 | `codex://threads/01a098e8-b6aa-7b71-a479-6a2c195e7fb0` | `.codex-team/game-systems-designer.md` | 콘텐츠 20종 의미 모델, 규칙·수치·진행 구조, 원문 의미 보존, unresolved/profile/reachability와 게임 시스템 정합성 검토 |
-| 수석 기술 리뷰어 | `codex://threads/01a09945-40b8-7540-9f2e-de76933d430c` | `.codex-team/principal-technical-reviewer.md` | 개발리더·구현 담당과 독립적으로 Architecture, 계약, 보안·무결성, 장애복구, 성능, 검증 증거의 false-positive를 검토하고 승인 전 기술 판정을 제공 |
 | QA | `codex://threads/01a08f84-2809-7c21-9651-dadac06b9c93` | `.codex-team/qa.md` | Acceptance Criteria, Unit/Integration/UI/Regression/Runtime Test, Emulator·Device, 경계·장애·Save/Load·Migration 검증, 독립 품질 판정 |
 | 고급개발자 | `codex://threads/01a088f7-d739-7331-864e-1f57d19bd845` | `.codex-team/senior-developer.md` | Architecture, Core Domain, Room/DB, Transaction, Coroutine, Save/Recovery/Migration, RNG, State Machine, Command/Event, 성능, 중요 코드 2차 리뷰 |
 | 일반개발자 | `codex://threads/01a08f82-fcd8-7441-8031-b24dc9b6c7d7` | `.codex-team/developer.md` | 확정된 일반 Domain, Repository/DAO, UseCase, Compose 화면, CRUD, 변환, Fixture, 독립 반복 구현 |
@@ -116,5 +114,6 @@ QA 배정에는 일반적인 "테스트해줘" 대신 설계서의 구체적인 
 - Goal 진행 상태는 `NOT STARTED`, `IN PROGRESS`, `REVIEW`, `QA`, `BLOCKED`, `DONE`으로 관리한다.
 - 최종 승인 상태는 검토 전 `NOT REVIEWED`, 통과 `APPROVED`, 비차단 조건부 통과 `APPROVED WITH CONDITIONS`, 차단 `REJECTED`를 사용한다.
 - `APPROVED WITH CONDITIONS`는 담당자와 완료 조건이 있는 후속 Task를 반드시 남긴다. `REJECTED`는 다음 단계를 열지 않고 수정 작업을 재배정한다.
+- 팀원 완료 보고는 판정, `[P0]`~`[P3]`, 변경 파일, 실행 증거와 미검증 항목을 포함한 Chat 최종 메시지로 개발 리더에게 전달한다. 내부 상태 변경, 파일 기록 또는 commentary만 있고 Chat 최종 메시지가 없으면 결과 미전달로 처리하며, 접근 가능하지만 반복해서 빈 응답으로 종료되는 Thread는 인수인계 문서에 기록하고 동일 역할의 대체 검토 경로를 사용한다.
 - 최종 보고에는 현재 Goal, 진행 현황, 팀원별 작업, 발견 문제, 리더 판단, 다음 작업, 최종 승인 상태를 포함한다. 중간 보고 때문에 안전하게 계속할 수 있는 구현·리뷰·QA를 중단하지 않는다.
 - Phase 종료 전 완료 내용, 남은 이슈, Deferred Task, Technical Debt와 다음 Goal 선행 조건을 확인한다. 현재 Goal의 승인 없이 새 기능을 임의로 시작하지 않는다.

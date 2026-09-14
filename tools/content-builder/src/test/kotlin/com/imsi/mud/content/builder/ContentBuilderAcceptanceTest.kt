@@ -430,19 +430,23 @@ class ContentBuilderAcceptanceTest {
         val png = minimalPng()
         Files.write(pngPath, png)
         val pngEntry = AssetPreviewEntry("asset-png", "PORTRAIT", "portrait/test.png", 8, 8, png.size.toLong(), CanonicalSourceConverter.sha256(png), "fixture-license", sourceDisplayName = "Portrait source", effectiveDisplayName = "Portrait public")
+        Files.write(assetRoot.resolve("portrait/fallback.png"), png)
+        val fallbackEntry = pngEntry.copy(id = "asset-fallback", relativePath = "portrait/fallback.png")
+        Files.write(assetRoot.resolve("portrait/unused.png"), png)
+        val unusedEntry = pngEntry.copy(id = "asset-unused", relativePath = "portrait/unused.png")
         val request = ContentBuildRequest(
             sourceRoot = source,
             outputRoot = root.resolve("output"),
             ddlPath = ddl(),
             contentVersion = "content.it3.v1",
             balanceVersion = "balance.test.v1",
-            assetEntries = listOf(pngEntry),
+            assetEntries = listOf(pngEntry, fallbackEntry, unusedEntry),
             assetRoot = assetRoot,
             approvedLicenseIds = setOf("fixture-license"),
             licenseRegistry = listOf(LicenseRegistryEntry("fixture-license", "CC0", "fixture", "APPROVED", setOf("ANDROID_APP"))),
             aliases = listOf(ContentAliasEntry("alias-1", "WPN-OLD", "WPN-0001", "REMAP", "fixture", "WPN", 1, 1, "rev-1")),
             assetBindings = listOf(AssetBindingEntry("binding-1", "WPN-0001", "LIST_FACE", "asset-png", 0)),
-            assetFallbacks = listOf(AssetFallbackEntry("fallback-1", "LIST_FACE", "GLOBAL_DEFAULT", null, "asset-png", 0))
+            assetFallbacks = listOf(AssetFallbackEntry("fallback-1", "LIST_FACE", "GLOBAL_DEFAULT", null, "asset-fallback", 0))
         )
         val result = ContentBuilder.build(request)
         assertTrue(Files.isRegularFile(result.bundleDirectory.resolve("assets/portrait/test.png")))
@@ -450,10 +454,20 @@ class ContentBuilderAcceptanceTest {
         assertTrue(result.bundleDirectory.resolve("asset-preview/PORTRAIT-001.html").readText().contains("../assets/portrait/test.png"))
         val persistedReport = JsonParser.parse(result.bundleDirectory.resolve("validation-report.json").readText()).asObject()
         val persistedAssets = persistedReport.value("assets").asArray().values.map(JsonValue::asObject)
-        assertEquals("asset-png", persistedAssets.single().value("id").asString())
+        assertEquals(setOf("asset-png", "asset-fallback", "asset-unused"), persistedAssets.map { it.value("id").asString() }.toSet())
+        assertTrue(persistedAssets.all { it.value("usageType") == JsonNull })
+        val previewRows = persistedReport.value("previewRows").asArray().values.map(JsonValue::asObject)
+        assertEquals(3, previewRows.size)
+        assertEquals(setOf("EXACT", "FALLBACK:GLOBAL_DEFAULT", "UNUSED"), previewRows.map { it.value("resolutionReason").asString() }.toSet())
+        assertTrue(previewRows.filter { it.value("resolutionReason").asString() != "UNUSED" }.all {
+            it.value("usageType").asString() == "LIST_FACE" && it.value("cropProfile").asString() == "SQUARE_FACE"
+        })
+        assertTrue(previewRows.single { it.value("resolutionReason").asString() == "UNUSED" }.value("unused").asBoolean())
+        val previewHtml = result.bundleDirectory.resolve("asset-preview/PORTRAIT-001.html").readText()
+        assertTrue(previewHtml.contains("data-crop-profile=\"SQUARE_FACE\"") && previewHtml.contains("FALLBACK:GLOBAL_DEFAULT"))
         val jsonDrivenReport = root.resolve("json-driven-validation-report.json")
-        val modifiedAsset = JsonObject(persistedAssets.single().values + ("effectiveDisplayName" to JsonString("JSON preview sentinel")))
-        Files.writeString(jsonDrivenReport, JsonObject(persistedReport.values + ("assets" to JsonArray(listOf(modifiedAsset)))).render())
+        val modifiedPreview = JsonObject(previewRows.first().values + ("effectiveDisplayName" to JsonString("JSON preview sentinel")))
+        Files.writeString(jsonDrivenReport, JsonObject(persistedReport.values + ("previewRows" to JsonArray(listOf(modifiedPreview)))).render())
         val jsonDrivenPreview = root.resolve("json-driven-preview")
         ContentBuilder::class.java.getDeclaredMethod("renderAssetPreview", Path::class.java, Path::class.java)
             .apply { isAccessible = true }
@@ -463,7 +477,7 @@ class ContentBuilderAcceptanceTest {
         DriverManager.getConnection("jdbc:sqlite:${db.toAbsolutePath()}").use { connection ->
             val checks = listOf(
                 "SELECT COUNT(*) FROM content_alias" to 1,
-                "SELECT COUNT(*) FROM asset_image" to 1,
+                "SELECT COUNT(*) FROM asset_image" to 3,
                 "SELECT COUNT(*) FROM asset_binding" to 1,
                 "SELECT COUNT(*) FROM asset_fallback" to 1,
                 "SELECT asset_id FROM asset_binding WHERE template_id=? AND usage_type=? ORDER BY priority" to 1,
@@ -497,16 +511,32 @@ class ContentBuilderAcceptanceTest {
         val bundleManifest = JsonParser.parse(result.bundleDirectory.resolve("content-bundle-manifest.json").readText()).asObject()
         val shippedAsset = bundleManifest.value("files").asArray().values.map(JsonValue::asObject).single { it.value("path").asString() == "assets/portrait/test.png" }
         assertEquals(CanonicalSourceConverter.sha256(png), shippedAsset.value("sha256").asString())
+        val artifactSources = mapOf(
+            "previewArtifact" to result.bundleDirectory.resolve("asset-preview/PORTRAIT-001.html"),
+            "validationReportArtifact" to result.bundleDirectory.resolve("validation-report.json"),
+            "databaseArtifact" to result.bundleDirectory.resolve("content.db"),
+            "queryPlanArtifact" to result.bundleDirectory.resolve("query-plan.json")
+        )
+        val artifactEvidence = artifactSources.flatMap { (key, source) -> listOf(
+            key to JsonString("artifacts/${source.fileName}"),
+            "${key}Sha256" to JsonString(CanonicalSourceConverter.sha256(Files.readAllBytes(source)))
+        ) }.toMap()
         writePhase1Evidence("P1-IT-003", JsonObject(mapOf(
             "testId" to JsonString("P1-IT-003"),
             "bundleHash" to JsonString(result.bundleHash),
+            "generatedByVersion" to bundleManifest.value("generatedByVersion"),
             "assetManifestSha256" to bundleManifest.value("assetManifestSha256"),
             "assetPath" to JsonString("assets/portrait/test.png"),
             "assetSha256" to shippedAsset.value("sha256"),
             "bindingCount" to JsonNumber(java.math.BigDecimal.ONE),
             "fallbackCount" to JsonNumber(java.math.BigDecimal.ONE),
             "preview" to JsonString("asset-preview/PORTRAIT-001.html")
-        )).render())
+        ) + artifactEvidence).render())
+        val evidenceArtifacts = phase1EvidenceDirectory("P1-IT-003").resolve("artifacts")
+        Files.createDirectories(evidenceArtifacts)
+        artifactSources.values.forEach { source ->
+            Files.copy(source, evidenceArtifacts.resolve(source.fileName), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 
     @Test
@@ -671,6 +701,28 @@ class ContentBuilderAcceptanceTest {
             "dbSha256" to manifest.value("artifactFileSha256"),
             "currentPointerBundleId" to JsonParser.parse(output.resolve("current.json").readText()).asObject().value("bundleId")
         )).render())
+    }
+
+    @Test
+    fun `P1-IT-005 output contract v2 coexists with legacy v1 bundle identity`() {
+        val root = Files.createTempDirectory("content-builder-tool-identity")
+        val source = canonicalSource(root)
+        val output = root.resolve("output")
+        val currentRequest = request(source, output, "content.identity.v1")
+        val legacy = ContentBuilder.build(currentRequest.copy(generatedByVersion = "p1-content-builder.v1"))
+        val current = ContentBuilder.build(currentRequest)
+        val repeated = ContentBuilder.build(currentRequest)
+
+        assertTrue(legacy.bundleHash != current.bundleHash)
+        assertEquals(current.bundleHash, repeated.bundleHash)
+        assertTrue(Files.isDirectory(output.resolve("bundles").resolve(legacy.bundleHash)))
+        assertTrue(Files.isDirectory(output.resolve("bundles").resolve(current.bundleHash)))
+        assertEquals(2L, Files.list(output.resolve("bundles")).use { it.count() })
+        assertEquals(
+            "p1-content-builder.v2",
+            JsonParser.parse(current.bundleDirectory.resolve("content-bundle-manifest.json").readText())
+                .asObject().value("generatedByVersion").asString()
+        )
     }
 
     @Test
@@ -853,6 +905,48 @@ class ContentBuilderAcceptanceTest {
         cliFailure("../save.db", null, "INVALID_ASSET_PATH")
         cliFailure("portrait/missing.png", null, "MISSING_REQUIRED_ASSET")
         cliFailure("portrait/broken.png", ByteArray(32), "ASSET_DECODE_FAILED")
+    }
+
+    @Test
+    fun `P1-IT-003 assets CLI preview href resolves the verified fixture asset`() {
+        val root = Files.createTempDirectory("content-builder-assets-preview-cli")
+        val assetRoot = root.resolve("assets")
+        val asset = assetRoot.resolve("portrait/test.png")
+        Files.createDirectories(asset.parent)
+        val bytes = minimalPng()
+        Files.write(asset, bytes)
+        val manifest = JsonObject(mapOf(
+            "entries" to JsonArray(listOf(JsonObject(mapOf(
+                "alphaMode" to JsonString("OPAQUE"), "assetId" to JsonString("asset-cli"),
+                "byteSize" to JsonNumber(java.math.BigDecimal(bytes.size)), "category" to JsonString("PORTRAIT"),
+                "colorSpace" to JsonString("SRGB"), "exactFileSha256" to JsonString(CanonicalSourceConverter.sha256(bytes)),
+                "height" to JsonNumber(java.math.BigDecimal(8)), "licenseId" to JsonString("fixture"),
+                "mimeType" to JsonString("image/png"), "poolVersion" to JsonString("pool.v1"),
+                "relativePath" to JsonString("portrait/test.png"), "validationStatus" to JsonString("VALID"),
+                "width" to JsonNumber(java.math.BigDecimal(8))
+            ))))
+        ))
+        val licenses = JsonObject(mapOf(
+            "entries" to JsonArray(listOf(JsonObject(mapOf(
+                "approvalStatus" to JsonString("APPROVED"), "distributionScopes" to JsonArray(listOf(JsonString("ANDROID_APP"))),
+                "id" to JsonString("fixture"), "license" to JsonString("PROJECT_OWNED_FIXTURE"), "source" to JsonString("fixture")
+            ))))
+        ))
+        val manifestPath = root.resolve("asset-manifest.json").apply { writeText(manifest.render()) }
+        val licensePath = root.resolve("license-registry.json").apply { writeText(licenses.render()) }
+        val preview = root.resolve("generated/preview")
+        val javaExecutable = Path.of(System.getProperty("java.home"), "bin", if (System.getProperty("os.name").contains("windows", true)) "java.exe" else "java")
+        val process = ProcessBuilder(
+            javaExecutable.toString(), "-cp", requireNotNull(System.getProperty("phase1.testRuntimeClasspath")),
+            "com.imsi.mud.content.builder.BuilderCliKt", "assets", "--manifest", manifestPath.toString(),
+            "--asset-root", assetRoot.toString(), "--license-registry", licensePath.toString(),
+            "--preview-output", preview.toString()
+        ).redirectErrorStream(true).start()
+        assertTrue("assets CLI did not terminate", process.waitFor(30, TimeUnit.SECONDS))
+        assertEquals(process.inputStream.bufferedReader().readText(), 0, process.exitValue())
+        val page = preview.resolve("PORTRAIT-001.html")
+        val href = Regex("""<img[^>]+src=\"([^\"]+)\"""").find(page.readText())!!.groupValues[1]
+        assertEquals(asset.toRealPath(), page.parent.resolve(href).normalize().toRealPath())
     }
 
     @Test

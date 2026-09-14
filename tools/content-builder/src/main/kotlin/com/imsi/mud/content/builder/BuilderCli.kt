@@ -27,7 +27,7 @@ fun main(args: Array<String>) {
                         contentVersion = options["content-version"] ?: "content.v1",
                         balanceVersion = options["balance-version"] ?: "balance.v1",
                         profile = options["profile"] ?: "PROTOTYPE",
-                        generatedByVersion = options["generated-by"] ?: "p1-content-builder.v1",
+                        generatedByVersion = options["generated-by"] ?: "p1-content-builder.v2",
                         assetEntries = assetEntries,
                         assetRoot = options["asset-root"]?.let(Path::of),
                         approvedLicenseIds = licenseRegistry.filter { it.approvalStatus == "APPROVED" && "ANDROID_APP" in it.distributionScopes }.map(LicenseRegistryEntry::id).toSet(),
@@ -48,7 +48,9 @@ fun main(args: Array<String>) {
                     diagnostics.forEach { println("${it.code}:${it.assetId}:${it.message}") }
                     throw assetValidationFailure(diagnostics)
                 }
-                val result = AssetPreviewRenderer.render(entries, Path.of(options["preview-output"] ?: "build/content-assets-preview"))
+                val previewOutput = Path.of(options["preview-output"] ?: "build/content-assets-preview").toAbsolutePath().normalize()
+                val assetHrefPrefix = previewOutput.relativize(root.toAbsolutePath().normalize()).toString().replace('\\', '/')
+                val result = AssetPreviewRenderer.render(entries, previewOutput, assetHrefPrefix = assetHrefPrefix)
                 println("validated ${entries.size} assets; preview pages=${result.pageCount}")
             }
             else -> throw IllegalArgumentException("usage: convert|build|assets --key value")

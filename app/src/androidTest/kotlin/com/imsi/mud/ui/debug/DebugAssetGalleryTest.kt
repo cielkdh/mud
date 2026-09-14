@@ -19,11 +19,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import coil3.decode.DataSource
 import coil3.request.SuccessResult
 import com.imsi.mud.content.AssetCategory
+import com.imsi.mud.content.AssetFallback
 import com.imsi.mud.content.AssetId
 import com.imsi.mud.content.AssetImage
 import com.imsi.mud.content.AssetResolveRequest
 import com.imsi.mud.content.AssetUnavailableReason
+import com.imsi.mud.content.CropProfile
+import com.imsi.mud.content.CropRect
 import com.imsi.mud.content.EntityKind
+import com.imsi.mud.content.FallbackMatcher
 import com.imsi.mud.content.ImageUsage
 import com.imsi.mud.content.InMemoryContentRepository
 import com.imsi.mud.content.InstalledBundle
@@ -49,12 +53,65 @@ class DebugAssetGalleryTest {
     @Test
     fun p1It003_exactAndFallbackKeepTheSamePublicLabel() {
         requireFixture("P1-IT-003")
-        val state = mutableStateOf<DebugAssetGalleryState>(
-            DebugAssetGalleryState.Content(
-                publicName = "정찰대장 리아",
-                description = "용병 초상",
-                resolution = DebugAssetResolution.Exact,
+        val exactAsset = AssetImage(
+            id = AssetId("lia-exact-asset"),
+            category = AssetCategory.PORTRAIT,
+            relativePath = "portraits/lia-exact.webp",
+            width = 128,
+            height = 128,
+            byteSize = 1_024,
+            sha256 = "1".repeat(64),
+        )
+        val fallbackAsset = AssetImage(
+            id = AssetId("lia-fallback-asset"),
+            category = AssetCategory.PORTRAIT,
+            relativePath = "portraits/lia-fallback.webp",
+            width = 128,
+            height = 128,
+            byteSize = 2_048,
+            sha256 = "2".repeat(64),
+        )
+        val crop = CropRect(0, 0, 128, 128)
+        val exactState = ResolvedAsset.Exact(
+            asset = exactAsset,
+            crop = crop,
+            profile = CropProfile.SQUARE_FACE,
+            effectiveTargetPx = 128,
+        ).toDebugGalleryState(
+            publicName = "정찰대장 리아",
+            description = "용병 초상",
+            noImageDescription = "텍스트 모드에서는 배경 이미지를 표시하지 않습니다.",
+            actionLabel = "탐색 계속",
+        )
+        val fallbackState = ResolvedAsset.Fallback(
+            asset = fallbackAsset,
+            crop = crop,
+            profile = CropProfile.SQUARE_FACE,
+            fallback = AssetFallback(
+                usage = ImageUsage.LIST_FACE,
+                matcher = FallbackMatcher.REGION,
+                matcherValue = "fallback-reason",
+                assetId = fallbackAsset.id,
+                priority = 1,
             ),
+            effectiveTargetPx = 128,
+        ).toDebugGalleryState(
+            publicName = "정찰대장 리아",
+            description = "용병 초상",
+            noImageDescription = "텍스트 모드에서는 배경 이미지를 표시하지 않습니다.",
+            actionLabel = "탐색 계속",
+        )
+        val skippedState = ResolvedAsset.SkippedByQualityMode(
+            qualityMode = QualityMode.TEXT,
+            usage = ImageUsage.LIST_FACE,
+        ).toDebugGalleryState(
+            publicName = "정찰대장 리아",
+            description = "용병 초상",
+            noImageDescription = "텍스트 모드에서는 배경 이미지를 표시하지 않습니다.",
+            actionLabel = "탐색 계속",
+        )
+        val state = mutableStateOf<DebugAssetGalleryState>(
+            exactState,
         )
         compose.setContent { DebugAssetGallery(state.value) }
 
@@ -63,15 +120,21 @@ class DebugAssetGalleryTest {
         compose.onAllNodesWithContentDescription("정찰대장 리아").assertCountEquals(1)
 
         compose.runOnIdle {
-            state.value = DebugAssetGalleryState.Content(
-                publicName = "정찰대장 리아",
-                description = "용병 초상",
-                resolution = DebugAssetResolution.Fallback,
-            )
+            state.value = fallbackState
         }
 
         compose.onNodeWithContentDescription("정찰대장 리아").assertIsDisplayed()
         compose.onAllNodesWithContentDescription("정찰대장 리아").assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("fallback-reason").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("lia-fallback-asset").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("portraits/lia-fallback.webp").assertCountEquals(0)
+
+        compose.runOnIdle { state.value = skippedState }
+
+        compose.onAllNodesWithTag("asset-gallery-image").assertCountEquals(0)
+        compose.onNodeWithText("정찰대장 리아").assertIsDisplayed()
+        compose.onNodeWithText("텍스트 모드에서는 배경 이미지를 표시하지 않습니다.").assertIsDisplayed()
+        compose.onNodeWithText("탐색 계속").assertIsDisplayed()
     }
 
     @Test

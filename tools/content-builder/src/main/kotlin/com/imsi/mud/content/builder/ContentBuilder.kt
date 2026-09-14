@@ -1,10 +1,12 @@
 package com.imsi.mud.content.builder
 
 import com.imsi.mud.content.CatalogImporter
+import com.imsi.mud.content.AssetResolver
 import com.imsi.mud.content.ContentHasher
 import com.imsi.mud.content.ContentSourceTemplate
 import com.imsi.mud.content.ContentDefinitionContractException
 import com.imsi.mud.content.ContentDefinitionV1Decoder
+import com.imsi.mud.content.ImageUsage
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinBase
 import com.sun.jna.platform.win32.WinNT
@@ -35,7 +37,7 @@ data class ContentBuildRequest(
     val contentVersion: String,
     val balanceVersion: String,
     val profile: String = "PROTOTYPE",
-    val generatedByVersion: String = "p1-content-builder.v1",
+    val generatedByVersion: String = "p1-content-builder.v2",
     val assetEntries: List<AssetPreviewEntry> = emptyList(),
     val assetRoot: Path? = null,
     val approvedLicenseIds: Set<String> = emptySet(),
@@ -324,6 +326,7 @@ object ContentBuilder {
                     "contentVersion" to JsonString(effectiveRequest.contentVersion),
                     "diagnostics" to JsonArray(reportDiagnostics.map(::reportDiagnosticJson)),
                     "assets" to JsonArray(effectiveRequest.assetEntries.sortedBy(AssetPreviewEntry::id).map(::assetPreviewJson)),
+                    "previewRows" to JsonArray(previewRows(effectiveRequest).map(::assetPreviewJson)),
                     "aliasResolutions" to JsonArray(resolvedAliasInputs.resolutions.sortedBy { it.alias.oldId }.map { resolution ->
                         val alias = resolution.alias
                         JsonObject(mapOf(
@@ -435,9 +438,42 @@ object ContentBuilder {
         "width" to JsonNumber(java.math.BigDecimal(entry.width))
     ))
 
+    private fun previewRows(request: ContentBuildRequest): List<AssetPreviewEntry> {
+        val assetsById = request.assetEntries.associateBy(AssetPreviewEntry::id)
+        val referenced = linkedSetOf<String>()
+        val rows = buildList {
+            request.assetBindings.sortedWith(compareBy(AssetBindingEntry::usageType, AssetBindingEntry::priority, AssetBindingEntry::id)).forEach { binding ->
+                referenced += binding.assetId
+                val usage = ImageUsage.valueOf(binding.usageType)
+                add(assetsById.getValue(binding.assetId).copy(
+                    usageType = usage.name,
+                    cropProfile = AssetResolver.profileFor(usage).name,
+                    resolutionReason = "EXACT",
+                    unused = false
+                ))
+            }
+            request.assetFallbacks.sortedWith(compareBy(AssetFallbackEntry::usageType, AssetFallbackEntry::priority, AssetFallbackEntry::id)).forEach { fallback ->
+                referenced += fallback.assetId
+                val usage = ImageUsage.valueOf(fallback.usageType)
+                add(assetsById.getValue(fallback.assetId).copy(
+                    usageType = usage.name,
+                    cropProfile = AssetResolver.profileFor(usage).name,
+                    resolutionReason = "FALLBACK:${fallback.matcherType}",
+                    unused = false
+                ))
+            }
+            request.assetEntries.filter { it.id !in referenced }.sortedBy(AssetPreviewEntry::id).forEach { asset ->
+                add(asset.copy(usageType = null, cropProfile = null, resolutionReason = "UNUSED", unused = true))
+            }
+        }
+        return rows.sortedWith(compareBy<AssetPreviewEntry>(
+            { it.category }, { it.usageType.orEmpty() }, { it.resolutionReason.orEmpty() }, { it.id }
+        ))
+    }
+
     private fun renderAssetPreview(reportPath: Path, output: Path) {
         val report = JsonParser.parse(readUtf8(reportPath)).asObject()
-        val entries = report.value("assets").asArray().values.map(JsonValue::asObject).map { value ->
+        val entries = (report.optional("previewRows") ?: report.value("assets")).asArray().values.map(JsonValue::asObject).map { value ->
             fun nullableString(name: String): String? = value.value(name).let { if (it == JsonNull) null else it.asString() }
             fun nullableInt(name: String): Int? = value.value(name).let { if (it == JsonNull) null else it.asInt() }
             AssetPreviewEntry(

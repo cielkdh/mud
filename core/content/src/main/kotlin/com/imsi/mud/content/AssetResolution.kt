@@ -108,7 +108,7 @@ object AssetResolver {
         val attempted = mutableListOf<AssetId>()
         candidates.forEach { (assetId, fallback) ->
             val asset = repository.findAsset(assetId) ?: return@forEach
-            if (asset.category != expectedCategory(request.usage)) return@forEach
+            if (asset.category != categoryFor(request.usage)) return@forEach
             attempted += assetId
             if (probe(asset)) {
                 val crop = crop(asset, profile)
@@ -166,7 +166,7 @@ object AssetResolver {
         qualityMode.name
     ).joinToString("|")
 
-    private fun expectedCategory(usage: ImageUsage): AssetCategory = when (usage) {
+    fun categoryFor(usage: ImageUsage): AssetCategory = when (usage) {
         ImageUsage.LIST_FACE, ImageUsage.DETAIL_PORTRAIT, ImageUsage.DIALOG_PORTRAIT,
         ImageUsage.BATTLE_TOKEN, ImageUsage.CHRONICLE_THUMB -> AssetCategory.PORTRAIT
         ImageUsage.ICON -> AssetCategory.ICON

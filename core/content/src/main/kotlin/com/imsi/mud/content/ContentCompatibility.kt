@@ -312,7 +312,9 @@ object ContentCompatibilityPlanner {
         legacy: LegacySnapshotIndex,
         aliases: Map<ContentId, ContentAlias> = emptyMap()
     ): BindingPlan {
-        if (saved.logicalContentHash == installed.identity.logicalContentHash) return BindingPlan.Compatible
+        if (saved.logicalContentHash == installed.identity.logicalContentHash &&
+            saved.requiredDefinitions.all { installed.definitionRefFor(it.id) == it }
+        ) return BindingPlan.Compatible
 
         val missing = mutableListOf<ContentId>()
         val changed = mutableListOf<ContentId>()

@@ -383,6 +383,39 @@ class ContentContractsTest {
     }
 
     @Test
+    fun `P1-CT-003 every usage shares category profile and focal crop golden`() {
+        val expected = mapOf(
+            ImageUsage.LIST_FACE to (AssetCategory.PORTRAIT to CropProfile.SQUARE_FACE),
+            ImageUsage.DETAIL_PORTRAIT to (AssetCategory.PORTRAIT to CropProfile.PORTRAIT_3_4),
+            ImageUsage.DIALOG_PORTRAIT to (AssetCategory.PORTRAIT to CropProfile.PORTRAIT_3_4),
+            ImageUsage.BATTLE_TOKEN to (AssetCategory.PORTRAIT to CropProfile.SQUARE_CENTER),
+            ImageUsage.CHRONICLE_THUMB to (AssetCategory.PORTRAIT to CropProfile.SQUARE_CENTER),
+            ImageUsage.ICON to (AssetCategory.ICON to CropProfile.SQUARE_CENTER),
+            ImageUsage.EMBLEM to (AssetCategory.EMBLEM to CropProfile.SQUARE_CENTER),
+            ImageUsage.ROOM_BACKGROUND to (AssetCategory.BACKGROUND to CropProfile.LANDSCAPE_16_9),
+            ImageUsage.EVENT_ART to (AssetCategory.EVENT_ART to CropProfile.LANDSCAPE_16_9),
+            ImageUsage.KEY_ART to (AssetCategory.KEY_ART to CropProfile.FIT_INSIDE)
+        )
+        assertEquals(expected.keys, ImageUsage.entries.toSet())
+        expected.forEach { (usage, categoryProfile) ->
+            assertEquals(categoryProfile.first, AssetResolver.categoryFor(usage))
+            assertEquals(categoryProfile.second, AssetResolver.profileFor(usage))
+        }
+
+        fun image(id: String, width: Int, height: Int, focal: Int? = null) = AssetImage(
+            AssetId(id), AssetCategory.PORTRAIT, "portrait/$id.webp", width, height, 1,
+            ContentHasher.sha256(id), focal, focal
+        )
+        assertEquals(CropRect(3, 0, 4, 4), AssetResolver.crop(image("wide", 11, 4), CropProfile.SQUARE_FACE))
+        assertEquals(CropRect(4, 0, 3, 4), AssetResolver.crop(image("portrait", 11, 4), CropProfile.PORTRAIT_3_4))
+        assertEquals(CropRect(0, 3, 4, 4), AssetResolver.crop(image("tall", 4, 11), CropProfile.SQUARE_CENTER))
+        assertEquals(CropRect(0, 3, 9, 5), AssetResolver.crop(image("landscape", 9, 11), CropProfile.LANDSCAPE_16_9))
+        assertEquals(CropRect(0, 0, 5, 7), AssetResolver.crop(image("inside", 5, 7), CropProfile.FIT_INSIDE))
+        assertEquals(CropRect(0, 0, 4, 4), AssetResolver.crop(image("focal-zero", 11, 4, 0), CropProfile.SQUARE_CENTER))
+        assertEquals(CropRect(7, 0, 4, 4), AssetResolver.crop(image("focal-max", 11, 4, 1_000_000), CropProfile.SQUARE_CENTER))
+    }
+
+    @Test
     fun `P1-CT-003 quality mode clamps target buckets and TEXT skips forbidden usage before repository access`() {
         val portrait = asset("NPC-1")
         val repository = InMemoryContentRepository(

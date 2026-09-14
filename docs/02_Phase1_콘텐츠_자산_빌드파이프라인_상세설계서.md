@@ -1,6 +1,6 @@
 # Phase 1. 콘텐츠 · 자산 · 빌드파이프라인 상세 설계서
 
-> 상태: 아키텍처/개발 리뷰 반영 기준선 · 구현/테스트 `NOT_STARTED / NOT_RUN`
+> 상태: `PROTOTYPE_ACCEPTED` · 구현 `DONE` · Phase 1 Test 27개 `PASS` · 실물 자산 `BLOCKED_ASSET`
 > 우선순위: 충돌 시 `84_전체_Command_Event_계약서.md`, 이 문서 1~15절, 관리데이터, 16절 원문 부록 순으로 적용한다.
 
 ## 1. 문서 개요
@@ -112,8 +112,8 @@ Phase1 Build Spike는 Gradle resolve, Kotlin/JVM compile, Android library compil
 - 입력: save의 `contentVersion, balanceVersion, logicalContentHash, generatorVersion, rngVersion, compatibilitySnapshot`, 설치 bundle manifest, alias map, legacy snapshot index.
 - 출력: `Compatible`, `MigrationRequired(steps)`, `Unsupported(missingIds)` 중 하나인 immutable `BindingPlan`.
 - resolver는 순수 계산이다. 파일·DB·save를 쓰지 않고 같은 입력에 같은 plan을 반환한다.
-- save 호환성의 콘텐츠 identity는 `logicalContentHash`다. 자산만 바뀌어 `bundleId`/`assetManifestSha256`가 달라도 logical hash가 같으면 `Compatible`이며, logical hash가 다를 때만 ID/alias/legacy 검사를 수행한다. `artifactFileSha256`와 `bundleId`는 설치 무결성 값이지 save 호환성 값이 아니다.
-- `ContentCompatibilitySnapshot.v1`은 `snapshotVersion`, saved `logicalContentHash`, 그리고 save가 실제로 참조하는 항목을 `(kind,id,definitionVersion,definitionHash)`로 정렬한 `requiredDefinitions`를 가진다. `DefinitionHash.v1`은 해당 template의 `kind,id,definitionVersion,grade,minLevel,sorted tags,enabled,canonical definition`을 canonical JSON으로 직렬화한 UTF-8 bytes의 SHA-256이며 표시명·provenance·asset 정보는 포함하지 않는다. `legacySnapshotIndex.v1`은 old tuple/hash, terminal new tuple/hash 또는 TOMBSTONE, provenance, 승인 revision을 보존한다. logical hash가 다를 때 각 required definition이 설치 bundle에서 같은 tuple/hash로 유지되거나 승인된 terminal REMAP/same-ID legacy entry로 증명되어야 하며, 하나라도 증명되지 않으면 `Unsupported(missingIds, changedDefinitions)`다. 증명된 변경이 하나 이상이면 `MigrationRequired(steps)`, 모두 동일하면 `Compatible`이다. alias만으로 definition 의미 동치를 추정하거나 같은 ID라는 이유로 변경된 definition을 자동 수용하지 않는다.
+- save 호환성의 콘텐츠 identity는 `logicalContentHash`다. 자산만 바뀌어 `bundleId`/`assetManifestSha256`가 달라도 호환성에는 영향을 주지 않는다. 다만 save snapshot의 global hash와 `requiredDefinitions`가 서로 일관됨을 snapshot 단독으로 증명할 수 없으므로, logical hash가 같아도 모든 required definition tuple이 설치 bundle과 정확히 일치할 때만 fast-path `Compatible`이다. 빈 `requiredDefinitions`는 asset-only 변경으로 간주해 `Compatible`이며, 하나라도 불일치하면 기존 ID/alias/legacy fail-closed 검사를 계속 수행한다. `artifactFileSha256`와 `bundleId`는 설치 무결성 값이지 save 호환성 값이 아니다.
+- `ContentCompatibilitySnapshot.v1`은 `snapshotVersion`, saved `logicalContentHash`, 그리고 save가 실제로 참조하는 항목을 `(kind,id,definitionVersion,definitionHash)`로 정렬한 `requiredDefinitions`를 가진다. `DefinitionHash.v1`은 해당 template의 `kind,id,definitionVersion,grade,minLevel,sorted tags,enabled,canonical definition`을 canonical JSON으로 직렬화한 UTF-8 bytes의 SHA-256이며 표시명·provenance·asset 정보는 포함하지 않는다. `legacySnapshotIndex.v1`은 old tuple/hash, terminal new tuple/hash 또는 TOMBSTONE, provenance, 승인 revision을 보존한다. fast-path가 성립하지 않으면 각 required definition이 설치 bundle에서 같은 tuple/hash로 유지되거나 승인된 terminal REMAP/same-ID legacy entry로 증명되어야 하며, 하나라도 증명되지 않으면 `Unsupported(missingIds, changedDefinitions)`다. 증명된 변경이 하나 이상이면 `MigrationRequired(steps)`, 모두 동일하면 `Compatible`이다. alias만으로 definition 의미 동치를 추정하거나 같은 ID라는 이유로 변경된 definition을 자동 수용하지 않는다.
 - P3 `content_binding.logical_content_hash`가 이 값을 저장한다. 과거 모호한 `source_bundle_hash` 이름은 사용하지 않는다.
 - 의미가 다른 template으로 자동 대체하지 않는다. 필수 ID가 alias/legacy에 없으면 `Unsupported`이며 원본 save는 그대로 둔다.
 - P3/P25의 별도 승인 command만 plan을 적용하고 migration history를 기록한다.
@@ -290,7 +290,7 @@ self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. sour
 
 ## 13. Test 설계
 
-모든 P1 Test는 `live save.db hash 불변`을 공통 oracle로 사용한다. seed, commandId, receipt는 fixture에 넣지 않으며 `WorldSession`이 필요한 graph test는 `ContentSnapshot.emptyForTest()`를 명시적으로 주입한다. 상태는 구현 전이므로 모두 `NOT_RUN`이다. 아래 표는 검토용 요약이며 실행 가능한 사전조건·절차·DB/로그 oracle의 단일 원천은 `관리데이터/tests.json`, 전역 목록은 `91_전체_Test_계획서.md`다.
+모든 P1 Test는 `live save.db hash 불변`을 공통 oracle로 사용한다. seed, commandId, receipt는 fixture에 넣지 않으며 `WorldSession`이 필요한 graph test는 `ContentSnapshot.emptyForTest()`를 명시적으로 주입한다. 초기 기준선의 27개 Test는 모두 `NOT_RUN`이었고, 현재 실행 상태와 증거의 단일 원천은 `관리데이터/tests.json`이다. 아래 표는 검토용 요약이며 실행 가능한 사전조건·절차·DB/로그 oracle의 전역 목록은 `91_전체_Test_계획서.md`다.
 
 | Test | 핵심 입력 | 독립 oracle |
 |---|---|---|
@@ -309,9 +309,9 @@ self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. sour
 | <a id="p1-ft-003"></a>`P1-FT-003` | 경로 공격·거짓/과대 physical metadata·미승인 licenseId | `INVALID_ASSET_PATH` 또는 build ERROR, root 밖/과대 decode 0 |
 | <a id="p1-ct-003"></a>`P1-CT-003` | legacy code·usage→category/crop·crop golden·TEXT/UI states | canonicalization·정수 floor/clamp·TEXT allow/skip·Loading/fallback 구분 |
 | <a id="p1-it-003"></a>`P1-IT-003` | 실제 PNG/WebP·6 DB read·모든 crop/UI states | 분할 preview/repository/gallery metadata·semantics·cache 일치 |
-| <a id="p1-ut-004"></a>`P1-UT-004` | terminal alias | `MigrationRequired` step과 old ID provenance |
-| <a id="p1-bt-004"></a>`P1-BT-004` | logical hash 동일·asset bundle만 변경 | Compatible/fallback, save 불변 |
-| <a id="p1-ft-004"></a>`P1-FT-004` | required ID/legacy 없음 | `Unsupported`, save 불변 |
+| <a id="p1-ut-004"></a>`P1-UT-004` | terminal alias·동일 hash 불일치 tuple의 승인 legacy | `MigrationRequired` step과 old ID provenance |
+| <a id="p1-bt-004"></a>`P1-BT-004` | logical hash 동일·required tuple 동일 또는 빈 집합·asset bundle만 변경 | Compatible/fallback, save 불변 |
+| <a id="p1-ft-004"></a>`P1-FT-004` | required ID/legacy 없음 또는 동일 hash·불일치 tuple·legacy 없음 | `Unsupported`, save 불변 |
 | <a id="p1-ct-004"></a>`P1-CT-004` | 동일 binding 입력 2회 | 동일 `BindingPlan`, I/O 0 |
 | <a id="p1-it-004"></a>`P1-IT-004` | version compatibility matrix | P3/P25 handoff DTO만 생성 |
 | <a id="p1-rt-001"></a>`P1-RT-001` | P0 graph+Phase1 graph | 기존 P0 경계와 새 정확 graph 모두 PASS |
@@ -326,7 +326,7 @@ self alias, cycle, alias-to-alias, kind 변경, missing target은 ERROR다. sour
 
 ### 13.1. 실행·증거 계약
 
-- 단일 Gate 명령은 Windows에서 `.\gradlew.bat phase1Gate --no-daemon --console=plain`이며 `:core:content:test`, `:tools:content-builder:test`, `:core:image:testDebugUnitTest`, `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:assembleRelease`, 문서 validator를 포함한다. Emulator가 필요한 fixture gallery는 `.\gradlew.bat :app:connectedDebugAndroidTest --no-daemon --console=plain`으로 별도 실행한다.
+- 단일 Gate 명령은 Windows에서 `.\gradlew.bat phase1Gate --no-daemon --console=plain`이며 `:core:content:test`, `:tools:content-builder:test`, `:core:image:testDebugUnitTest`, `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:assembleRelease`, 문서 validator, `:app:connectedDebugAndroidTest`와 Android 성능 증거 수집을 포함한다. Android 계측만 재실행할 때는 `.\gradlew.bat :app:connectedDebugAndroidTest --no-daemon --console=plain`을 사용할 수 있으나 Phase 승인 증거는 전체 Gate 결과다.
 - 각 executable test 이름은 27개 Test ID 중 하나를 포함하고, `build/reports/phase1/phase1-test-evidence.json`은 `testId, command, fixtureProfile, startedAt, durationMs, result, artifactPaths, beforeSaveSha256, afterSaveSha256`를 가진다. JUnit XML, validation JSON/Markdown, DB/query-plan, preview, screenshot/semantics, memory/latency artifact 경로를 누락하지 않는다.
 - test-owned 입력의 고정 root는 `phase1-fixtures/<TestId>/`, 공통 불변 sentinel은 `phase1-fixtures/common/save-sentinel.db`, 격리 출력은 `build/phase1-fixtures/<TestId>/`다. 각 case의 실제 module test resource는 이 ID 경로를 가리키며 임시 디렉터리는 실행마다 새로 만든다.
 - 공통 save sentinel은 test resource의 불변 bytes와 선택적인 빈 `-wal/-shm` 부재를 실행 전후 SHA-256·파일 목록으로 비교한다. P1 코드가 save path를 open/write한 기록이 한 건이라도 있거나 before/after가 다르면 해당 Test와 Gate를 실패시킨다.
