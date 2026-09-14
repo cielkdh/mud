@@ -1,7 +1,7 @@
 # Phase 2. 월드명령 · 시간 · 예약 · RNG 상세 설계서
 
-> 버전 v31.0 · 기준원문 v30 · 작성일 2026-09-08  
-> 상태: **설계 검토 초안 / 구현 NOT_STARTED / Test NOT_RUN**  
+> 버전 v31.4 · 기준원문 v30 · 작성일 2026-09-14
+> 상태: **구현 전 기술 보완 완료 / 구현 NOT_STARTED / Test NOT_RUN**
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
 ## 1. 문서 개요
@@ -39,7 +39,39 @@
 ### 공통 계약의 적용 범위
 이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
-`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
+`CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`는 **GAMEPLAY COMMAND**의 UseCase 경계에서만 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
+
+#### Command 권위 분류와 lane
+
+전역 [84 Command/Event 계약](84_전체_Command_Event_계약서.md) 6.1의 분류를 이 Phase의 단일 기준으로 사용한다. `WorldSession.execute`의 gameplay lane만 receipt를 소유한다. lifecycle/control lane은 안전한 segment 경계에서 실행을 제어하지만 독립 gameplay receipt나 `DomainEvent`를 만들지 않는다.
+
+| 기능 | 분류 | CommandEnvelope | receipt/Idempotency | Event 생성 | 최종 경계 |
+|---|---|---|---|---|---|
+| FUNC-P2-001 | `PROTOCOL` facade | gameplay payload를 수락 | 바깥 gameplay command가 소유 | 바깥 Delta에 포함될 때만 | `WorldSession.execute → SavePort.commit` |
+| FUNC-P2-002 | `INTERNAL` calculation | 아니오 | 아니오 | 아니오 | 호출 gameplay UseCase의 `DomainDelta` |
+| FUNC-P2-003 | `GAMEPLAY COMMAND` | 예 | 예 | 필요 시 바깥 command event | `WorldSession.execute → SavePort.commit` |
+| FUNC-P2-004 | `GAMEPLAY COMMAND` (resumable) | 예 | 예, receipt 1개를 segment별 갱신 | 예, 각 segment commit에 포함 | `WorldSession.execute → SavePort.commitSegment` |
+| FUNC-P2-005 | `LIFECYCLE / CONTROL` | 아니오 | 아니오 | 아니오 | active command의 다음 안전 경계 제어 또는 runtime close |
+
+`TimeRngKernel`과 lifecycle operation이 DB를 직접 쓰거나 publish하지 않는다. gameplay UseCase가 immutable snapshot으로 계산한 `DomainDelta`만 SavePort에 전달하고 commit 성공 뒤에만 공개 snapshot/event를 publish한다.
+
+#### Phase 2 / Phase 3 저장 책임과 Gate
+
+Phase 2는 `:core:simulation` 소유 `SavePort` 계약, test-only `InMemorySavePort`/`FaultInjectingSavePort`, 그리고 `SavePortConformanceSuite`를 구현·검증한다. 이 suite는 complete-or-previous commit, receipt idempotency, segment cursor, RNG/event/action 원자성, commit 성공 후 publish만 검증하며 Room·파일·WAL을 요구하지 않는다. test double은 production runtime에 등록하지 않는다.
+
+Phase 3는 `:core:save`의 Room SavePort, SaveCoordinator, WAL/checkpoint, 실제 DB close/reopen, process-kill 및 손상 복구를 구현한다. Phase 3 Gate는 같은 `SavePortConformanceSuite`를 실제 Room adapter에 재실행하고 Phase 3 전용 recovery test를 추가한다. 이는 Phase 2를 다시 여는 dependency가 아니며 `P2 Gate → P3 implementation/Gate` 단방향이다.
+
+`commitSegment(envelope, expectedSegmentNo, delta, timeAdvanceState, terminalResult)`는 해당 expected segment가 현재 RUNNING state의 다음 번호일 때만 current rows·RNG·world events·time advance state·동일 receipt watermark/result를 한 transaction으로 확정한다. stale/repeated segment는 기존 결과를 반환하거나 Conflict로 끝내며 double apply하지 않는다. 각 event의 `sourceVersion`은 그 event가 생성된 segment commit version이고 receipt `stateVersion`은 최신 성공 watermark다. `terminalResult`와 receipt lifecycle mapping은 아래 표를 단일 기준으로 사용한다.
+
+| TimeAdvance result | receipt lifecycle | 의미 |
+|---|---|---|
+| `COMPLETED`, `UNREACHABLE`, `LIMIT_REACHED`, `CANCELLED` | `COMMITTED` | 명령이 정상적으로 결정된 terminal outcome |
+| `INTERRUPTED`, `DECISION_REQUIRED` | `INTERRUPTED` | 기존 receipt terminal; 계속/결정 후 새 continuation command |
+| `FAILED` (durable progress 있음) | `INTERRUPTED` | 마지막 완전 slice까지 보존, resultCode=FAILED |
+| `FAILED` (admission 전 deterministic domain reject) | `REJECTED` | world/RNG/action 변경 0 |
+| `SYSTEM_HALT` | 새 terminal write 없음 | 신뢰할 수 없는 상태에서 commit/publish하지 않고 직전 durable RUNNING/terminal 상태 보존 |
+
+검증된 request를 수락하면 boundary 계산 전에 **admission segment 0**을 commit하여 RUNNING receipt와 durable goal/mode/limits/registry binding을 만든다. goal이 시작 상태에서 이미 참이면 같은 admission transaction에서 `COMPLETED` terminal로 기록한다. 따라서 수락 직후 또는 첫 boundary 전 kill에도 command 유실이 없고 same-id 재요청은 저장된 receipt를 반환한다. malformed/untrusted envelope는 admission 전 거절하며 receipt를 만들지 않는다.
 
 게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
 
@@ -92,7 +124,7 @@
 |---|---|---|---|
 | WorldSession | 신규/기존 adapter | feature와 headless에 공개되는 단일 mutation facade | WorldSession.execute(envelope: CommandEnvelope) -> CommandResult |
 | WorldEngine | 신규/기존 adapter | 세션 내부 검증·Delta 계산 규칙조정자. 구체 저장 구현 비참조 | WorldEngine.compute(envelope: CommandEnvelope, before: WorldSnapshot) -> WorldDelta |
-| SavePort | 기존 공통 계약 | `:core:simulation` 소유 receipt 조회·원자 commit 계약 | SavePort.findReceipt(...), SavePort.commit(envelope, delta) -> CommitReceipt |
+| SavePort | 기존 공통 계약 확장 | `:core:simulation` 소유 receipt 조회·원자 commit·resumable segment 계약 | `findReceipt`, `commit`, `commitSegment(envelope, expectedSegmentNo, delta, timeAdvanceState, terminalResult)` |
 | 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
 | 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
 | 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
@@ -102,52 +134,52 @@
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 게임 달력·잔여 밀리초·RNG 스트림을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 게임 달력·잔여 밀리초·RNG 스트림을 **순수 내부 계산**으로 구현한다. 외부 command·receipt·event를 소유하지 않으며, 호출 gameplay UseCase가 결과를 DomainDelta에 포함한다. |
 | 관련 요구사항 | [§7](#src-0007), [§121](#src-0121), [§3066](#src-3066), [§3067](#src-3067), [§3068](#src-3068), [§3069](#src-3069), [§3070](#src-3070), [§3071](#src-3071) |
 | 기능 요구사항 | 1. 1 년360 일·월30 일·일24 시간과 authoritative totalGameMinutes 를 유지한다<br>2. 설계 보완안으로 subMinuteMs 0~59999 를 저장해 전투 시간을 분에 누적 변환하며 매 전투 ceil 은 금지한다<br>3. 버전 고정 PCG 계열을 채택하고 stream 별 state/counter 를 snapshot 한다<br>4. UI·이름·초상 RNG 가 전투/전리품 RNG 에 영향을 주지 않는다 |
-| 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
+| 비기능/운영 | 완전 오프라인, 결정론, immutable input/output, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 재시도 멱등성은 이 kernel이 아니라 호출 gameplay command에 적용한다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `TimeRngKernel.advanceCombat(ms: CombatMillis, clock: WorldClock) -> ClockDelta` |
+| 주요 메소드 | `GameClockMath.targetAfter(elapsed: CombatMillis, clock: WorldClock) -> ClockTarget`; `DeterministicRng.draw(stream: RngStreamSnapshot, operation: RngOperation) -> RngOutcome` |
 | 입력 필드/값 | combatDeltaMs, totalGameMinutes, subMinuteMs, rngStreams; 구체적값: clock=(분0,잔여0), 10 초 전투를6 회 |
 | 반환값 | newGameMinutes, newSubMinuteMs, changedStreams; 정상결과: clock=(분1,잔여0); 1 회60 초와 동일 |
 | 입력 검증 | 23:59 +1 분, 12 월30 일 → 다음 연도1 월1 일00:00; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | 미지원 rngAlgorithmVersion → 복구 중단; 다른 난수기로 자동 대체 금지; typed DomainError 로상위호출에전달 |
-| Transaction | WorldSession의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고 WorldEngine은 `SavePort`만 호출한다. SaveCoordinator 구현의 단일 write transaction 성공 뒤 게시한다. |
-| 상태 변화 | (minute,remainder) → canonical clock + stream snapshots |
+| Transaction | 없음. kernel은 immutable clock/RNG snapshot을 받아 `ClockDelta`와 RNG outcome/counter만 반환한다. 반환 Delta의 commit·receipt·publish는 호출 `WorldSession.execute` gameplay command가 소유한다. |
+| 상태 변화 | 입력 snapshot은 불변이며 `(minute,remainder,rng state/counter)` → canonical `ClockDelta`/changed stream snapshots을 계산한다. |
 | 소유 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P2-TASK-006](#p2-task-006) · [P2-TASK-007](#p2-task-007) · [P2-TASK-008](#p2-task-008) · [P2-TASK-009](#p2-task-009) · [P2-TASK-010](#p2-task-010) |
 | 관련 Test | [P2-UT-002](#p2-ut-002) · [P2-BT-002](#p2-bt-002) · [P2-FT-002](#p2-ft-002) · [P2-CT-002](#p2-ct-002) · [P2-IT-002](#p2-it-002) |
 
 #### 처리 순서 및 데이터 흐름
-1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. 1 년360 일·월30 일·일24 시간과 authoritative totalGameMinutes 를 유지한다
-3. 설계 보완안으로 subMinuteMs 0~59999 를 저장해 전투 시간을 분에 누적 변환하며 매 전투 ceil 은 금지한다
-4. 버전 고정 PCG 계열을 채택하고 stream 별 state/counter 를 snapshot 한다
-5. UI·이름·초상 RNG 가 전투/전리품 RNG 에 영향을 주지 않는다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
+1. 호출 gameplay UseCase가 immutable `WorldClock`·RNG stream snapshot과 검증된 입력을 준비한다. kernel은 envelope, epoch, receipt, commandId를 받지 않는다.
+2. 1 년360 일·월30 일·일24 시간과 authoritative totalGameMinutes 를 계산한다.
+3. subMinuteMs 0~59999 를 저장해 전투 시간을 분에 누적 변환하며 매 전투 ceil 은 금지한다.
+4. 버전 고정 PCG 계열을 stream 별 state/counter snapshot에서 계산한다.
+5. UI·이름·초상 RNG 가 전투/전리품 RNG 에 영향을 주지 않도록 leaf streamKey를 사용한다.
+6. 같은 input + 같은 clock state + 같은 RNG state는 같은 `ClockTarget` + RNG result + drawCounter를 반환한다. 세계 시간이 증가하는 결과는 직접 clock delta로 commit하지 않고 반드시 `WorldTimeTraversal`에 target으로 전달한다.
 
-입력 `combatDeltaMs, totalGameMinutes, subMinuteMs, rngStreams` → `TimeRngKernel.advanceCombat` → 검증된 `newGameMinutes, newSubMinuteMs, changedStreams` → SavePort/영속세대 → PublicProjection/후속 handler.
+입력 `combatDeltaMs, immutable totalGameMinutes, subMinuteMs, rngStreams` → `GameClockMath.targetAfter`/`DeterministicRng` → 검증된 `ClockTarget + rng outcome + changedStreams/drawCounter` → 호출 gameplay UseCase가 `WorldTimeTraversal(COMBAT_ELAPSED)`로 crossed boundary를 처리 → `DomainDelta` → `SavePort.commit` → commit 후 PublicProjection. F002는 세계 시간을 직접 변경하지 않는다.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
 |---|---|
 | 정상 | clock=(분0,잔여0), 10 초 전투를6 회 → clock=(분1,잔여0); 1 회60 초와 동일 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
+| 일부 성공 | kernel 자체에는 영속 부분 성공이 없다. 호출 command가 원자적이면 kernel 반환값도 같은 DomainDelta에 포함되고, resumable `AdvanceTime`이면 각 경계 segment의 DomainDelta에 한 번만 포함된다. |
 | 일부 실패 | 복구 중단; 다른 난수기로 자동 대체 금지 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
+| 중복 실행 | 동일 immutable 입력의 반환값은 동치다. kernel에는 commandId·멱등키·receipt가 없으며, 실제 효과 1회 보장은 호출 gameplay command의 receipt 계약이 담당한다. |
+| 재기동 후 | kernel은 저장 상태를 복구하지 않는다. 호출 command가 복원한 authoritative clock/RNG snapshot으로 같은 계산을 재현한다. |
 | 비정상 데이터 | 다음 연도1 월1 일00:00; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
 | 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
 
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| TimeRngKernel | 신규/기존 adapter | 게임 달력·잔여 밀리초·RNG 스트림 규칙조정자 | TimeRngKernel.advanceCombat(ms: CombatMillis, clock: WorldClock) -> ClockDelta |
+| GameClockMath / DeterministicRng | 신규/기존 순수 함수 | target clock과 leaf-stream RNG 결과 계산. boundary 처리·commit·publish는 하지 않음 | `targetAfter(...) -> ClockTarget`; `draw(...) -> RngOutcome` |
 | 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+| 저장 경계 | 호출 gameplay UseCase의 existing SavePort 재사용 | kernel은 DAO/SavePort/codec을 호출하지 않는다. 호출자가 returned Delta를 commit한다. | outer use case별 typed read/commit 계약 |
+| 표현 변환 | 호출 gameplay UseCase의 existing mapper 재사용 | kernel은 PublicView/DomainEvent를 만들지 않는다. | outer use case별 PublicViewOrReport |
 
 <a id="func-p2-003"></a>
 ### 5.3. FUNC-P2-003 — 예약·점유·자원 선점
@@ -156,16 +188,16 @@
 |---|---|
 | 기능 목적 | 예약·점유·자원 선점을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§1998](#src-1998), [§1999](#src-1999), [§2000](#src-2000), [§2001](#src-2001), [§2002](#src-2002), [§2003](#src-2003), [§2004](#src-2004), [§2005](#src-2005), [§2031](#src-2031), [§2032](#src-2032), [§2033](#src-2033), [§2037](#src-2037), [§2038](#src-2038), [§2039](#src-2039), [§2040](#src-2040) |
-| 기능 요구사항 | 1. 인물 점유 구간은 반열린 [start,end)로 정의한다<br>2. 제작재료 선점은 available=owned-reserved 로 계산하고 다른 예약과 재사용하지 못한다<br>3. 실제 동시 활동은 하나의 월드 시간 위에서 여러 due event 로 모델링하며 Thread 를 NPC 별로 생성하지 않는다<br>4. 취소·만료·대상 소멸 시 해제할 자원과 이미 소비된 비용을 구분한다 |
+| 기능 요구사항 | 1. 인물 점유 구간은 반열린 [start,end)로 정의하고 `dueMinute > startMinute`만 허용한다<br>2. 자원 claim별 정책으로 available=owned-held를 계산하고 다른 예약과 재사용하지 못한다<br>3. 실제 동시 활동은 하나의 월드 시간 위에서 `ACTION_START`/`ACTION_COMPLETE` boundary 후보로 모델링하며 Thread를 NPC별로 생성하지 않는다<br>4. 예약 우선순위·활동 중단·취소·자원 claim 정책을 서로 다른 versioned 계약으로 유지한다<br>5. 충돌 탐지와 원자적 일정 변경은 제공하되 P2가 플레이어/NPC 대신 해결책을 선택하지 않는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | `ScheduleService.reserve(request: ScheduleRequest, calendar: OccupancyView) -> ReservationDelta` |
+| 주요 메소드 | `ScheduleService.reserve(request, calendar) -> ReservationResult`; `cancel(actionId, reason) -> CancellationDelta`; `resolveConflict(conflictId, selectedResolution, expectedVersions) -> ReservationDelta` |
 | 입력 필드/값 | actorIds[], resourceClaims[], startMinute, endMinute, actionType; 구체적값: 리아 [14:00,18:00) 치료 후 [18:00,20:00) 훈련 |
 | 반환값 | reservationGroupId, acceptedInterval, rejectionDetails; 정상결과: 경계 접점은 충돌 없음 |
 | 입력 검증 | 동일 인물 [17:59,19:00) → ScheduleConflict; 선점 생성0; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | 재료예약 뒤 일정저장 실패 → 자원 예약/일정 모두 rollback; typed DomainError 로상위호출에전달 |
 | Transaction | WorldSession의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고 WorldEngine은 `SavePort`만 호출한다. SaveCoordinator 구현의 단일 write transaction 성공 뒤 게시한다. |
-| 상태 변화 | PLANNED → RESERVED → RUNNING → COMPLETED/CANCELLED/FAILED |
+| 상태 변화 | PLANNED → RESERVED → RUNNING ↔ PAUSED; RUNNING/PAUSED → NEEDS_RESCHEDULE; 비terminal 상태 → COMPLETED/CANCELLED/FAILED |
 | 소유 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P2-TASK-011](#p2-task-011) · [P2-TASK-012](#p2-task-012) · [P2-TASK-013](#p2-task-013) · [P2-TASK-014](#p2-task-014) · [P2-TASK-015](#p2-task-015) |
@@ -174,12 +206,28 @@
 #### 처리 순서 및 데이터 흐름
 1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
 2. 인물 점유 구간은 반열린 [start,end)로 정의한다
-3. 제작재료 선점은 available=owned-reserved 로 계산하고 다른 예약과 재사용하지 못한다
-4. 실제 동시 활동은 하나의 월드 시간 위에서 여러 due event 로 모델링하며 Thread 를 NPC 별로 생성하지 않는다
-5. 취소·만료·대상 소멸 시 해제할 자원과 이미 소비된 비용을 구분한다
+3. 각 claim은 `available=owned-heldTotal`로 계산하고 다른 active hold와 재사용하지 못한다.
+4. 실제 동시 활동은 하나의 월드 시간 위에서 ACTION_START/ACTION_COMPLETE candidate로 모델링하며 Thread를 NPC별로 생성하지 않는다.
+5. 취소·만료·대상 소멸 시 action kind profile과 취소 stage에 따라 해제·소비·환불·손실을 구분한다.
 6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
 
 입력 `actorIds[], resourceClaims[], startMinute, endMinute, actionType` → `ScheduleService.reserve` → 검증된 `reservationGroupId, acceptedInterval, rejectionDetails` → SavePort/영속세대 → PublicProjection/후속 handler.
+
+#### `ScheduledActionPayload.v1` canonical 계약
+
+`scheduled_action.payload_json`은 canonical JSON이며 최상위 `codec` 값은 정확히 `ScheduledActionPayload.v1`이다. 호환 불가능한 의미 변경은 v1을 재해석하지 않고 새 codec을 등록한다. `ownerType`/`ownerId`는 취소 권한·비용 책임을 가진 하나의 typed entity ref이고, `participants[]`는 `(type,id)`로 정렬·유일한 실제 활동 주체다. v1은 최소 `ownerType`, `ownerId`, `participants[]`, `schedulePriority`, `resourceClaims[]`, `actionInterruptionPolicy`, `actionCancellationPolicy`, `completionEventType`을 가진다. `action_kind`, `start_minute`, `due_minute`는 물리 열만 권위이며 payload에 중복하지 않는다. nullable `actor_id`가 있으면 `MERCENARY` participant 중 하나와 일치한다.
+
+`SchedulePriority.v1`은 `EMERGENCY_RESCUE > WORLD_CRISIS > OFFICIAL_OPERATION > TREATMENT > PERSONAL_COMMITMENT > TRAINING_ROUTINE`이다. 이는 같은 시각 boundary 실행 순서의 `BoundaryCandidate.priority`와 별개다. 충돌 응답은 `ScheduleConflictResult(conflictingActionIds, conflictingRowVersions, requestedPriority, existingPriorities, allowedResolutions, consequencePreview)`이며, P2는 `KEEP_EXISTING`, `PREEMPT`, `PAUSE_AND_INSERT`, `CANCEL_AND_INSERT`, `RESCHEDULE_REQUIRED`의 가능 여부만 계산한다. 새 일정이 더 높고 기존 action 정책이 허용할 때만 preemption 후보가 되며 자동 선택하지 않는다. 선택 후 `ScheduleService.resolveConflict`는 응답의 row version을 expected version으로 받아 대상 row를 재검증하고 기존 일정 전이·자원 정산·새 일정 삽입을 하나의 `DomainDelta`와 commit으로 처리한다.
+
+`consequencePreview`는 내부 계산 객체가 아니라 `PublicConsequencePreview.v1`이다. `authoritative consequence -> visibility/redaction projection -> public preview`만 UI로 전달하며 hidden affection/personality, 비공개 relationship flag, 미공개 확률과 사건 조건은 필드 자체를 만들지 않는다. preview는 현재 일정, 제안 일정, 취소 일정, 환불/손실 금액, 소비/반환 자원, 손실 진행률, 공개 가능한 관계·평판 영향, 재예약 가능 여부를 포함하고 각 값은 `KNOWN`, `NONE(영향 없음)`, `UNDETERMINED(확정되지 않음)`, `UNKNOWN(알 수 없음)`, `NOT_APPLICABLE` 중 하나를 명시한다. `PREEMPT`, `CANCEL_AND_INSERT`, RUNNING/PAUSED action 취소, `FINAL_BOUNDARY` 취소 및 금액·자원·진행률·관계 손실이 있는 변경은 모두 Risk Action이다. UI는 위 항목을 확인 화면에 표시한 뒤에만 명령을 제출하며, 명령은 `previewCodec`, `previewHash`, `conflictingRowVersions`를 포함한다. commit 직전 값이 달라지면 `StaleConsequencePreview`로 효과 0건을 반환하고 새 preview를 요구한다.
+
+`ActionInterruptionPolicy.v1` 결과는 `CONTINUE`, `PAUSE`, `CANCEL`, `FAIL`, `RESCHEDULE_REQUIRED`다. 적용 결과인 `ActionInterruptionOutcome.v1`은 `actionId`, `reasonCode`, `result`, `progressBasis`, `progressValue`, claim별 `settlement`, `nextState`, `consequenceEventCodec`을 canonical 순서로 가진다. `ActionCancellationPolicy.v1`은 `BEFORE_START`, `IN_PROGRESS`, `FINAL_BOUNDARY`별 환불·진행 손실·재예약 가능 여부를 고정한다. 훈련/치료/운송/개인 약속/제작의 선택은 콘텐츠 계약이 지정하며 P2에 종류별 의사결정을 hard-code하지 않는다. 각 action kind의 소유 Phase는 `ActionKindPolicyProfile.v1(resumable, progressBasis, interruptionPolicy, cancellationByStage, consequenceEventCodec)`을 콘텐츠 계약과 fixture로 제공해야 한다. P2는 profile을 적용해 outcome·원자 전이·claim 정산만 확정하고 관계 기억·제작 손실·치료 악화 같은 도메인 결과는 소유 Phase의 namespaced event codec으로 생성한다. 이 outcome은 enclosing schedule gameplay command의 result/DomainDelta 일부이며 별도 receipt lifecycle을 만들지 않는다.
+
+`resourceClaims[]`의 각 항목은 `resourceKind`, `resourceId`, `quantity`, `policy`를 가지며 `(resourceKind,resourceId)`로 정렬·유일하고 quantity는 양수다. top-level consumption policy는 두지 않는다. `ResourceClaimPolicy.v1`은 `CONSUME_ON_RESERVE`, `HOLD_THEN_CONSUME_ON_START`, `HOLD_THEN_CONSUME_ON_COMPLETE`, `HOLD_AND_RELEASE`다. 치료실 침대/경매 보증금은 `HOLD_AND_RELEASE`, 제작 재료는 `HOLD_THEN_CONSUME_ON_START`, 예약금은 `CONSUME_ON_RESERVE`의 대표 fixture다. `heldTotal=SUM(active hold quantity)`, `0<=heldTotal<=owned`, `available=owned-heldTotal`을 항상 만족하며 consume은 owned 감소와 hold 종료를, cancel/fail/complete는 정책별 release/refund를 actionId+claim key 기준 정확히 한 번 원자 처리한다.
+
+0-duration action과 same-time 재귀 scheduling은 v1에서 금지한다. `dueMinute > startMinute`이어야 하며 boundary 처리 중 새 action의 start/due를 현재 boundaryTime 이하로 만들 수 없다. 이 금지는 ScheduledAction에 한정되지 않는다. 모든 candidate evaluator와 그 `DomainDelta`는 현재 `boundaryTime` 이하의 새 boundary-bearing state/candidate를 만들 수 없고, 즉시 파생 결과는 현재 delta/event에 포함하거나 batch 수집 전에 conditional candidate로 선언해야 한다. 위반은 slice 전체를 mutation 없이 `SYSTEM_HALT`한다. 현재 시각에 시작하는 외부 예약 명령은 그 명령의 delta에서 `ACTION_START` 전이를 적용하고 future `ACTION_COMPLETE`만 등록한다. 따라서 same-time fixpoint·depth·cycle framework는 만들지 않는다.
+
+반복 예약은 **DEFERRED**다. `RecurringScheduleSpec.v1` 계약 소유자는 P2이고 발생 materialization은 Phase 17 NPC 일정 통합, 사용자 편집/표현은 Phase 22가 소유한다. P2 v1은 반복 rule을 실행하지 않으며 이를 단일 예약 누락으로 오인하지 않는다.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
@@ -196,7 +244,7 @@
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| ScheduleService | 신규/기존 adapter | 예약·점유·자원 선점 규칙조정자 | ScheduleService.reserve(request: ScheduleRequest, calendar: OccupancyView) -> ReservationDelta |
+| ScheduleService | 신규/기존 adapter | 예약·점유·자원 선점 규칙조정자. 충돌 해결책은 계산하되 선택하지 않음 | `reserve(...) -> ReservationResult`; `cancel(...) -> CancellationDelta`; `resolveConflict(...) -> ReservationDelta` |
 | 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
 | 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
 | 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
@@ -206,18 +254,18 @@
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 이벤트 경계 시간 진행·자동중단을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 모든 세계 시간 증가를 `WorldTimeTraversal`로 통합하고 `AdvanceTime`은 그중 FAST_FORWARD goal facade로 구현한다. |
 | 관련 요구사항 | [§1991](#src-1991), [§1992](#src-1992), [§1993](#src-1993), [§1994](#src-1994), [§1995](#src-1995), [§1996](#src-1996), [§1997](#src-1997), [§2006](#src-2006), [§2007](#src-2007), [§2008](#src-2008), [§2009](#src-2009), [§2010](#src-2010), [§2011](#src-2011), [§2012](#src-2012), [§2013](#src-2013) 외 27 개 |
-| 기능 요구사항 | 1. 다음 예약·날짜·질병·던전·위기 경계의 최소값으로 점프한다<br>2. 같은 시각은 예약완료→인물상태→던전→시장→랭킹→사건 순서를 고정하되 승인된 phase order 버전으로 관리한다<br>3. P0 중단은 해제 불가이며 P1~P4 정책을 평가해 남은 목표와 lastProcessedBoundary 를 보존한다<br>4. 30 일 전체를 하나의 장시간 transaction 으로 묶지 않고 경계별 bounded commit 한다 |
+| 기능 요구사항 | 1. FAST_FORWARD/COMBAT_ELAPSED/DUNGEON_ACTION/TRAVEL/NORMAL_ACTION이 같은 crossed-boundary traversal을 사용한다<br>2. 한 시각의 모든 source 후보를 수집해 `BoundaryOrder.v1`로 정렬하며 eventSequence를 입력으로 사용하지 않는다<br>3. durable goal/cursor/limits/decision gate로 process kill과 continuation을 복구한다<br>4. SYSTEM_HALT, DECISION_GATE, TIME_ADVANCE_STOP을 분리한다<br>5. timestamp batch와 durability `BoundarySlice`를 구분하며 gate가 없으면 batch 전체, gate가 있으면 deterministic prefix를 한 bounded commit으로 확정한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `TimeAdvanceEngine.advance(request: TimeAdvanceRequest) -> AdvanceResult` |
-| 입력 필드/값 | targetGameMinute, stopPolicy, stepBudget, previousCursor; 구체적값: 08:00→내일08:00,10:30 치료완료 중단 설정 |
-| 반환값 | status, actualGameTime, lastBoundary, remainingTarget; 정상결과: 10:30 에서 정지·치료1 회완료·남은 목표 유지 |
+| 입력 필드/값 | goal, `TimeAdvanceInterruptPolicy.v1`, `TimeTraversalLimits.v1`; 구체적값: `UntilFirstActionCompleted(treatment-10:30)` |
+| 반환값 | COMPLETED/INTERRUPTED/DECISION_REQUIRED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED, actualGameTime, lastBoundary, remainingGoal, continuationOfCommandId? |
 | 입력 검증 | target=current, due event 없음 → NoOp·시간/RNG 불변; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | 3 일째 처리 실패 → 마지막 성공 경계에서 정지; 다음 실행에서 이미 처리한 일마감 재실행 없음; typed DomainError 로상위호출에전달 |
-| Transaction | `AdvanceTime`은 외부 envelope/receipt 1개를 유지하는 resumable command다. 각 경계는 `SavePort.commitSegment(envelope, segmentNo, domainDelta, terminal)`로 current rows·RNG·events·`time_advance_state`·같은 receipt의 RUNNING/terminal 상태를 한 bounded transaction에 확정한다. segment별 CommandEnvelope/receipt를 만들지 않는다. |
-| 상태 변화 | IDLE → RUNNING(segment 0..N) → INTERRUPTED/COMPLETED; commit 전 실패는 이전 RUNNING 경계에서 재개 |
+| Transaction | `AdvanceTime`은 envelope/receipt 1개를 유지하는 resumable gameplay command다. admission은 segment 0, 각 `BoundarySlice`는 `SavePort.commitSegment` 한 번으로 current rows·RNG·events·state·같은 receipt에 확정한다. segment별 envelope/receipt는 없다. |
+| 상태 변화 | receipt RUNNING→COMMITTED/INTERRUPTED/REJECTED; `time_advance_state`는 RUNNING에서 명시된 7개 terminal result 중 하나로 전이한다. terminal은 재활성화하지 않는다. |
 | 소유 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P2-TASK-016](#p2-task-016) · [P2-TASK-017](#p2-task-017) · [P2-TASK-018](#p2-task-018) · [P2-TASK-019](#p2-task-019) · [P2-TASK-020](#p2-task-020) |
@@ -225,23 +273,23 @@
 
 #### 처리 순서 및 데이터 흐름
 1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. 다음 예약·날짜·질병·던전·위기 경계의 최소값으로 점프한다
-3. 같은 시각은 예약완료→인물상태→던전→시장→랭킹→사건 순서를 고정하되 승인된 phase order 버전으로 관리한다
-4. P0 중단은 해제 불가이며 P1~P4 정책을 평가해 남은 목표와 lastProcessedBoundary 를 보존한다
-5. 30 일 전체를 하나의 장시간 transaction 으로 묶지 않고 경계별 bounded commit 한다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
+2. `TIME_ADVANCE_GOAL.v1`로 입력 goal을 canonical bytes로 고정하고, resume 가능한 `time_advance_state`와 첫 RUNNING receipt를 boundary 처리 전 admission segment 0에서 원자 저장한다. 시작 시 이미 만족된 goal은 같은 admission transaction에서 COMPLETED로 끝낸다.
+3. immutable `BoundarySource` 목록이 제시한 다음 경계 최소값과 goal/target cap 중 이른 시각으로 이동하고, 같은 시각 후보는 `BoundaryOrder.v1`으로 정렬한다.
+4. SYSTEM_HALT는 해제 가능한 중요도와 분리하며, decision/stop 정책을 정해진 precedence로 평가해 남은 goal과 cursor를 보존한다.
+5. 일반 gameplay command는 active AdvanceTime이 terminal이 될 때까지 FIFO 대기한다. PAUSE/CANCEL/APP_BACKGROUND/CLOSE는 control lane에서 다음 commit 경계에 요청을 반영한다.
+6. 하나의 경계 DomainDelta 불변식→해당행/RNG/events/같은 receipt/time_advance_state 원자 commit→commit 후 PublicView/event 발행. 실패 시메모리/DB 게시를하지않는다.
 
-입력 `targetGameMinute, stopPolicy, stepBudget, previousCursor` → `TimeAdvanceEngine.advance` → 검증된 `status, actualGameTime, lastBoundary, remainingTarget` → SavePort/영속세대 → PublicProjection/후속 handler.
+입력 `TimeAdvanceGoal, interruptPolicy` → `WorldSession.execute(AdvanceTime envelope)` → `TimeAdvanceEngine.advance` → 경계별 `DomainDelta` → `SavePort.commitSegment` → 검증된 `status, actualGameTime, lastBoundary, remainingGoal` → commit 후 PublicProjection/후속 handler.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
 |---|---|
-| 정상 | 08:00→내일08:00,10:30 치료완료 중단 설정 → 10:30 에서 정지·치료1 회완료·남은 목표 유지 |
+| 정상 | `UntilFirstActionCompleted(treatment-10:30)`와 P1 중단 설정 → 10:30 에서 정지·치료1 회완료·codec화된 남은 goal 유지 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 시간 진행은 명시적인 resumable 예외다. 이미 COMMITTED된 경계는 보존되고 같은 외부 receipt는 RUNNING이며, 다음 실행이 `(lastBoundaryKey,nextEventSequence)`에서 재개한다. 한 경계 내부의 정산은 분할하지 않는다. |
-| 일부 실패 | 마지막 성공 경계에서 정지; 다음 실행에서 이미 처리한 일마감 재실행 없음 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
+| 일부 성공 | 시간 진행은 명시적인 resumable 예외다. 이미 COMMITTED된 경계는 보존되며 `RUNNING` receipt만 `(cursor,lastBoundaryKey,goalCodec,goalPayload)`에서 복원한다. `nextEventSequence`는 output counter이지 resume 정렬 입력이 아니다. 한 경계 내부 정산은 분할하지 않는다. |
+| 일부 실패 | 마지막 성공 경계에서 안전 정지한다. 다음 실행은 이미 처리한 boundary를 재실행하지 않는다. `INTERRUPTED`는 terminal이며 원 receipt를 RUNNING으로 되돌리지 않는다. |
+| 중복 실행 | 같은 RUNNING/COMMITTED envelope는 전역 receipt 규칙을 따른다. `INTERRUPTED` 뒤 사용자의 “계속”은 **새** commandId/envelope로 제출하고 `continuationOfCommandId`에 prior commandId를 보존한다. 새 command는 durable remaining goal에서 시작한다. |
+| 재기동 후 | process kill 뒤 RUNNING state는 마지막 committed cursor와 goal codec/payload로 재개한다. terminal receipt는 결과만 재조회하며 재활성화하지 않는다. codec 미지원·payload 무결성 실패는 해석하지 않고 안전 정지한다. |
 | 비정상 데이터 | NoOp·시간/RNG 불변; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
 | 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
 
@@ -258,42 +306,42 @@
 
 | 항목 | 설계 |
 |---|---|
-| 기능 목적 | 세션·생명주기·작업 종료을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
+| 기능 목적 | 세션·생명주기·작업 종료를 gameplay command plane과 분리된 **lifecycle/control plane**으로 구현한다. 이를 통해 drain·pause·close가 command receipt/event를 새로 만들지 않고 active gameplay command의 안전 경계만 제어한다. |
 | 관련 요구사항 | [§3057](#src-3057), [§3086](#src-3086), [§3087](#src-3087), [§3088](#src-3088), [§3089](#src-3089) |
 | 기능 요구사항 | 1. 앱 background 에 새 명령 유입을 멈추고 안전한 경계에서 일시정지한다<br>2. structured concurrency 와 세션 epoch 로 이전 슬롯 작업을 무효화한다<br>3. DB 커밋 작업과 CPU 계산 취소를 분리하고 CancellationException 을 일반 실패로 삼켜 계속하지 않는다<br>4. 종료 callback 이 반드시 호출된다고 가정하지 않으며 이미 커밋한 체크포인트에서 복원한다 |
-| 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
+| 비기능/운영 | 완전 오프라인, deterministic control ordering, structured concurrency, 실패 범위 명시를 준수한다. gameplay idempotency는 lifecycle operation에 적용하지 않으며, 로컬 진단은 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `WorldSession.close(reason: CloseReason) -> CloseResult` |
-| 입력 필드/값 | reason, epoch, inFlightCommandId, allowCommitDrain; 구체적값: 앱 종료 후 현실24 시간 경과 후 재실행 |
+| 입력 필드/값 | reason, epoch, activeCommandCorrelation, allowCommitDrain; 구체적값: 앱 종료 후 현실24 시간 경과 후 재실행 |
 | 반환값 | closedEpoch, lastCommittedVersion, outstandingJobs=0; 정상결과: worldTime·치료 잔여시간 동일 |
 | 입력 검증 | 슬롯 A 이미지/DB 응답 지연 중 슬롯 B 로드 → epoch A 응답을 버려 B 에 쓰기0; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | 프로세스 즉시 kill 로 onStop 미실행 → 마지막 committed 상태만 복원; typed DomainError 로상위호출에전달 |
-| Transaction | WorldSession의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고 WorldEngine은 `SavePort`만 호출한다. SaveCoordinator 구현의 단일 write transaction 성공 뒤 게시한다. |
-| 상태 변화 | OPEN → PAUSING → PAUSED → CLOSING → CLOSED |
+| Transaction | lifecycle operation 자체의 SavePort commit·command_receipt·DomainEvent는 없다. active `AdvanceTime`이 있으면 control request를 기록하고 다음 safe boundary commit에서 `CANCEL_ADVANCE`는 기존 gameplay receipt를 `CANCELLED`/`COMMITTED`, PAUSE/APP_BACKGROUND/CLOSE는 `INTERRUPTED`로 terminal 전이시킨다. 이미 terminal이거나 active command가 없으면 runtime-only NoOp다. |
+| 상태 변화 | OPEN → PAUSING → PAUSED → CLOSING → CLOSED. 이는 runtime session state이며 gameplay state machine/receipt가 아니다. |
 | 소유 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P2-TASK-021](#p2-task-021) · [P2-TASK-022](#p2-task-022) · [P2-TASK-023](#p2-task-023) · [P2-TASK-024](#p2-task-024) · [P2-TASK-025](#p2-task-025) |
 | 관련 Test | [P2-UT-005](#p2-ut-005) · [P2-BT-005](#p2-bt-005) · [P2-FT-005](#p2-ft-005) · [P2-CT-005](#p2-ct-005) · [P2-IT-005](#p2-it-005) |
 
 #### 처리 순서 및 데이터 흐름
-1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
-2. 앱 background 에 새 명령 유입을 멈추고 안전한 경계에서 일시정지한다
-3. structured concurrency 와 세션 epoch 로 이전 슬롯 작업을 무효화한다
-4. DB 커밋 작업과 CPU 계산 취소를 분리하고 CancellationException 을 일반 실패로 삼켜 계속하지 않는다
-5. 종료 callback 이 반드시 호출된다고 가정하지 않으며 이미 커밋한 체크포인트에서 복원한다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
+1. control plane이 현재 session epoch와 runtime state를 확인한다. CommandEnvelope, payloadHash, commandId, gameplay receipt를 만들거나 조회하지 않는다.
+2. 앱 background/PAUSE는 새 gameplay command 수락을 막고 active AdvanceTime의 다음 안전 경계에 pause request를 반영한다.
+3. structured concurrency 와 session epoch로 이전 슬롯 작업의 publish/commit 진입을 무효화한다.
+4. DB commit 작업과 CPU 계산 취소를 분리하고 CancellationException을 일반 실패로 삼켜 계속하지 않는다.
+5. CLOSE는 새 gameplay command를 거절하고 active command의 boundary commit을 drain한 뒤 consumer를 join한다. callback 미실행 process kill은 이미 committed state로 복원한다.
+6. control action은 독립 `DomainDelta`/event/receipt를 publish하지 않는다. active gameplay command가 terminal transition을 commit했을 때만 그 command의 normal publish 경로가 동작한다.
 
-입력 `reason, epoch, inFlightCommandId, allowCommitDrain` → `WorldSession.close` → 검증된 `closedEpoch, lastCommittedVersion, outstandingJobs=0` → SavePort/영속세대 → PublicProjection/후속 handler.
+입력 `reason, epoch, activeCommand correlation, allowCommitDrain` → `WorldSession.close/pause/resume` → runtime lane 제어 및 필요 시 active AdvanceTime의 다음 boundary terminal 전이 → `closedEpoch, lastCommittedVersion, outstandingJobs=0`. lifecycle 자체의 SavePort/receipt/event/publish 경로는 없다.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
 |---|---|
 | 정상 | 앱 종료 후 현실24 시간 경과 후 재실행 → worldTime·치료 잔여시간 동일 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
+| 일부 성공 | lifecycle control은 partial gameplay mutation을 만들지 않는다. drain 전 성공한 boundary만 durable하고, 다음 boundary는 실행하지 않는다. |
 | 일부 실패 | 마지막 committed 상태만 복원 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
-| 재기동 후 | 동일 COMMITTED snapshot/version 을 기준으로 재조회한다. 미완료 시간 진행과 상태는 checkpoint 에서 이어간다. |
+| 중복 실행 | `pause/close/resume`은 현재 lifecycle state에 대한 idempotent runtime operation이다. commandId/payloadHash/IdempotencyKeyReuse/command receipt replay 규칙을 사용하지 않는다. |
+| 재기동 후 | 새 session은 마지막 committed world state와 RUNNING time advance state만 복구한다. lifecycle 호출 자체를 replay하지 않는다. |
 | 비정상 데이터 | epoch A 응답을 버려 B 에 쓰기0; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
 | 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
 
@@ -302,37 +350,129 @@
 |---|---|---|---|
 | WorldSession | 신규/기존 adapter | 세션·생명주기·작업 종료 규칙조정자 | WorldSession.close(reason: CloseReason) -> CloseResult |
 | 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
-| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
-| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 | 공개/허용 결과만 변환; 별도 Projection 클래스는 둘 이상의 소비자가 공유할 때만 추가 | use case별 PublicViewOrReport |
+| 저장 경계 | active gameplay command의 existing SavePort만 재사용 | lifecycle은 직접 commit하지 않는다. control request가 active AdvanceTime terminal transition을 요구할 때만 기존 gameplay boundary commit에 포함된다. | runtime state / outer command commit 계약 |
+| 표현 변환 | existing session-state mapper 재사용 | lifecycle은 DomainEvent/PublicSnapshot을 독립 publish하지 않는다. | session state observation |
 
 
 ### Phase 특화 알고리즘·수치·판단
 
-### 경계와 RNG의 구체적 실행
+### WorldTimeTraversal·TimeAdvance 복구·동일시각 순서·RNG의 구체 계약
+
+#### `TIME_ADVANCE_GOAL.v1`과 durable cursor
+
+`AdvanceTime` payload는 lambda나 UI 문구가 아닌 versioned canonical goal을 보낸다.
+
 ```kotlin
-// 실행 설계 pseudocode: 라이브러리 API에 종속되지 않는 순수 엔진 계약
-while (clock < target && !cancelRequested) {
-    val boundary = min(nextDueAction, nextCalendarClose, nextWorldEvent, target)
-    val inputs = frozenInputsAt(boundary)
-    val segment = evaluateBoundaryInVersionedOrder(inputs)
-    assertInvariants(segment.domainDelta)
-    savePort.commitSegment(
-        envelope = envelope,
-        segmentNo = cursor.segmentNo,
-        delta = segment.domainDelta,
-        terminal = segment.terminalStatus
-    ) // 같은 receipt를 RUNNING→terminal로 갱신
-    publishCommittedView()
-    if (interruptPolicy.mustStop(segment.events)) return Interrupted(boundary, target)
+sealed interface TimeAdvanceGoal {
+    data class UntilMinute(val targetMinute: GameMinute) : TimeAdvanceGoal
+    data class UntilFirstActionCompleted(val actionSelector: ActionSelector) : TimeAdvanceGoal
+    data class UntilAllActionsCompleted(val actionSelector: ActionSelector) : TimeAdvanceGoal
+    data class UntilCondition(val condition: ConditionRef) : TimeAdvanceGoal
+    data class UntilEvent(val selector: EventSelector) : TimeAdvanceGoal
 }
 ```
-첫 segment transaction이 `command_receipt(lifecycle_status=RUNNING)`과 `time_advance_state(command_epoch,request_id,segment_no,last_boundary_key,next_event_sequence)`를 함께 생성한다. 이후 transaction은 같은 `(epoch,command_id)` receipt만 갱신한다. 중복 제출 시 terminal receipt면 결과를 반환하고 RUNNING이면 저장 cursor부터 재개한다. eventSequence는 외부 command 전체에서 연속이며 segment가 바뀌어도 0으로 초기화하지 않는다. 동일 시각 처리 순서는 **ADR-TIME-02 v1**인 예약완료→인물 생애/건강→던전/위기→경제→랭킹→사건으로 고정한다. 같은 시각 P0 사건이 생기면 그 경계의 원자적 결과만 확정하고 다음 경계로 이동하지 않는다.
 
-세계 시간 `(m,r)`에서 전투 경과 `d`를 반영할 때 `q=(r+d)//60000`, `r2=(r+d)%60000`, `m2=m+q`이다. 큰 d 의 덧셈 overflow 는 checked operation 으로 검사한다. 전투는 10ms 정밀도, 세계 예약은 분 정밀도를 보존한다. 내부 정렬에 현실시각이나 coroutine 완료순서를 사용하지 않는다.
+`TIME_ADVANCE_GOAL.v1`은 `targetType`과 canonical `goalPayload`를 함께 직렬화한다. `ActionSelector`는 stable action ID 또는 codec화된 canonical selector이고, `ConditionRef`는 등록된 condition codec ID와 canonical payload다. `EventSelector`는 event type/최소 importance/subject ref의 canonical 조합이며 “다음 중요 사건까지”는 `UntilEvent(minImportance=approvedSignificantThreshold)`로 표현한다. 임의 함수, HashMap iteration, 현재 화면 상태는 payload에 넣지 않는다. condition은 공개 authoritative state만 읽는 순수식이며 RNG를 소비하지 않는다. `UntilMinute`는 future candidate가 없어도 `min(targetMinute,maxAdvanceMinute)`까지 clock-only terminal step을 만들므로 목표 시각에 도달할 수 있다. 반면 action/event/condition goal은 등록 source와 goal resolver가 future match 부재를 증명하면 `UNREACHABLE`이며 임의의 calendar tick을 생성해 무한 탐색하지 않는다.
 
-RNG는 **PCG32-XSH-RR v1**로 확정한다. unsigned 64-bit wraparound에서 `state = oldState * 6364136223846793005 + increment`, `xorshifted = uint32(((oldState >> 18) xor oldState) >> 27)`, `rot = oldState >> 59`, 출력은 `rotr32(xorshifted, rot)`다. 초기화는 `state=0`, `increment=(initSeq<<1)|1`, 1회 draw, `state += initState`, 1회 draw 순서다. reference vector `initState=42, initSeq=54`의 첫 6개 출력은 `a15c02b7,7b47f409,ba1d3330,83d2f293,bfa4784b,cbed606e`다.
+결과는 `COMPLETED`, `INTERRUPTED`, `DECISION_REQUIRED`, `CANCELLED`, `UNREACHABLE`, `LIMIT_REACHED`, `FAILED`다. 사용자의 `CANCEL_ADVANCE`는 목표를 폐기해 다음 safe boundary에서 `CANCELLED`/receipt `COMMITTED`로 끝나며 continuation할 수 없다. `PAUSE`, `APP_BACKGROUND`, `CLOSE`와 사건 정책의 `TIME_ADVANCE_STOP`은 남은 goal을 보존한 `INTERRUPTED`/receipt `INTERRUPTED`이고 새 continuation command로만 잇는다. 대상 action이 `CANCELLED`/`FAILED`/소멸했거나 source가 future match 부재를 증명하면 `UNREACHABLE`, 절대 `maxAdvanceMinute` 또는 양의 `maxBoundaryCount`에 먼저 닿으면 `LIMIT_REACHED`다. 이 두 limit는 command 수락 시 `TimeTraversalLimits.v1` 값으로 payload/state에 snapshot하여 재개 중 바꾸지 않는다. wall-clock timeout·CPU 속도·8ms cutoff는 authoritative 결과 입력이 아니다. 시작 상태에서 goal이 이미 참이면 time/RNG 변경 없이 `COMPLETED`다.
 
-stream seed는 UTF-8 `"MUD-RNG-PCG32.v1\u0000" + u32be(worldSeedByteLength) + worldSeedBytes + u32be(streamKeyByteLength) + streamKeyBytes`의 SHA-256에서 앞 8 byte big-endian을 `initState`, 다음 8 byte를 `initSeq`로 읽는다. streamKey는 `world/npc-id/decision`, `combat/encounter-id`, `loot/source-id`, `portrait/npc-id`, `name/npc-id`, `enhance/item-id/attempt-no`처럼 분리하며 문자열 합/언어 `hashCode`를 쓰지 않는다.
+시간 진행 preset의 사용자 preference persistence와 편집 UI는 Phase 22 `:app`/DataStore 소유로 **DEFERRED**한다. core에는 immutable `TimeAdvancePresetPolicy` DTO만 둘 수 있고, app은 command 수락 전에 이를 명시적 goal/policy/limits 값으로 펼친다. save/receipt에는 preset ID나 mutable preference를 권위 입력으로 저장하지 않는다.
+
+`time_advance_state`의 권위 복구 최소값은 `command_epoch`, `request_id`, `start_minute`, `progression_mode`, `engine_order_version`, `target_type`, `goal_codec`, `goal_payload`, `continuation_of_epoch/command_id`, `time_advance_interrupt_policy_json`, `max_advance_minute`, `max_boundary_count`, `max_candidates_per_batch`, `max_candidate_payload_bytes`, `max_pending_batch_bytes`, `processed_boundary_count`, `segment_no`, `last_boundary_key`, `next_boundary_minute`, `pending_decision_gate_id`, `pending_batch_codec/payload/hash`, 선택적인 `pending_elapsed_codec/payload/hash/effective_minute`, `status`다. pending batch 3필드는 DECISION_REQUIRED일 때만 모두 존재하고 그 외에는 모두 NULL이다. pending elapsed 4필드는 non-FAST_FORWARD sealed outcome이 있는 DECISION_REQUIRED에서만 모두 존재한다. `progress_summary_json`은 UI/debug 파생값이며 복구 권위가 아니다. `next_event_sequence`는 receipt 단위 출력 counter일 뿐 다음 경계 선택·정렬 입력이 아니다. `remainingGoal`은 terminal authoritative state와 original goal에서 재구축한다.
+
+`SemanticBoundaryBatch`는 한 세계시각의 ordered candidate 전체다. `BoundarySlice`는 batch의 아직 미처리된 연속 구간이며 일반적으로 전체 batch 하나다. mandatory DECISION_GATE가 있으면 gate를 포함한 prefix가 첫 slice, 선택 이후 후보가 다음 continuation의 slice다. admission이 segment 0이고 각 committed slice가 다음 segment다. `processed_boundary_count`는 timestamp batch의 마지막 후보까지 확정했을 때만 증가하며 `segment_no`는 slice마다 증가한다. TIME_ADVANCE_STOP은 완전한 batch 뒤에만 적용한다. future multi-time batching은 완전한 batch만 deterministic count/byte profile로 묶는 별도 ADR이 필요하다. process kill 뒤 RUNNING만 마지막 cursor에서 같은 commandId로 복구하고 terminal은 새 continuation으로만 잇는다.
+
+#### 모든 세계 시간 증가의 단일 경로
+
+`WorldTimeTraversal`은 세계 clock 증가의 유일한 authoritative 경로다. `FAST_FORWARD`, `COMBAT_ELAPSED`, `DUNGEON_ACTION`, `TRAVEL`, `NORMAL_ACTION` 모두 `GameClockMath`가 계산한 target을 이 경로에 전달하고 `BoundaryEngine`이 crossed boundary를 빠짐없이 처리한 뒤에만 clock delta를 commit한다. 모드 차이는 presentation·notification defer·TimeAdvance stop policy뿐이며 boundary discovery/order/state mutation을 바꾸지 않는다. 특히 Phase 6 전투가 10:29→10:31로 진행되면 10:30 예약 완료를 처리한다. 전투 중 일반 notification은 commit 후 요약할 수 있지만 authoritative settlement는 미룰 수 없고 mandatory decision gate만 별도 규칙으로 멈춘다.
+
+commit mode는 두 실행 형태를 갖는다. `FAST_FORWARD`는 admission과 durable `BoundarySlice` segment를 사용한다. gate 없는 짧은 `COMBAT_ELAPSED`/`DUNGEON_ACTION`/`NORMAL_ACTION`은 target까지의 bounded traversal plan과 outer domain delta를 바깥 gameplay command 한 transaction에 commit한다. 장시간 `TRAVEL`, 안전 복귀, 장기 치료·훈련·운송·제작은 단일 clock jump가 아니라 `ScheduledAction + WorldTimeTraversal`로 시작·진행·완료를 모델링한다.
+
+`ATOMIC_SEALED.v1`은 target 전 mandatory gate가 최대 1개, 공개 가능한 허용 선택이 1..8개이고 각 선택 적용 뒤 target까지 추가 mandatory gate 없이 candidate/payload cap, 승인 codec과 `maxAdvanceMinute`/`maxBoundaryCount` 안임을 mutation 전에 증명할 수 있는 짧은 action에만 허용한다. choice canonical key 순으로 각 branch를 `BoundaryOrder.v1` 순회하며 총 평가 수는 `choiceCount × maxBoundaryCount`(최대 `8 × maxBoundaryCount`)를 넘지 않는다. 각 branch의 boundaryTime은 cursor보다 엄격히 증가해야 하므로 cycle/current-time 재진입은 typed reject이고, 같은 state로 합류하는 diamond도 branch별 평가하되 위 총 상한 안이다. 별도 wall-clock/휴리스틱 중단은 없다. 하나라도 증명할 수 없거나 중첩 gate가 가능하면 mutation 0의 typed reject이며, 해당 action kind는 처음부터 `SCHEDULED`를 사용한다. eligibility preflight를 통과한 뒤 target 이전 mandatory `DECISION_GATE`가 발견되면 전체 command를 reject하거나 outcome을 재계산하지 않는다. gate transaction은 gate까지의 ordered prefix와 clock, action-local RNG state/drawCounter, `SealedElapsedOutcome.v1(codec,payload,hash,effectiveMinute,domainResultId)` 및 원 target/goal, gate와 미처리 suffix를 기존 `time_advance_state`에 원자 저장하고 원 receipt를 `INTERRUPTED/DECISION_REQUIRED`로 끝낸다. sealed outcome은 사용자에게 `확정 대기`로만 보이며 아직 공개 완료 결과가 아니지만, 이후 재추첨·취소·변경할 수 없다. 새 decision continuation command가 predecessor/gate/suffix/outcome hash를 검증한 뒤 target까지를 하나의 짧은 원자 protected completion으로 처리한다. 이 구간에는 PAUSE/CANCEL/일반 limit terminal을 끼워 넣지 않고 control은 commit 뒤에 관측한다. process kill은 이전 완전한 `DECISION_REQUIRED` 또는 완전한 target commit 중 하나만 남긴다. 후속 Phase는 별도 segment receipt나 독자적인 clock 증가 경로를 만들 수 없다.
+
+따라서 `ATOMIC_SEALED`와 `SCHEDULED` 분류는 action kind 계약에 고정한다. 일반 전투처럼 짧고 취소 불가능한 결과만 전자이며, DecisionGate를 사이에 두고 장시간 지속될 수 있는 행동은 후자다. 안전 복귀는 패배 손실과 복귀 시작을 먼저 commit하고, 이동 중 gate에서는 `PAUSED/DECISION_REQUIRED`, 완료 boundary에서만 HUB 도착·최종 회복을 적용하는 취소 불가 ScheduledAction이다. 이미 commit된 gameplay 결과는 중간 세계 사건 때문에 사후 취소하지 않고, 증가한 세계시간 사이의 boundary도 생략하지 않는다.
+
+#### Authoritative lane과 boundary source
+
+```kotlin
+interface BoundarySource {
+    val sourceId: String // registry가 부여한 canonical ASCII ID
+    fun nextTimeAfter(snapshot: WorldSnapshot, cursor: BoundaryCursor): GameTime?
+    fun candidatesAt(snapshot: WorldSnapshot, time: GameTime): List<BoundaryCandidate>
+}
+```
+
+registry는 유일한 ASCII `sourceId`를 부여하고 canonical byte order로 고정한다. 모든 source의 `nextTimeAfter` 최소값을 구한 뒤 그 시각에 모든 source의 `candidatesAt`을 호출하므로 한 source가 같은 시각에 N개 후보를 반환해도 누락하지 않는다. `ScheduledActionBoundarySource`는 `(status,start_minute,id)`에서 `ACTION_START`, `(status,due_minute,id)`에서 `ACTION_COMPLETE` 후보를 모두 반환한다. Phase 2는 이 source와 `CalendarBoundarySource`만 구현한다. `Health`, `Facility`, `Dungeon`, `NpcDecision`, `Economy`, `WorldEvent` source는 후속 Phase가 같은 계약으로 등록하며 engine 본체에 분기하지 않는다.
+
+`BoundaryCandidate.v1`은 `sourceId`, `boundaryTime`, `category`, `priority`, `domainSequence`, `stableEntityId`, `stableSubKey`, `candidateKind`, `payloadCodec`, `payloadHash`, `canonicalPayload`를 가진 불변 **평가 지시**이며 아직 `DomainEvent`가 아니다. `candidateKind`와 payload codec은 소유 domain을 포함한 versioned namespace를 사용한다(예: `scheduled.action.start.v1`, `scheduled.action.complete.v1`). evaluator가 ordered candidate를 적용한 뒤에만 `ScheduledActionStarted.v1`, `ScheduledActionCompleted.v1` 같은 namespaced DomainEvent를 만든다. 전투의 action/event type과 일반 문자열 `ACTION_START`를 공유하지 않는다.
+
+atomic elapsed outcome도 target clock 뒤 별도 tail delta로 붙이지 않고 `sourceId=elapsed.action`, `candidateKind=elapsed.action.apply.v1`, `boundaryTime=effectiveMinute`인 기존 `BoundaryCandidate.v1`로 frozen batch에 포함한다. Phase 2 v1 전투는 `category=COMBAT_CRISIS`, action contract가 고정한 priority/domainSequence, `stableEntityId=domainResultId(combatResultId)`, `stableSubKey=combat`을 사용한다. continuation commandId는 causal receipt/FK에는 사용하지만 ordering key에는 쓰지 않는다. 후속 atomic action kind는 구현 전에 같은 registry binding에 category/priority/domainSequence와 command와 무관한 stable domain result key를 등록해야 하며 등록이 없으면 admission reject다. 따라서 no-gate와 sealed continuation 모두 effectiveMinute의 lifecycle/action-complete/economy/decision candidate와 `BoundaryOrder.v1` 한 규칙으로 상대 순서를 결정한다. no-gate와 gated run은 receipt/gate provenance가 다르므로 전체 event bytes/hash 동치를 요구하지 않고 target batch의 business candidate 상대 순서와 최종 domain projection을 비교한다. 동일 gated 입력의 무중단/kill-recovery끼리는 receipt·event를 포함한 전체 stateHash/RNG/event order가 같아야 한다.
+
+`BoundaryRegistryBinding.v1`은 `engineOrderVersion` 하나가 exact ordered sourceId set, BoundaryOrder version, candidate codec/resolver version을 가리키는 immutable catalog다. RUNNING state는 수락 시 version을 snapshot하며 재개 시 그 binding을 사용할 수 없으면 current registry로 silent fallback하지 않고 SYSTEM_HALT한다. 각 source는 pure/no-RNG/no-mutation이고 `candidatesAt(time)`은 정확히 그 time의 unique BoundaryKey만 반환해야 한다. 전체 후보 수가 snapshot한 `maxCandidatesPerBatch`를 넘거나 candidate canonical payload가 `maxCandidatePayloadBytes=65,536`을 넘거나, aggregate pending batch와 sealed elapsed payload가 `maxPendingBatchBytes=1,048,576`을 넘거나, wrong-time/duplicate/past candidate가 있으면 partial mutation 없이 typed `BoundaryLimitReached`로 끝낸다. 이미 저장된 payload의 cap/hash/codec 위반은 corruption으로 보고 SYSTEM_HALT한다.
+
+P2는 test-only `BoundarySourceConformanceSuite.v1`을 제공하고 모든 후속 source가 이를 재사용한다. suite는 cursor 이하/past candidate, same-time 재귀 생성, duplicate key, 호출마다 달라지는 순서, source 내부 RNG 소비, time 불일치, 미등록 codec/invalid canonical payload, candidate/byte cap 초과를 검출한다. 새 source의 Phase Gate는 자체 예시 테스트로 이 규칙을 복제하지 않고 이 suite를 통과해야 한다.
+
+active FAST_FORWARD/장시간 ScheduledAction traversal 중 UI가 새 일반 gameplay command를 제출하면 mailbox에 숨겨 쌓지 않고 `AdvanceInProgress(activeCommandId, allowedControls=[PAUSE,CANCEL_ADVANCE])`를 반환한다. 이미 수락된 내부/scheduler command는 terminal 뒤 FIFO를 유지한다. `PAUSE`, `CANCEL_ADVANCE`, `APP_BACKGROUND`, `CLOSE`만 control lane에서 수락되어 다음 committed boundary 뒤에 반영된다. 단, sealed atomic outcome의 decision continuation은 취소 가능한 시간 진행이 아니라 이미 확정된 결과의 protected completion이므로 `allowedControls=[]`이고 결과 적용 또는 다음 gate commit까지 control을 반영하지 않는다. `CANCEL_ADVANCE`는 취소 가능한 traversal에서만 `CANCELLED`/receipt `COMMITTED`, 나머지 control은 `INTERRUPTED`를 만든다. 현실 8ms는 UI cooperative yield/측정에만 쓰며 segment, admission, domain 결과 입력이 아니다. continuous run과 여러 bounded commit run은 stateHash, world time, RNG state/counter, actions, event ordering이 같아야 한다.
+
+control 요청을 수락하면 UI에는 즉시 `PAUSE_REQUESTED`, `CANCEL_REQUESTED`, `BACKGROUND_STOP_REQUESTED`, `CLOSE_REQUESTED` 피드백을 주고 authority는 다음 deterministic safe boundary commit에서만 멈춘다. 접수 지연은 NFR-PERF-012로 측정하지만 wall-clock timeout을 boundary 선택·분할·결과에 사용하지 않는다. safe boundary 도달 지연이 예산을 넘으면 성능 실패로 기록할 뿐 simulation 결과를 바꾸지 않는다.
+
+```text
+while (goalNotSatisfied && limitsRemain) {
+    time = minOfGoalCapAnd(sources.mapNotNull { it.nextTimeAfter(snapshot, cursor) }.minOrNull())
+    if (time == goalMinute && noCandidateAt(time)) return commitClockOnly(COMPLETED)
+    candidates = sources.flatMap { it.candidatesAt(snapshot, time) }
+    ordered = candidates.sortBy(BoundaryOrder.v1)
+    outcome = BoundaryEngine.foldFrozenBatch(snapshot, cursor, ordered)
+    assertInvariants(outcome.delta)
+    SavePort.commitSegment(envelope, segmentNo, outcome.delta, outcome.terminal)
+    publishOnlyAfterCommit()
+    if (outcome.decisionGate != null || outcome.timeAdvanceStop) break
+}
+```
+
+candidate 목록은 batch 시작 snapshot에서 한 번 수집·검증해 동결한다. evaluator는 정렬된 순서로 immutable intermediate snapshot을 fold하므로 뒤 candidate는 같은 batch의 앞 candidate가 만든 상태를 본다. 다만 DB에는 slice 전체를 한 번만 원자 commit하고 중간 snapshot은 publish하지 않는다. 처리 중 생성된 DomainEvent는 현재 delta에 포함하지만 새 same-time candidate 재수집은 하지 않는다. 모든 source의 evaluator 출력은 현재 시각 이하의 새 boundary-bearing state/candidate 생성 금지 불변식을 검증하며 위반은 partial mutation 없는 `SYSTEM_HALT`다. 별도 phaseRank가 필요한 파생 결과는 batch 시작에 conditional candidate로 미리 선언하고 fold 시 적용 또는 deterministic NoOp한다.
+
+`BoundaryCursor`는 `(boundaryTime,lastCompletedBoundaryKey,pendingDecisionGateId?)`를 보존한다. candidate 처리 중 어떤 source도 현재 시각 이하의 새 candidate를 만들 수 없지만, mandatory `DECISION_GATE`에서 batch 일부를 멈추는 것은 허용한다. gate 이전 deterministic prerequisite와 gate candidate까지 commit하고 gate ID/cursor 및 미처리 ordered suffix의 `BoundaryBatch.v1` bytes/hash를 저장하며 뒤 후보는 처리하지 않는다. 선택 command가 gate를 해결하면 새 continuation command가 저장된 suffix의 codec/hash와 registry binding을 검증한 뒤 `lastCompletedBoundaryKey` 다음부터 처리한다. 이 **decision continuation의 첫 transaction**은 predecessor epoch/id·DECISION_REQUIRED 상태·gate 선택·suffix hash를 검증하고, predecessor당 UNIQUE child를 claim하며, 선택 적용·저장 suffix 소비·새 receipt/state/event를 함께 원자 commit한다. claim만 먼저 저장하지 않고 predecessor terminal row/payload는 감사 근거로 그대로 둔다. current source 재조회로 suffix를 바꾸거나 검증 실패를 silent 보정하지 않고 SYSTEM_HALT한다.
+
+#### `BoundaryOrder.v1` (`ADR-TIME-02`)
+
+`SYSTEM_HALT`는 DB invariant 실패·save corruption·codec incompatibility 같은 시스템 실패이며 boundary category/Event가 아니다. 미commit batch를 폐기하고 직전 durable state를 보존한 채 즉시 안전 정지한다. `DECISION_GATE`는 플레이어 선택 없이는 뒤 결과를 결정할 수 없는 authoritative candidate다. `TIME_ADVANCE_STOP`은 같은 timestamp의 authoritative batch를 끝까지 commit한 뒤 다음 timestamp로 넘어가지 않는 fast-forward 결과다.
+
+terminal commit 뒤 `TimeAdvanceSummaryView.v1`은 receipt, committed public world events와 현재 public snapshot에서 재구축하는 read projection이다. `elapsedMinutes`, `terminalReason`, 주요 사건, 완료 작업, 자원 경고, 중요 상태 변화, 낮은 중요도 유형별 묶음 수, 확인하지 않은 중요 사건 수와 가능한 다음 행동/continuation을 포함한다. 항목은 public event order로 안정 정렬하고 상세 목록에는 고정 개수 상한과 overflow count를 둔다. 숨은 값은 `PublicConsequencePreview`와 같은 visibility projection을 거친다. summary 생성 실패는 gameplay commit을 rollback하지 않으며 재조회로 복원한다.
+
+같은 `boundaryTime`에는 아래 category rank를 오름차순으로 적용한다. mandatory decision prerequisite/gate는 해당 category의 stable candidate로 표현한다. 일반 P0 중요도는 자동으로 SYSTEM_HALT를 뜻하지 않으며 policy상 forced stop일 수 있다.
+
+| phaseRank | category | 같은 category의 domainSequence 예 |
+|---:|---|---|
+| 10 | `MANDATORY_DECISION_PREREQUISITE` | gate를 판정하는 최소 확정 prerequisite |
+| 20 | `LIFECYCLE` | succession, death, health/life transition 및 필요한 DECISION_GATE |
+| 30 | `COMBAT_CRISIS` | combat resolution, dungeon/world crisis 및 필요한 DECISION_GATE |
+| 40 | `ORGANIZATION_DECISION` | party/guild/NPC organization decision 및 필요한 DECISION_GATE |
+| 50 | `SCHEDULED_ACTION_START` | ACTION_START와 hold→consume 전이 |
+| 55 | `SCHEDULED_ACTION_COMPLETE` | ACTION_COMPLETE와 release/consume/completion |
+| 60 | `RELATIONSHIP` | relationship/memory consequence |
+| 70 | `ECONOMY_SETTLEMENT` | market/ledger settlement |
+| 80 | `RANKING` | ranking snapshot/settlement |
+| 90 | `WORLD_EVENT` | deterministic world event resolution |
+| 100 | `INFORMATION` | notification/projection request only; authoritative mutation 재실행 금지 |
+
+완전한 tie-break는 `(boundaryTime, phaseRank, priority, domainSequence, stableEntityId, stableSubKey, sourceId)`다. `priority`는 boundary 실행 priority이며 `SchedulePriority`가 아니다. `eventSequence`는 정렬 뒤 부여되는 결과값이고 입력으로 역사용하지 않는다. 동일 minute의 forced stop + NPC death + action start/complete + economy settlement는 반복 실행마다 동일 stateHash/event order/RNG state를 만들어야 한다.
+
+`last_boundary_key`는 `BoundaryKey.v1`의 canonical encoding이다. v1은 위 tuple을 length/type-delimited bytes로 보존한다. provider 등록 순서·eventSequence·DB 반환 순서는 포함하지 않는다. cursor가 같은 boundaryTime을 가리키면 이 key보다 큰 후보만 선택하고, 다음 시간으로 이동하면 key를 초기화한다.
+
+#### `TimeAdvanceInterruptPolicy.v1` precedence
+
+`SYSTEM_HALT`(정책 밖, 무시 불가) → mandatory `DECISION_GATE` → explicit `CANCEL_ADVANCE` → forced stop/PAUSE/APP_BACKGROUND/CLOSE → importance threshold와 favorite boost → explicit stop event type → explicit ignore → resource/party safety guard → summary/defer 순으로 평가한다. 상위 결과를 하위 규칙이 취소할 수 없다. 따라서 SYSTEM_HALT+ignore는 halt, decision gate+cancel은 `DECISION_REQUIRED`, cancel+ignore는 `CANCELLED`, forced stop+ignore는 `INTERRUPTED`, resource safety+summary는 stop, ordinary ignored+summary는 continue다. 모든 집합은 canonical rule ID 순서로 평가해 단일 결과를 낸다.
+
+세계 시간 `(m,r)`에서 전투 경과 `d`를 반영할 때 `q=(r+d)//60000`, `r2=(r+d)%60000`, `m2=m+q`이다. 큰 d 의 덧셈 overflow 는 checked operation으로 검사한다. 전투는 10ms 정밀도, 세계 예약은 분 정밀도를 보존하며 정렬에 현실시각·coroutine 완료순서·DB 반환순서를 사용하지 않는다.
+
+#### `PCG32-XSH-RR.v1` (`ADR-RNG-03`)
+
+RNG는 unsigned 64-bit wraparound에서 `state = oldState * 6364136223846793005 + increment`, `xorshifted = uint32(((oldState >> 18) xor oldState) >> 27)`, `rot = uint32(oldState >> 59)`, 출력 `rotr32(xorshifted, rot)`으로 고정한다. `rotr32(x, 0)=x`; 그 외 rotate count는 `rot & 31`이고 모든 shift는 unsigned logical shift다. 초기화는 `state=0`, `increment=(initSeq<<1)|1`(uint64 wrap), draw 1회, `state += initState`(uint64 wrap), draw 1회 순서다. reference vector `initState=42`, `initSeq=54`의 첫 6개 unsigned hex 출력은 `a15c02b7,7b47f409,ba1d3330,83d2f293,bfa4784b,cbed606e`다.
+
+`world_state.world_seed`는 lower-case unsigned uint64 fixed16 hex TEXT다. `worldSeedBytes`는 이 hex의 UTF-8 16 bytes가 아니라 numeric unsigned uint64의 **big-endian raw 8 bytes**다. seed material은 UTF-8 `"MUD-RNG-PCG32.v1\u0000" + u32be(8) + worldSeedBytes + u32be(streamKeyByteLength) + UTF8(streamKey)`이고 SHA-256의 bytes 0..7/8..15를 각각 big-endian `initState`/`initSeq`로 읽는다. golden fixture는 `worldSeed`, `streamKey`, raw `worldSeedBytes`, expected `initState`, `initSeq`, first N outputs, final drawCounter를 JVM과 Android에서 모두 비교한다.
+
+stream key는 leaf responsibility까지 분리한다: `combat/<encounterId>/hit`, `combat/<encounterId>/crit`, `loot/<sourceId>`, `dungeon/<dungeonId>`, `npc/<npcId>/decision`, `world/event`, `potential/<entityId>`, `portrait/<npcId>`, `name/<npcId>`, `enhance/<itemId>/<attemptNo>`. 한 subsystem의 raw draw 수 변경은 다른 leaf stream state/output/counter를 바꾸지 않는다. 문자열 합의 임의 형식·언어 `hashCode`·locale formatting은 금지한다.
 
 draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw 1회, `bernoulli(0|1_000_000)` 0회·그 외 `bounded(1_000_000)` 1회 이상, weighted choice는 ID 오름차순 후보에 `bounded(totalWeight)` 1회 이상, shuffle은 뒤에서 앞으로 Fisher-Yates `bounded(i+1)`을 수행한다. 부적격 후보는 draw 전에 제거하고, 선언 순서가 의미인 effect/loot node는 canonical node order로 평가한다. 모든 raw draw마다 counter를 1 증가시키며 branch 결과뿐 아니라 최종 counter도 golden으로 비교한다.
 
@@ -347,13 +487,13 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | 논리/물리 객체 | 저장영역 | 최초 계약 Phase | 접근 | PK/유일조건 | 조회 Index |
 |---|---|---|---|---|---|
 | command_receipt | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | epoch,command_id | state_version, lifecycle_status,epoch,state_version |
-| occupancy | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | resource_key,action_id | resource_key,status,start_minute,end_minute |
-| resource_reservation | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | resource_kind,resource_id,action_id | resource_id,status, action_id |
+| occupancy | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | resource_kind,resource_id,action_id | resource_kind,resource_id,status,start_minute,end_minute |
+| resource_reservation | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | resource_kind,resource_id,action_id | resource_kind,resource_id,status; action_id |
 | rng_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | stream_key | PK/UNIQUE |
-| scheduled_action | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | completion_event_id | status,due_minute,id, actor_id,start_minute |
+| scheduled_action | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | completion_event_id | status,start_minute,id, status,due_minute,id, actor_id,start_minute |
 | time_advance_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | command_epoch,request_id | status,next_boundary_minute,request_id |
 | world_event | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | source_epoch,source_command_id,event_sequence | game_minute,id, event_type,game_minute, source_epoch,source_command_id,event_sequence |
-| world_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK | session_epoch |
+| world_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK + CHECK(id='WORLD') | 없음(singleton scan) |
 
 모든일반 SQL 테이블은 `id TEXT NOT NULL PRIMARY KEY`, `row_version INTEGER NOT NULL DEFAULT 0`을공통필드로갖는다. nullable 는 DDL 에 NOT NULL 없는필드만이다. 단위는 `_minute`게임분/`_ms`밀리초/`_bp`0.01%p/`_ppm`0.0001%p,금액/수량 Long 정수. ID 는재사용하지않는다.
 
@@ -368,7 +508,7 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | lifecycle_status TEXT NOT NULL | RUNNING/COMMITTED/INTERRUPTED/REJECTED 상태 |
 | result_code TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | result_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| state_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| state_version INTEGER NOT NULL | 일반 command의 최종 commit version. resumable AdvanceTime은 현재까지 성공적으로 반영한 최신 segment commit version이며 과거 event의 source_version과 달라도 정상이다. |
 | game_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
 같은 ID+다른 payload는 거절한다. resumable command도 같은 receipt 한 행을 갱신하며 generation 생성 여부와 분리한다.
@@ -376,7 +516,8 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 
 | 필드/제약 | 용도 |
 |---|---|
-| resource_key TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| resource_kind TEXT NOT NULL | `ResourceIdentity.v1` kind. uppercase ASCII token 1..32자로 직접 문자열 조립을 금지한다. |
+| resource_id TEXT NOT NULL | `ResourceIdentity.v1` stable canonical ID. trim된 1..128자이며 typed factory만 생성한다. |
 | action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | start_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | end_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
@@ -412,9 +553,9 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | due_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | status TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | reservation_group_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| payload_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| payload_json TEXT NOT NULL | canonical `ScheduledActionPayload.v1` JSON. owner/participants/schedule priority/action interruption/action cancellation/resource claims/completion event를 포함한다. |
 | completion_event_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| CHECK(due_minute>=start_minute) | 불변/유일성 제약 |
+| CHECK(due_minute>start_minute) | v1은 0-duration과 same-time recursive scheduling을 금지한다. |
 #### `time_advance_state` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -422,12 +563,34 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | command_epoch TEXT NOT NULL | command_receipt.epoch FK 구성 열 |
 | request_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | segment_no INTEGER NOT NULL | 완료 segment 번호 |
-| target_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| start_minute INTEGER NOT NULL | 이 AdvanceTime command가 수락된 authoritative game minute |
+| progression_mode TEXT NOT NULL | `FAST_FORWARD`, `COMBAT_ELAPSED`, `DUNGEON_ACTION`, `TRAVEL`, `NORMAL_ACTION` |
+| engine_order_version INTEGER NOT NULL | 수락 시 snapshot한 `BoundaryRegistryBinding.v1` catalog version |
+| target_type TEXT NOT NULL | `TIME_ADVANCE_GOAL.v1` discriminator (`UNTIL_MINUTE`, `UNTIL_FIRST_ACTION_COMPLETED`, `UNTIL_ALL_ACTIONS_COMPLETED`, `UNTIL_CONDITION`, `UNTIL_EVENT`) |
+| goal_codec TEXT NOT NULL | `TIME_ADVANCE_GOAL.v1` 또는 승인된 후속 codec ID |
+| goal_payload TEXT NOT NULL | goal codec canonical payload. UI 문구·lambda·현재 화면 상태를 저장하지 않는다. |
+| continuation_of_epoch TEXT | 새 continuation이 잇는 prior terminal TimeAdvance의 epoch. commandId와 함께 있거나 함께 NULL이다. |
+| continuation_of_command_id TEXT | prior terminal TimeAdvance commandId. `(continuation_of_epoch,continuation_of_command_id)`는 predecessor당 한 child만 허용한다. |
+| processed_boundary_count INTEGER NOT NULL | commit 완료한 semantic boundary batch 수. maxBoundaryCount 판정의 권위값 |
+| max_advance_minute INTEGER NOT NULL | command 수락 시 snapshot한 절대 상한 |
+| max_boundary_count INTEGER NOT NULL | command 수락 시 snapshot한 양의 경계 수 상한 |
+| max_candidates_per_batch INTEGER NOT NULL | 한 timestamp에서 허용하는 양의 candidate 상한 |
+| max_candidate_payload_bytes INTEGER NOT NULL | candidate 한 개 canonical payload 상한. v1 baseline 65,536 bytes |
+| max_pending_batch_bytes INTEGER NOT NULL | pending suffix와 sealed elapsed payload 합계 상한. v1 baseline 1,048,576 bytes |
 | last_boundary_key TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | next_boundary_minute INTEGER | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| next_event_sequence INTEGER NOT NULL | 외부 command 전체의 다음 event sequence |
-| interrupt_policy_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| status TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| next_event_sequence INTEGER NOT NULL | 외부 command 전체의 다음 event sequence output counter. boundary 선택·동일시각 sort input이 아니다. |
+| pending_decision_gate_id TEXT | 같은 시각 batch를 DECISION_GATE에서 멈춘 경우의 durable gate ref |
+| pending_batch_codec TEXT | DECISION_REQUIRED에서 미처리 suffix를 보존하는 `BoundaryBatch.v1`; 그 외 NULL |
+| pending_batch_payload BLOB | ordered candidate suffix canonical bytes; `maxCandidatesPerBatch` 상한 적용 |
+| pending_batch_hash TEXT | codec+payload SHA-256; resume 전 검증 |
+| pending_elapsed_codec TEXT | non-FAST_FORWARD decision gate에서 보존한 `SealedElapsedOutcome.v1` codec |
+| pending_elapsed_payload BLOB | 이미 계산되어 재추첨할 수 없는 action outcome canonical bytes |
+| pending_elapsed_hash TEXT | codec+payload SHA-256; continuation 전에 검증 |
+| pending_elapsed_effective_minute INTEGER | sealed outcome을 정확히 한 번 적용할 target world minute |
+| time_advance_interrupt_policy_json TEXT NOT NULL | `TimeAdvanceInterruptPolicy.v1` canonical JSON; ActionInterruptionPolicy와 별개 |
+| progress_summary_json TEXT | UI/debug 파생 summary. 복구 권위가 아니며 current state/goal에서 재구축 가능해야 한다. |
+| status TEXT NOT NULL | RUNNING/COMPLETED/INTERRUPTED/DECISION_REQUIRED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED. terminal continuation은 새 command로만 생성한다. |
 #### `world_event` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -436,12 +599,12 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | source_event_id TEXT | 다른 사건에서 파생됐을 때의 원본 Event ID |
 | source_epoch TEXT NOT NULL CHECK(length(source_epoch)>0) | 원인 command receipt의 epoch. source_command_id와 복합 FK |
 | source_command_id TEXT NOT NULL CHECK(length(source_command_id)>0) | 원인 command receipt의 command_id. source_epoch와 복합 FK |
-| source_version INTEGER NOT NULL CHECK(source_version>=0) | 원인 command receipt와 동일한 state_version |
+| source_version INTEGER NOT NULL CHECK(source_version>=0) | event를 실제 생성한 commit의 stateVersion. resumable command가 이후 segment를 commit하면 최종 receipt.stateVersion과 달라도 정상이다. |
 | event_type TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | event_sequence INTEGER NOT NULL CHECK(event_sequence>=0) | 같은 (source_epoch,source_command_id) 안에서 0부터 단조 증가하는 발행 순서 |
 | game_minute INTEGER NOT NULL CHECK(game_minute>=0) | 월드 시작 후 누적 게임 분 |
 | sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999) | 같은 game_minute 안의 0..59,999 밀리초 |
-| visibility TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| visibility TEXT NOT NULL | `EventVisibility.v1`: PUBLIC/PARTICIPANTS/OBSERVER_SCOPED/SYSTEM_HIDDEN |
 | importance INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | payload_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | consumed_mask INTEGER NOT NULL DEFAULT 0 | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
@@ -453,7 +616,7 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 |---|---|
 | total_game_minutes INTEGER NOT NULL CHECK(total_game_minutes>=0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | sub_minute_ms INTEGER NOT NULL CHECK(sub_minute_ms BETWEEN 0 AND 59999) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| world_seed TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| world_seed TEXT NOT NULL CHECK(length(world_seed)=16 AND world_seed=lower(world_seed) AND world_seed NOT GLOB '*[^0-9a-f]*') | lower-case unsigned uint64 fixed16 hex. RNG seed material은 이를 numeric big-endian raw 8 bytes로 decode하며 UTF-8 hex bytes를 사용하지 않는다. |
 | session_epoch TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | branch_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
@@ -464,7 +627,7 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | player_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | state_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
-1 개 캠페인 DB 에서 현재 materialized world 는 한 행. Seed 는 unsigned64 를 고정16 진수 TEXT 로 직렬화.
+`id`는 `WORLD`만 허용하는 PK다. DB가 최대 한 행을 강제하고 bootstrap/quick-load가 정확히 한 행인지 검사하므로 `1 campaign DB = 1 authoritative world_state`다. Seed 는 unsigned64 를 고정16 진수 TEXT 로 직렬화.
 
 ### FK·대량처리·Lock·Isolation
 권위관계는선언된 FK/UNIQUE 와명령불변식을함께사용한다. polymorphic owner/subject/contentId 는 cross-DB FK 를만들지않고 ReferenceValidator 로검사한다. 가족/역사/증표/유일물품은 ON DELETE RESTRICT/보존요약으로보호한다. FK 다형성검사를 DB 가자동보장한다고가정하지않는다.
@@ -477,7 +640,7 @@ Index 는조회조건/정렬을기준으로추가하고 EXPLAIN QUERY PLAN 과�
 ```sql
 -- 같은 writer transaction 안에서 overlap 검사 후 예약/선점 삽입
 SELECT id FROM occupancy
-WHERE resource_key = :resourceKey AND status IN ('RESERVED','RUNNING')
+WHERE resource_kind = :resourceKind AND resource_id = :resourceId AND status IN ('RESERVED','ACTIVE')
   AND :newStart < end_minute AND start_minute < :newEnd
 LIMIT 1;
 -- 반환 1행이면 ScheduleConflict. 없는 경우에만 예약 관련 행을 함께 INSERT.
@@ -511,27 +674,28 @@ CREATE INDEX IF NOT EXISTS ix_command_receipt_2 ON command_receipt(lifecycle_sta
 CREATE TABLE IF NOT EXISTS occupancy (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  resource_key TEXT NOT NULL,
+  resource_kind TEXT NOT NULL CHECK(length(resource_kind) BETWEEN 1 AND 32 AND resource_kind=upper(resource_kind) AND resource_kind NOT GLOB '*[^A-Z0-9_]*' AND substr(resource_kind,1,1) GLOB '[A-Z]'),
+  resource_id TEXT NOT NULL CHECK(length(resource_id) BETWEEN 1 AND 128 AND resource_id=trim(resource_id)),
   action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT,
   start_minute INTEGER NOT NULL,
   end_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('RESERVED','ACTIVE','RELEASED','CANCELLED')),
   CHECK(end_minute>start_minute),
-  UNIQUE(resource_key,action_id)
+  UNIQUE(resource_kind,resource_id,action_id)
 );
-CREATE INDEX IF NOT EXISTS ix_occupancy_1 ON occupancy(resource_key,status,start_minute,end_minute);
+CREATE INDEX IF NOT EXISTS ix_occupancy_1 ON occupancy(resource_kind,resource_id,status,start_minute,end_minute);
 
 CREATE TABLE IF NOT EXISTS resource_reservation (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  resource_kind TEXT NOT NULL,
-  resource_id TEXT NOT NULL,
+  resource_kind TEXT NOT NULL CHECK(length(resource_kind) BETWEEN 1 AND 32 AND resource_kind=upper(resource_kind) AND resource_kind NOT GLOB '*[^A-Z0-9_]*' AND substr(resource_kind,1,1) GLOB '[A-Z]'),
+  resource_id TEXT NOT NULL CHECK(length(resource_id) BETWEEN 1 AND 128 AND resource_id=trim(resource_id)),
   action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT,
   quantity INTEGER NOT NULL CHECK(quantity>0),
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('HELD','CONSUMED','RELEASED','CANCELLED')),
   UNIQUE(resource_kind,resource_id,action_id)
 );
-CREATE INDEX IF NOT EXISTS ix_resource_reservation_1 ON resource_reservation(resource_id,status);
+CREATE INDEX IF NOT EXISTS ix_resource_reservation_1 ON resource_reservation(resource_kind,resource_id,status);
 CREATE INDEX IF NOT EXISTS ix_resource_reservation_2 ON resource_reservation(action_id);
 
 CREATE TABLE IF NOT EXISTS rng_state (
@@ -539,8 +703,8 @@ CREATE TABLE IF NOT EXISTS rng_state (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   stream_key TEXT NOT NULL,
   algorithm_version TEXT NOT NULL,
-  state_hex TEXT NOT NULL,
-  increment_hex TEXT NOT NULL,
+  state_hex TEXT NOT NULL CHECK(length(state_hex)=16 AND state_hex=lower(state_hex) AND state_hex NOT GLOB '*[^0-9a-f]*'),
+  increment_hex TEXT NOT NULL CHECK(length(increment_hex)=16 AND increment_hex=lower(increment_hex) AND increment_hex NOT GLOB '*[^0-9a-f]*' AND substr(increment_hex,16,1) IN ('1','3','5','7','9','b','d','f')),
   draw_counter INTEGER NOT NULL CHECK(draw_counter>=0),
   UNIQUE(stream_key)
 );
@@ -552,15 +716,16 @@ CREATE TABLE IF NOT EXISTS scheduled_action (
   action_kind TEXT NOT NULL,
   start_minute INTEGER NOT NULL,
   due_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PLANNED','RESERVED','RUNNING','PAUSED','NEEDS_RESCHEDULE','COMPLETED','CANCELLED','FAILED')),
   reservation_group_id TEXT,
   payload_json TEXT NOT NULL,
   completion_event_id TEXT,
-  CHECK(due_minute>=start_minute),
+  CHECK(due_minute>start_minute),
   UNIQUE(completion_event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_scheduled_action_1 ON scheduled_action(status,due_minute,id);
-CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(actor_id,start_minute);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(status,start_minute,id);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_3 ON scheduled_action(actor_id,start_minute);
 
 CREATE TABLE IF NOT EXISTS time_advance_state (
   id TEXT PRIMARY KEY NOT NULL,
@@ -568,14 +733,42 @@ CREATE TABLE IF NOT EXISTS time_advance_state (
   command_epoch TEXT NOT NULL,
   request_id TEXT NOT NULL,
   segment_no INTEGER NOT NULL DEFAULT 0 CHECK(segment_no>=0),
-  target_minute INTEGER NOT NULL,
+  start_minute INTEGER NOT NULL,
+  progression_mode TEXT NOT NULL CHECK(progression_mode IN ('FAST_FORWARD','COMBAT_ELAPSED','DUNGEON_ACTION','TRAVEL','NORMAL_ACTION')),
+  engine_order_version INTEGER NOT NULL,
+  target_type TEXT NOT NULL CHECK(target_type IN ('UNTIL_MINUTE','UNTIL_FIRST_ACTION_COMPLETED','UNTIL_ALL_ACTIONS_COMPLETED','UNTIL_CONDITION','UNTIL_EVENT')),
+  goal_codec TEXT NOT NULL,
+  goal_payload TEXT NOT NULL,
+  continuation_of_epoch TEXT,
+  continuation_of_command_id TEXT,
+  processed_boundary_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_boundary_count>=0),
+  max_advance_minute INTEGER NOT NULL CHECK(max_advance_minute>=start_minute),
+  max_boundary_count INTEGER NOT NULL CHECK(max_boundary_count>0),
+  max_candidates_per_batch INTEGER NOT NULL CHECK(max_candidates_per_batch>0),
+  max_candidate_payload_bytes INTEGER NOT NULL DEFAULT 65536 CHECK(max_candidate_payload_bytes BETWEEN 1 AND 65536),
+  max_pending_batch_bytes INTEGER NOT NULL DEFAULT 1048576 CHECK(max_pending_batch_bytes BETWEEN 1 AND 1048576),
   last_boundary_key TEXT,
   next_boundary_minute INTEGER,
   next_event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_event_sequence>=0),
-  interrupt_policy_json TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED')),
+  pending_decision_gate_id TEXT,
+  pending_batch_codec TEXT,
+  pending_batch_payload BLOB,
+  pending_batch_hash TEXT,
+  pending_elapsed_codec TEXT,
+  pending_elapsed_payload BLOB,
+  pending_elapsed_hash TEXT,
+  pending_elapsed_effective_minute INTEGER,
+  time_advance_interrupt_policy_json TEXT NOT NULL,
+  progress_summary_json TEXT,
+  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED','DECISION_REQUIRED','CANCELLED','UNREACHABLE','LIMIT_REACHED','FAILED')),
   UNIQUE(command_epoch,request_id),
-  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT
+  UNIQUE(continuation_of_epoch,continuation_of_command_id),
+  CHECK((continuation_of_epoch IS NULL AND continuation_of_command_id IS NULL) OR (continuation_of_epoch IS NOT NULL AND continuation_of_command_id IS NOT NULL)),
+  CHECK((status='DECISION_REQUIRED' AND pending_decision_gate_id IS NOT NULL AND pending_batch_codec IS NOT NULL AND pending_batch_payload IS NOT NULL AND pending_batch_hash IS NOT NULL) OR (status<>'DECISION_REQUIRED' AND pending_decision_gate_id IS NULL AND pending_batch_codec IS NULL AND pending_batch_payload IS NULL AND pending_batch_hash IS NULL)),
+  CHECK((pending_elapsed_codec IS NULL AND pending_elapsed_payload IS NULL AND pending_elapsed_hash IS NULL AND pending_elapsed_effective_minute IS NULL) OR (status='DECISION_REQUIRED' AND progression_mode<>'FAST_FORWARD' AND pending_elapsed_codec IS NOT NULL AND pending_elapsed_payload IS NOT NULL AND pending_elapsed_hash IS NOT NULL AND pending_elapsed_effective_minute IS NOT NULL)),
+  CHECK(coalesce(length(pending_batch_payload),0)+coalesce(length(pending_elapsed_payload),0)<=max_pending_batch_bytes),
+  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT,
+  FOREIGN KEY(continuation_of_epoch,continuation_of_command_id) REFERENCES time_advance_state(command_epoch,request_id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS ix_time_advance_state_1 ON time_advance_state(status,next_boundary_minute,request_id);
 
@@ -591,7 +784,7 @@ CREATE TABLE IF NOT EXISTS world_event (
   event_sequence INTEGER NOT NULL CHECK(event_sequence>=0),
   game_minute INTEGER NOT NULL CHECK(game_minute>=0),
   sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999),
-  visibility TEXT NOT NULL,
+  visibility TEXT NOT NULL CHECK(visibility IN ('PUBLIC','PARTICIPANTS','OBSERVER_SCOPED','SYSTEM_HIDDEN')),
   importance INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   consumed_mask INTEGER NOT NULL DEFAULT 0,
@@ -603,11 +796,11 @@ CREATE INDEX IF NOT EXISTS ix_world_event_2 ON world_event(event_type,game_minut
 CREATE INDEX IF NOT EXISTS ix_world_event_3 ON world_event(source_epoch,source_command_id,event_sequence);
 
 CREATE TABLE IF NOT EXISTS world_state (
-  id TEXT PRIMARY KEY NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL CHECK(id='WORLD'),
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   total_game_minutes INTEGER NOT NULL CHECK(total_game_minutes>=0),
   sub_minute_ms INTEGER NOT NULL CHECK(sub_minute_ms BETWEEN 0 AND 59999),
-  world_seed TEXT NOT NULL,
+  world_seed TEXT NOT NULL CHECK(length(world_seed)=16 AND world_seed=lower(world_seed) AND world_seed NOT GLOB '*[^0-9a-f]*'),
   session_epoch TEXT NOT NULL,
   branch_id TEXT NOT NULL,
   content_version TEXT NOT NULL,
@@ -618,17 +811,16 @@ CREATE TABLE IF NOT EXISTS world_state (
   player_id TEXT,
   state_hash TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 ```
 
 ## 7. Transaction / 동시성 / Thread 설계
 
 | 관점 | 이 Phase 의 구현 기준 |
 |---|---|
-| Transaction 시작/종료 | WorldEngine이 불변 Delta 계산을 완료한 뒤 `SavePort.commit`을 호출하고 `:core:save`의 SaveCoordinator 구현이 실제 Room write를 시작한다. 변경행/receipt/RNG/event/manifest→검증→commit 후에만 게시한다. compute/read/tool 은 live transaction 해당없음. |
+| Transaction 시작/종료 | Phase 2는 `SavePort` 계약과 test-only InMemory/FaultInjecting 구현으로 complete-or-previous·receipt/event/RNG 원자성을 검증한다. 실제 Room transaction은 Phase 3 SaveCoordinator가 구현하고 동일 conformance suite를 재실행한다. commit 후에만 게시한다. |
 | Rollback | 필수입력/FK/버전/금액/소유권/일정/메소드예외,affectedRows 예상불일치면해당 semantic 작업전부 rollback.이미게시된 UI 값으로 DB 복구하지않음. |
 | 부분 실패 | 하나의거래/강화/승계/보상은부분성공없음. 서로독립정비항목/검증 case/선택 background 활동만항목 receipt 로부분결과를허용. |
-| 동시 처리/중복 | 외부 mailbox는 FIFO capacity 64다. UI `trySend` 실패는 `Busy`를 반환하고 envelope를 실행한 것으로 표시하지 않으며, 이미 접수된 ID는 같은 ID로 결과를 조회한다. scheduler/resume은 drop하지 않고 suspend send한다. 시간 진행은 segment 32개 또는 순수 계산 8ms 중 먼저 도달한 지점에서 commit/yield하여 다음 외부 command를 처리한 뒤 같은 cursor를 재등록한다. epoch/version/unique receipt로 재기동 중복을 차단한다. |
+| 동시 처리/중복 | 외부 gameplay mailbox는 FIFO capacity 64다. active AdvanceTime 중 UI의 새 gameplay command는 `AdvanceInProgress`로 거절하며, 이미 수락된 내부/scheduler command는 terminal 뒤 FIFO를 지킨다. PAUSE/CANCEL_ADVANCE/APP_BACKGROUND/CLOSE만 control lane에서 다음 safe boundary에 반영한다. 현실 8ms는 UI yield/측정일 뿐 command interleave·cursor·결과를 정하지 않는다. |
 | 여러 노드 | 오프라인싱글:해당없음. 분산 lock/서버 leader election/remoteDB 를신설하지않음. |
 | Thread 생성 주체 | Application 이인프라 scope, WorldSessionFactory 가세션 scope/전용직렬 dispatcher 를소유. CPU 계산 Default/전용 dispatcher, DB/파일 IO 는 IO/context 를사용. Main 은 UI 만. |
 | Daemon/Pool | 직접 Java daemon Thread 를게임수명보장으로사용하지않음. 고정·제한 dispatcher/pool 만허용. NPC/이벤트마다 Thread 생성금지. daemon 여부에무관하게구조화 scope 종료를검증. |
@@ -671,7 +863,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-002, P2-TASK-003, P2-TASK-004 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -695,7 +887,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-005 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
@@ -719,12 +911,12 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-005 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-001, P2-IT-001 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | P2 SavePort 계약과 InMemory/FaultInjecting conformance 통합·codec·원자성 검증; Room/migration은 P3 Gate |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p2-task-004"></a>
@@ -734,8 +926,8 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-004 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:simulation / :core:common |
+| 상세 구현 내용 | ID 기반 호출과 공개 ViewState의 Loading·Empty·Error·Blocked·성공 상태를 제공한다. mutation CTA는 `WorldSession.execute`만 호출하고 UI가 authoritative 데이터를 직접 수정하지 않으며, 중복 탭과 active AdvanceTime의 `AdvanceInProgress`를 명확히 표시한다. |
+| 대상 모듈 | :app (UI 조립) → :core:simulation API. core에는 Compose/ViewState를 두지 않는다. |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, command_receipt, world_event, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p2_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -743,7 +935,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-005 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -767,7 +959,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-026 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -782,16 +974,16 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-006 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | TimeRngKernel.advanceCombat(ms: CombatMillis, clock: WorldClock) -> ClockDelta 의 DTO/오류/불변식 정의. 입력 combatDeltaMs, totalGameMinutes, subMinuteMs, rngStreams. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
+| 상세 구현 내용 | INTERNAL `TimeRngKernel.advanceCombat`의 immutable DTO/오류/불변식 정의. 입력 combatDeltaMs, immutable totalGameMinutes/subMinuteMs/rngStreams; 출력 ClockDelta/RngOutcome/drawCounter. envelope·receipt·SavePort·DomainEvent를 직접 소유하지 않는 fixture를 작성한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음. 호출 gameplay command가 world_state/rng_state를 자신의 DomainDelta로 commit한다. |
 | 설정 변경 | config.func_p2_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P0-TASK-021 |
 | 후속 Task | P2-TASK-007, P2-TASK-008, P2-TASK-009 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -806,16 +998,16 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-007 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 1 년360 일·월30 일·일24 시간과 authoritative totalGameMinutes 를 유지한다; 설계 보완안으로 subMinuteMs 0~59999 를 저장해 전투 시간을 분에 누적 변환하며 매 전투 ceil 은 금지한다; 버전 고정 PCG 계열을 채택하고 stream 별 state/counter 를 snapshot 한다; UI·이름·초상 RNG 가 전투/전리품 RNG 에 영향을 주지 않는다. 정해진 입력에서는 'clock=(분1,잔여0); 1 회60 초와 동일'을 만족해야 한다. |
+| 상세 구현 내용 | 1년360일·월30일·일24시간과 subMinuteMs 0~59999 누적, PCG32-XSH-RR.v1 unsigned 연산, raw 8-byte worldSeed codec, leaf stream key isolation과 drawCounter를 고정한다. 같은 immutable input은 같은 ClockDelta/RngOutcome/counter를 반환하며 hit draw 변경이 crit/loot/NPC stream을 바꾸지 않아야 한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음. snapshot encoding 요구만 outer gameplay persistence에 전달한다. |
 | 설정 변경 | config.func_p2_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-006 |
 | 후속 Task | P2-TASK-010 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
@@ -830,40 +1022,40 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-008 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 world_state, rng_state. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
+| 상세 구현 내용 | kernel 결과가 AdvanceTime/전투 gameplay UseCase의 DomainDelta에만 병합되는 경로를 연결한다. 부모 command의 원자 commit/receipt를 검증하되 F002 전용 receipt·event·SavePort 호출은 0건이어야 한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | F002 직접 변경 없음; outer gameplay command의 world_state/rng_state mapping만 검증한다. |
 | 설정 변경 | config.func_p2_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-006 |
 | 후속 Task | P2-TASK-010 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-002, P2-IT-002 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | outer command/WorldTimeTraversal 통합과 test-only SavePort에서 F002 직접 영속 0·RNG/clock 원자성 검증 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p2-task-009"></a>
-### P2-TASK-009 — 게임 달력·잔여 밀리초·RNG 스트림 — UI·호출 경로
+### P2-TASK-009 — 게임 달력·잔여 밀리초·RNG 스트림 — outer 호출 경로
 
 | 항목 | 설계 |
 |---|---|
 | Task ID | P2-TASK-009 |
-| 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:simulation / :core:common |
+| 목적 | F002가 직접 UI를 갖지 않고 모든 시간 변경 outer UseCase가 공통 traversal을 호출함을 완성한다. |
+| 상세 구현 내용 | F002에는 직접 UI/CLI 진입점을 만들지 않는다. 전투/시간 진행의 outer gameplay UseCase만 kernel을 호출하며, 공개 상태는 그 outer command의 commit 후 snapshot으로 관측한다. |
+| 대상 모듈 | :core:simulation / :core:common. Compose/ViewState 없음 |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음. |
 | 설정 변경 | config.func_p2_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-006 |
 | 후속 Task | P2-TASK-010 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -878,16 +1070,16 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-010 |
 | 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
+| 상세 구현 내용 | P2-UT-002..IT-002를 pure determinism, PCG/vector/seed codec, leaf isolation, outer-command-only persistence로 구현/실행한다. F002가 envelope/receipt/event/SavePort를 직접 소유하는 회귀를 독립 검토한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음; outer gameplay command integration만 검증한다. |
 | 설정 변경 | config.func_p2_002 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-007, P2-TASK-008, P2-TASK-009 |
 | 후속 Task | P2-TASK-026 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -902,7 +1094,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-011 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ScheduleService.reserve(request: ScheduleRequest, calendar: OccupancyView) -> ReservationDelta 의 DTO/오류/불변식 정의. 입력 actorIds[], resourceClaims[], startMinute, endMinute, actionType. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
+| 상세 구현 내용 | `reserve`/`cancel`/`resolveConflict`의 DTO·오류·불변식과 SchedulePriority/ActionKindPolicyProfile/claim별 정책을 정의한다. 입력 actorIds[], resourceClaims[], startMinute, endMinute, actionType과 expected row versions를 고정하고 정상·경계·실패 fixture를 작성한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | scheduled_action, occupancy, resource_reservation; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -911,7 +1103,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-012, P2-TASK-013, P2-TASK-014 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -926,7 +1118,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-012 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 인물 점유 구간은 반열린 [start,end)로 정의한다; 제작재료 선점은 available=owned-reserved 로 계산하고 다른 예약과 재사용하지 못한다; 실제 동시 활동은 하나의 월드 시간 위에서 여러 due event 로 모델링하며 Thread 를 NPC 별로 생성하지 않는다; 취소·만료·대상 소멸 시 해제할 자원과 이미 소비된 비용을 구분한다. 정해진 입력에서는 '경계 접점은 충돌 없음'을 만족해야 한다. |
+| 상세 구현 내용 | 인물 점유 구간은 반열린 [start,end), `dueMinute>startMinute`로 정의한다. claim별 `heldTotal`과 `available=owned-heldTotal`을 계산하고, ScheduleConflictResult/선택된 원자 resolution 및 BEFORE_START/IN_PROGRESS/FINAL_BOUNDARY 취소·중단·자원 정산을 구현한다. 실제 동시 활동은 하나의 월드 시간과 ACTION_START/ACTION_COMPLETE 후보로 모델링하며 NPC별 Thread를 만들지 않는다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | scheduled_action, occupancy, resource_reservation; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -935,7 +1127,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-015 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
@@ -959,12 +1151,12 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-015 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-003, P2-IT-003 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | test-only SavePort에서 schedule/claim/receipt 원자성과 codec·FK·취소 경계 검증; Room/migration은 P3 Gate |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p2-task-014"></a>
@@ -974,8 +1166,8 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-014 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:simulation / :core:common |
+| 상세 구현 내용 | 예약 목록·취소와 함께 `ScheduleConflictResult`의 충돌 대상/우선순위/허용 해결책과 `PublicConsequencePreview.v1`을 표시한다. PREEMPT/CANCEL_AND_INSERT/진행 중·FINAL_BOUNDARY 취소/손실 변경은 현재·새·취소 일정, 금액, 자원, 진행률, 공개 관계·평판, 재예약 가능 여부와 NONE/UNDETERMINED/UNKNOWN 상태를 모두 보여주는 Risk confirm 뒤에만 제출한다. preview hash/row version stale이면 재확인하며 숨은 정보와 자동 preemption, UI 직접 데이터 수정은 금지한다. |
+| 대상 모듈 | :app (예약 UI 조립) → :core:simulation ScheduleService API. core에는 Compose/ViewState를 두지 않는다. |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | scheduled_action, occupancy, resource_reservation; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p2_003 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -983,7 +1175,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-015 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1007,7 +1199,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-026 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1022,7 +1214,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-016 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | TimeAdvanceEngine.advance(request: TimeAdvanceRequest) -> AdvanceResult 의 DTO/오류/불변식 정의. 입력 targetGameMinute, stopPolicy, stepBudget, previousCursor. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
+| 상세 구현 내용 | TIME_ADVANCE_GOAL/EventSelector, TimeAdvanceInterruptPolicy/limits, progression mode, multi-candidate BoundarySource, BoundaryKey/cursor, 7개 결과와 terminal→new continuation DTO/오류/불변식을 정의한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, scheduled_action, time_advance_state, world_event; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1031,7 +1223,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-017, P2-TASK-018, P2-TASK-019 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1046,7 +1238,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-017 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 다음 예약·날짜·질병·던전·위기 경계의 최소값으로 점프한다; 같은 시각은 예약완료→인물상태→던전→시장→랭킹→사건 순서를 고정하되 승인된 phase order 버전으로 관리한다; P0 중단은 해제 불가이며 P1~P4 정책을 평가해 남은 목표와 lastProcessedBoundary 를 보존한다; 30 일 전체를 하나의 장시간 transaction 으로 묶지 않고 경계별 bounded commit 한다. 정해진 입력에서는 '10:30 에서 정지·치료1 회완료·남은 목표 유지'을 만족해야 한다. |
+| 상세 구현 내용 | 모든 elapsed mode가 WorldTimeTraversal을 사용한다. gate 없는 짧은 action은 outer commit, 중간 DecisionGate는 sealed outcome/RNG/suffix/target continuation, 장시간 action은 ScheduledAction이다. BoundaryOrder/START→COMPLETE/no-recursion과 BoundarySourceConformanceSuite/byte cap을 구현한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, scheduled_action, time_advance_state, world_event; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1055,7 +1247,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-020 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
@@ -1070,7 +1262,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-018 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 world_state, scheduled_action, time_advance_state, world_event. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
+| 상세 구현 내용 | SavePort contract와 test-only InMemory/FaultInjecting suite에 goal/cursor/gate/pending suffix, sealed elapsed outcome, candidate/pending byte cap과 segment atomicity를 연결한다. actual Room adapter/reopen/WAL/process kill/DB CHECK는 P3 인계다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, scheduled_action, time_advance_state, world_event; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1079,12 +1271,12 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-020 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-004, P2-IT-004 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | test-only SavePort conformance·codec/cursor/원자성 검증 및 P3 Room 재실행 manifest 완료 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p2-task-019"></a>
@@ -1094,8 +1286,8 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-019 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:simulation / :core:common |
+| 상세 구현 내용 | goal/policy/limit를 명시해 AdvanceTime을 호출하고 ADVANCING/요청 접수 중/INTERRUPTED/DECISION_REQUIRED/COMPLETED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED와 `AdvanceInProgress`를 구분해 표시한다. 계속은 terminal receipt 재활성화가 아니라 continuationOfCommandId를 가진 새 command로 제출한다. terminal 뒤 `TimeAdvanceSummaryView.v1`으로 경과 시간·정지 이유·주요 사건·완료 작업·자원 경고·중요 변화·묶음 수·미확인 중요 건수와 다음 행동을 표시한다. |
+| 대상 모듈 | :app (시간진행 UI 조립) → :core:simulation API. core에는 preset persistence/Compose/ViewState를 두지 않는다. |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, scheduled_action, time_advance_state, world_event; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p2_004 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -1103,7 +1295,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-020 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1118,7 +1310,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-020 |
 | 목적 | 검증 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
+| 상세 구현 내용 | 전투 중 DecisionGate의 sealed outcome/continuation, BoundarySourceConformanceSuite, payload cap, control responsiveness와 public summary를 P2-UT/BT/FT/CT/IT-004로 구현·실행하고 transaction·정보공개를 독립 리뷰한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, scheduled_action, time_advance_state, world_event; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1127,7 +1319,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P2-TASK-026 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1142,20 +1334,20 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-021 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | WorldSession.close(reason: CloseReason) -> CloseResult 의 DTO/오류/불변식 정의. 입력 reason, epoch, inFlightCommandId, allowCommitDrain. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
+| 상세 구현 내용 | lifecycle/control DTO와 OPEN/PAUSED/CLOSED 전이를 정의한다. 입력은 reason/epoch/active-command correlation/allowCommitDrain이며 CommandEnvelope·payloadHash·gameplay receipt를 사용하지 않는다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, time_advance_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | F005 직접 변경 없음. active AdvanceTime을 terminal 전이해야 할 때만 그 기존 gameplay segment transaction이 time_advance_state/receipt를 갱신한다. |
 | 설정 변경 | config.func_p2_005 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P0-TASK-021 |
 | 후속 Task | P2-TASK-022, P2-TASK-023, P2-TASK-024 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P2-UT-005, P2-BT-005, P2-FT-005, P2-CT-005, P2-IT-005 |
+| Test | P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
@@ -1166,16 +1358,16 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-022 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 앱 background 에 새 명령 유입을 멈추고 안전한 경계에서 일시정지한다; structured concurrency 와 세션 epoch 로 이전 슬롯 작업을 무효화한다; DB 커밋 작업과 CPU 계산 취소를 분리하고 CancellationException 을 일반 실패로 삼켜 계속하지 않는다; 종료 callback 이 반드시 호출된다고 가정하지 않으며 이미 커밋한 체크포인트에서 복원한다. 정해진 입력에서는 'worldTime·치료 잔여시간 동일'을 만족해야 한다. |
+| 상세 구현 내용 | admission stop→safe boundary drain→child job cancel/join→handle close 순서를 고정한다. active AdvanceTime은 CANCEL_ADVANCE이면 기존 receipt를 CANCELLED/COMMITTED, PAUSE/APP_BACKGROUND/CLOSE이면 INTERRUPTED로 전이할 수 있고 lifecycle 자신은 receipt/Event/stateVersion을 만들지 않는다. abrupt kill은 lifecycle callback이 아니라 last committed state로 복원한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, time_advance_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음. |
 | 설정 변경 | config.func_p2_005 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-021 |
 | 후속 Task | P2-TASK-025 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
@@ -1190,21 +1382,21 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-023 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 world_state, time_advance_state. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
+| 상세 구현 내용 | lifecycle은 SavePort를 직접 호출하지 않음을 검증한다. safe boundary에서 active gameplay command가 terminal commit하는 path와 stale epoch publish/write 차단만 연계한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, time_advance_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음. |
 | 설정 변경 | config.func_p2_005 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-021 |
 | 후속 Task | P2-TASK-025 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-005, P2-IT-005 |
-| 완료 조건 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 |
+| 완료 조건 | runtime lifecycle과 in-memory SavePort에서 direct lifecycle persistence 0·active command safe-boundary terminal 검증 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p2-task-024"></a>
@@ -1214,16 +1406,16 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-024 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다. |
-| 대상 모듈 | :core:simulation / :core:common |
+| 상세 구현 내용 | pause/resume/close는 runtime session control로만 노출한다. gameplay command UI와 동일한 idempotency/replay surface를 만들지 않고, active command의 terminal 결과는 기존 command UI가 관측한다. |
+| 대상 모듈 | :app (lifecycle 연결) → :core:simulation WorldSession control API. core에는 Compose/ViewState를 두지 않는다. |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, time_advance_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | 직접 변경 없음. |
 | 설정 변경 | config.func_p2_005 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-021 |
 | 후속 Task | P2-TASK-025 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1241,13 +1433,13 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 상세 구현 내용 | P2-UT-005, P2-BT-005, P2-FT-005, P2-CT-005, P2-IT-005 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
-| DB 변경 | world_state, time_advance_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
+| DB 변경 | F005 직접 변경 없음. 이 Test는 active AdvanceTime을 terminal 전이한 기존 gameplay segment transaction만 검증하며, 관련 `time_advance_state`/receipt를 lifecycle의 소유 데이터처럼 취급하지 않는다. |
 | 설정 변경 | config.func_p2_005 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
 | 선행 Task | P2-TASK-022, P2-TASK-023, P2-TASK-024 |
 | 후속 Task | P2-TASK-026 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
@@ -1262,7 +1454,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 |---|---|
 | Task ID | P2-TASK-026 |
 | 목적 | Gate 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 시간 역행·중복 경계 처리 0 건·배속과 RNG 독립; 기능별리뷰/예외/회귀/세이브호환/후속 port 확인. 미승인설계 보완안은해당기능구현활성화를차단하고상태를은폐하지않는다. |
+| 상세 구현 내용 | crossed boundary 누락·중복 0, sealed atomic/long ScheduledAction, RNG, canonical resource/singleton 의미 invariant, Risk preview, BoundarySource conformance, payload cap과 `SavePortConformanceSuite`를 검증한다. actual Room/reopen/WAL/process-kill/DB CHECK는 P3 Gate에 인계한다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1271,7 +1463,7 @@ CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 | 후속 Task | P3-TASK-001, P3-TASK-006, P3-TASK-011, P3-TASK-016, P3-TASK-021, P3-TASK-026, P4-TASK-001, P4-TASK-006, P4-TASK-011, P4-TASK-016, P4-TASK-021, P5-TASK-001, P5-TASK-006, P5-TASK-011, P5-TASK-016, P6-TASK-001, P6-TASK-006, P6-TASK-011, P6-TASK-016, P6-TASK-021, P6-TASK-026, P8-TASK-001, P8-TASK-006, P8-TASK-011, P8-TASK-016, P10-TASK-001, P10-TASK-006, P10-TASK-011, P10-TASK-016, P11-TASK-001, P11-TASK-006, P11-TASK-011, P11-TASK-016 |
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
-| 설계 결정 의존 | C15 |
+| 설계 결정 의존 | C15, C27, C28 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
@@ -1352,6 +1544,30 @@ flowchart TB
 
 UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Concurrency,REC=Recovery,PT=Performance,OP=운영,ET=Exception 이다. 모든 case 는 실행 계획이며 현재 NOT_RUN 이다. 정상 예제에 사용한 fixture profile 수치를 제품 확정값으로 해석하지 않는다.
 
+다음 교차 시나리오는 기존 Test ID의 필수 assertion이며 별도 선택 검증이 아니다.
+
+| 시나리오 | 담당 Test | 필수 oracle |
+|---|---|---|
+| 동일 시각 ScheduledAction 완료 4개 | P2-UT-004, P2-IT-004 | 4개 모두 처리, stable order/stateHash/RNG 반복 동치 |
+| 같은 시간대 ACTION_START/ACTION_COMPLETE | P2-BT-003, P2-IT-004 | phaseRank 50→55와 state/claim 전이 결정론 |
+| 전투 10:29→10:31, 예약 10:30 | P2-BT-004, P2-IT-002/004 | COMBAT_ELAPSED도 10:30 boundary 누락 0 |
+| 전투 10:29→10:31 중 10:30 DECISION_GATE | P2-FT-004, P2-IT-004 | 모든 선택 branch closure preflight 뒤 gate까지 prefix/clock과 sealed outcome/RNG/suffix/target를 원자 보존, continuation 후 전투·boundary 정확히 1회 |
+| 10:30 승계 DECISION_GATE+경제+예약 | P2-FT-004, P2-IT-004 | prerequisite/gate까지만 commit, cursor 보존, 선택 후 새 continuation이 나머지 처리 |
+| 동일 batch 앞 candidate가 뒤 candidate 조건을 변경 | P2-UT-004, P2-IT-004 | 시작 snapshot 후보 집합은 동결되고 ordered intermediate state fold로 뒤 candidate가 앞 결과를 관측 |
+| 미래 candidate 없는 UntilMinute | P2-BT-004 | target까지 clock-only terminal step으로 COMPLETED; 임의 minute tick 생성 0 |
+| 치료 예약 vs 긴급 구조 | P2-BT-003, P2-CT-003 | priority/conflict/preemption 가능성만 반환, hidden 정보 0인 PublicConsequencePreview와 stale-confirm 방어, 선택 적용은 원자적 |
+| reserve/cancel/start/complete/fail/fault | P2-FT-003, P2-IT-003, P2-REC-001 | owned/held/consumed invariant 및 double settlement 0 |
+| UntilActionCompleted 대상 CANCELLED | P2-BT-004 | 무한 진행 없이 UNREACHABLE |
+| SYSTEM_HALT/decision/P0+ignore+favorite | P2-CT-004, P2-ET-001 | precedence table과 같은 단일 결과 |
+| explicit maxMinute/maxBoundaryCount | P2-PT-001 | wall-clock 무관 LIMIT_REACHED와 재개 후 동일 결과 |
+| admission 직후/첫 boundary 전 fault | P2-FT-004, P2-REC-001 | durable segment 0 복구, same-id command 유실/중복 0 |
+| duplicate/wrong-time/over-cap provider 및 registry version 변경 | P2-BT-004, P2-CT-004 | partial mutation 0, exact binding 재개 또는 typed SYSTEM_HALT |
+| BoundarySource 공통 오용 | P2-CT-004, P2-IT-004 | reusable conformance suite가 past/current·recursive·duplicate·unstable·RNG·codec·byte cap 위반을 모두 검출 |
+| world_state/resource identity DB 방어 | P2-BT-001, P2-IT-003, P3-IT-001 | P2 의미 conformance, P3 SQLite/Room에서 singleton·canonical tuple·CHECK 위반 INSERT 실패 |
+| pending payload byte cap | P2-BT-004, P2-REC-001 | candidate 65,536 bytes/aggregate 1,048,576 bytes 상한, 초과 partial commit 0, corrupt reload SYSTEM_HALT |
+
+`SavePortConformanceSuite`는 P2-IT-001/003/004/005와 P2-REC-001이 공유하는 계약 suite다. Phase 2에서는 test-only in-memory/fault port로 실행하고, Phase 3에서는 실제 Room port로 그대로 재실행한다. suite 이름이 같아도 Phase 2 결과가 Phase 3 reopen/WAL/process-kill PASS를 대체하지 않는다.
+
 <a id="p2-ut-001"></a>
 ### P2-UT-001 — 단일 작성자 명령 처리 / 정상 규칙
 
@@ -1379,9 +1595,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | BT |
 | 대상 기능 | FUNC-P2-001 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 과거 expectedVersion |
+| 입력값 | 과거 expectedVersion, 두 번째 world_state 또는 `id!='WORLD'`, 비정규 ResourceIdentity |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | Conflict, 재조회 안내·변경0 |
+| 예상 결과 | stale command는 Conflict·변경0. P2 conformance에서 singleton/identity 위반 delta 거절; P3 실제 SQLite/Room에서는 invalid INSERT 자체가 실패 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-001, testId=P2-BT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | Conflict, 재조회 안내·변경0 |
@@ -1425,7 +1641,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-it-001"></a>
-### P2-IT-001 — 단일 작성자 명령 처리 / adapter·영속 경계
+### P2-IT-001 — 단일 작성자 명령 처리 / SavePort conformance
 
 | 항목 | 설계 |
 |---|---|
@@ -1433,9 +1649,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P2-001 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 잔액60·receipt 1 개·stateVersion 1 회 증가; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 입력값 | 동일 commandId로 금화40 지출 2회, 잔액100; `InMemorySavePort`와 `FaultInjectingSavePort` |
+| 수행 절차 | `SavePortConformanceSuite`로 정상 commit, duplicate, before/during/after-commit fault와 publish 경계를 검증한다. 실제 DB reopen은 요구하지 않는다. |
+| 예상 결과 | 잔액60·receipt 1개·stateVersion 1회 증가, complete-or-previous, failed commit publish 0 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-001, testId=P2-IT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 잔액60·receipt 1 개·stateVersion 1 회 증가; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
@@ -1451,13 +1667,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P2-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | clock=(분0,잔여0), 10 초 전투를6 회 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | clock=(분1,잔여0); 1 회60 초와 동일 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-002, testId=P2-UT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | clock=(분1,잔여0); 1 회60 초와 동일 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | 동일 immutable clock=(분0,잔여0), RNG snapshots, 10초×6와 60초; PCG initState=42/initSeq=54 vector |
+| 수행 절차 | ① 동일 input snapshot으로 kernel을 두 번 호출 ② 10초×6/60초 결과와 PCG 첫 6 raw outputs·drawCounter 비교 ③ 입력 snapshot 불변과 SavePort/receipt/event 호출 0을 확인 |
+| 예상 결과 | ClockDelta=(분1,잔여0) 동치, PCG vector `a15c02b7..cbed606e` 동치, changed stream/counter 동치 |
+| DB/파일 확인 | kernel 단독 테스트는 live save.db/receipt/world_event 쓰기 0건이다. |
+| 로그 확인 | feature=FUNC-P2-002, testId=P2-UT-002, algorithm/seed/vector/counter만 기록하며 sourceCommandId는 없다. |
+| 상태 확인 | same input + same clock/RNG state = same ClockDelta + RNG result + drawCounter |
+| 성공 기준 | 입력 불변·반환값/Golden/counter 동치·F002 전용 SavePort/receipt/event 0건 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-bt-002"></a>
@@ -1469,13 +1685,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | BT |
 | 대상 기능 | FUNC-P2-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 23:59 +1 분, 12 월30 일 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 다음 연도1 월1 일00:00 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-002, testId=P2-BT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 다음 연도1 월1 일00:00 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | 23:59+1분, 12월30일; `worldSeed=0123456789abcdef`, leaf streamKey |
+| 수행 절차 | ① calendar rollover 계산 ② fixed16 hex를 raw big-endian 8 bytes로 decode ③ seed derivation의 initState/initSeq/first N outputs fixture와 비교 |
+| 예상 결과 | 다음 연도1월1일00:00이며 UTF-8 16-byte hex 해석과 다른 raw 8-byte golden을 정확히 선택 |
+| DB/파일 확인 | kernel 단독 DB/receipt/event 쓰기 0건. |
+| 로그 확인 | feature=FUNC-P2-002, worldSeed/streamKey/raw bytes/initState/initSeq를 evidence로 기록. |
+| 상태 확인 | unsigned wrap/rotate·calendar boundary·seed byte order가 고정됨 |
+| 성공 기준 | clock/seed codec/Golden이 일치하고 F002 전용 persistence 0건 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ft-002"></a>
@@ -1488,12 +1704,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | FUNC-P2-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
 | 입력값 | 미지원 rngAlgorithmVersion |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
+| 수행 절차 | ① 미지원 algorithm/key codec snapshot을 kernel/decoder 경계에 전달 ② typed failure를 확인 ③ input과 DB/receipt/event가 불변인지 확인 |
 | 예상 결과 | 복구 중단; 다른 난수기로 자동 대체 금지 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-002, testId=P2-FT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | kernel 실패는 live save.db/receipt/world_event 쓰기 0건이다. |
+| 로그 확인 | feature=FUNC-P2-002, testId=P2-FT-002, algorithm/key codec failure만 기록한다. |
 | 상태 확인 | 복구 중단; 다른 난수기로 자동 대체 금지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | automatic fallback 0, input/persistence 불변, typed safe halt |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ct-002"></a>
@@ -1505,17 +1721,17 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P2-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | clock=(분0,잔여0), 10 초 전투를6 회; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | clock=(분1,잔여0); 1 회60 초와 동일; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-002, testId=P2-CT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | clock=(분1,잔여0); 1 회60 초와 동일; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | combat/<id>/hit raw draw count만 1회와 N회; combat/<id>/crit, loot/<id>, npc/<id>/decision 동일 seed |
+| 수행 절차 | ① leaf stream snapshots를 조립 ② hit draw 수만 변경 ③ crit/loot/NPC output과 counter를 비교 ④ F002 standalone SavePort/receipt/event 호출 0을 확인 |
+| 예상 결과 | hit만 변화하고 crit/loot/NPC outputs 및 counters는 불변; 같은 kernel input 반복 결과 동치 |
+| DB/파일 확인 | kernel 단독 DB/receipt/world_event 쓰기 0건. |
+| 로그 확인 | feature=FUNC-P2-002, testId=P2-CT-002, streamKey별 draw counter와 result hash 기록. |
+| 상태 확인 | idempotency/commandId/payloadHash는 F002에 적용하지 않음 |
+| 성공 기준 | leaf stream isolation과 pure repeatability가 확인되고 F002 direct persistence 0건 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-it-002"></a>
-### P2-IT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / adapter·영속 경계
+### P2-IT-002 — 게임 달력·RNG / 순수·outer traversal 통합
 
 | 항목 | 설계 |
 |---|---|
@@ -1523,13 +1739,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P2-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | clock=(분0,잔여0), 10 초 전투를6 회; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | clock=(분1,잔여0); 1 회60 초와 동일; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-002, testId=P2-IT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | clock=(분1,잔여0); 1 회60 초와 동일; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | 동일 worldSeed/streamKey/clock을 outer AdvanceTime 또는 Combat gameplay command로 JVM·Android에서 실행 |
+| 수행 절차 | ① F002가 target/RNG result만 반환 ② outer command가 `WorldTimeTraversal`에 target 전달 ③ in-memory conformance commit ④ JVM/Android golden outputs/counter 비교 ⑤ F002 전용 receipt/event 조회 |
+| 예상 결과 | crossed boundary 누락 0, outer receipt 1개, F002 receipt/event 0개, JVM/Android vector 동치. 실제 Room round-trip은 P3 Gate |
+| DB/파일 확인 | 부모 command의 receipt/state/RNG만 갱신되고 F002 식별자 receipt/event는 0건. |
+| 로그 확인 | feature=FUNC-P2-002, testId=P2-IT-002, JVM/Android vector evidence와 outer sourceCommandId를 분리 기록. |
+| 상태 확인 | kernel은 parent DomainDelta 내부 계산이며 앱/헤드리스 모두 같은 golden을 얻음 |
+| 성공 기준 | platform byte-for-byte Golden·outer receipt 1·F002 direct receipt/event 0·reload 동치 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ut-003"></a>
@@ -1541,12 +1757,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P2-003 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 리아 [14:00,18:00) 치료 후 [18:00,20:00) 훈련 |
+| 입력값 | 리아 [10:00,11:00) 치료 후 [11:00,12:00) 훈련, `ScheduledActionPayload.v1`, action kind별 `ActionKindPolicyProfile.v1` |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 경계 접점은 충돌 없음 |
+| 예상 결과 | 반열린 경계 접점은 충돌 없고 payload/profile canonical round-trip 후 owner/participants/claim/action 정책/namespaced consequence event 의미가 같다 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-UT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 경계 접점은 충돌 없음 |
+| 상태 확인 | `[10:00,11:00)`와 `[11:00,12:00)`는 non-conflict이며 payload codec은 v1로 고정 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
@@ -1559,12 +1775,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | BT |
 | 대상 기능 | FUNC-P2-003 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 동일 인물 [17:59,19:00) |
+| 입력값 | overlap/zero-duration/duplicate claim/owned=10 held=8 request=3, 기존 TREATMENT와 새 EMERGENCY_RESCUE |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | ScheduleConflict; 선점 생성0 |
+| 예상 결과 | invalid/overbook은 생성0. priority 충돌은 conflicting IDs/row versions/priorities/allowed resolutions/consequence preview를 반환하고 P2 자동 preemption 0 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-BT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | ScheduleConflict; 선점 생성0 |
+| 상태 확인 | `heldTotal + request > owned`이면 총량 기준으로 거절 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
@@ -1577,12 +1793,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | FT |
 | 대상 기능 | FUNC-P2-003 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 재료예약 뒤 일정저장 실패 |
+| 입력값 | 네 `ResourceClaimPolicy.v1` 각각의 reserve/cancel/start/complete/fail 및 BEFORE_START/IN_PROGRESS/FINAL_BOUNDARY fault |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 자원 예약/일정 모두 rollback |
+| 예상 결과 | policy/cancel stage별 owned·held·consumed·released/refunded/lost가 정확하고 partial state/double settlement 0 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-FT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 자원 예약/일정 모두 rollback |
+| 상태 확인 | claim별 policy와 ActionCancellationPolicy 결과가 일치하고 `available=owned-held` 유지 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
@@ -1595,17 +1811,17 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P2-003 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 리아 [14:00,18:00) 치료 후 [18:00,20:00) 훈련; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 경계 접점은 충돌 없음; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
+| 입력값 | canonical payload, 치료 vs 긴급 구조 conflict, 선택된 PREEMPT 또는 CANCEL_AND_INSERT, hidden affection/비공개 확률 fixture, stale preview |
+| 수행 절차 | ① conflict 및 authoritative consequence 산출 ② public projection의 모든 필드 상태/비공개 제거 확인 ③ Risk Action confirm ④ preview hash+row version 재검증 ⑤ old transition/claim 정산/new insert 원자 적용 ⑥ stale confirm과 동일 command 재호출 |
+| 예상 결과 | P2 자동 선택 0, 숨은 필드/미공개 확률 노출 0, NONE/UNDETERMINED/UNKNOWN 구분, stale preview 효과 0, 허용된 resolution만 적용, partial state 0, outer command 효과 1회 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-CT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 경계 접점은 충돌 없음; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
+| 상태 확인 | idempotency는 ScheduleService outer command에만 적용되고 payload codec 자체에 적용하지 않음 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-it-003"></a>
-### P2-IT-003 — 예약·점유·자원 선점 / adapter·영속 경계
+### P2-IT-003 — 예약·점유·자원 선점 / in-memory conformance
 
 | 항목 | 설계 |
 |---|---|
@@ -1613,12 +1829,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P2-003 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 리아 [14:00,18:00) 치료 후 [18:00,20:00) 훈련; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 경계 접점은 충돌 없음; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 입력값 | 네 ResourceClaimPolicy의 reserve→cancel/start/complete/fail과 fault injection |
+| 수행 절차 | in-memory/fault port snapshot을 serialize/restore해 claim 총량, action state, duplicate transition, conflict resolution의 원자성을 검증한다. 실제 Room reopen은 P3 Gate |
+| 예상 결과 | 각 transition/process-fault 뒤 owned-held-consumed invariant와 action/payload 의미가 동일 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-IT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 경계 접점은 충돌 없음; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 상태 확인 | Save/Load 이후 over-reservation·double consume·wrong refund 0 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
@@ -1631,13 +1847,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P2-004 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 08:00→내일08:00,10:30 치료완료 중단 설정 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 10:30 에서 정지·치료1 회완료·남은 목표 유지 |
+| 입력값 | 같은 minute의 forced stop+NPC death+ACTION_START/COMPLETE 4개+economy, health/death→succession과 NPC→economy conditional candidate, `TIME_ADVANCE_GOAL.v1` 5 variant |
+| 수행 절차 | ① goal canonical round-trip ② source별 nextTime/candidatesAt 수집 ③ conditional candidate apply/NoOp ④ provider/DB 입력 순열을 바꿔 batch/order 반복 비교 |
+| 예상 결과 | candidate 누락 0, conditional candidate는 batch 시작에 선언되어 정확히 1회 apply 또는 NoOp, phaseRank/tie-break 순 event order, 동일 stateHash/RNG/counter; UntilEvent 포함 goal payload 동치 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-004, testId=P2-UT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 10:30 에서 정지·치료1 회완료·남은 목표 유지 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 로그 확인 | feature=FUNC-P2-004, testId=P2-UT-004, BoundaryKey.v1/order version/goal codec/stream counter 기록. |
+| 상태 확인 | eventSequence는 결과값이며 candidate sort input이 아님 |
+| 성공 기준 | canonical goal/order·provider 순열 독립성·동일 deterministic outcome 확인 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-bt-004"></a>
@@ -1649,13 +1865,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | BT |
 | 대상 기능 | FUNC-P2-004 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | target=current, due event 없음 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | NoOp·시간/RNG 불변 |
+| 입력값 | UntilMinute=current, future candidate 없는 UntilMinute=future, CANCELLED action, no future event, explicit limits, submit-time invalid codec, resume-time missing approved codec |
+| 수행 절차 | NoOp/UNREACHABLE/LIMIT_REACHED/submit reject/recovery halt를 각각 실행하고 receipt/state/clock/RNG/action을 비교한다. |
+| 예상 결과 | current NoOp와 future UntilMinute clock-only step은 COMPLETED, action/event/condition impossible은 UNREACHABLE, 상한은 LIMIT_REACHED, submit invalid는 REJECTED, persisted binding/codec 부재는 SYSTEM_HALT와 새 write 0 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-BT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | NoOp·시간/RNG 불변 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | goal codec/condition은 boundary state change에서만 평가하며 매분 scan하지 않음 |
+| 성공 기준 | admission/result→receipt mapping 일치, trust boundary별 reject/halt 구분, partial action/event/RNG draw 0 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ft-004"></a>
@@ -1667,13 +1883,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | FT |
 | 대상 기능 | FUNC-P2-004 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 3 일째 처리 실패 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 마지막 성공 경계에서 정지; 다음 실행에서 이미 처리한 일마감 재실행 없음 |
+| 입력값 | SYSTEM_HALT, mandatory DECISION_GATE+economy+reservation, 선택 A/B가 서로 다른 future candidate를 만드는 sealed action, choice 8/9개·branch boundary cap-1/cap/cap+1·cycle·diamond·중첩 gate, TIME_ADVANCE_STOP, 현재/과거 boundary-bearing row를 만드는 악성 evaluator, gate/child claim/effective-minute commit fault |
+| 수행 절차 | ① 각 precedence 조합에 ignore/favorite/summary 중첩 ② canonical choice 순·BoundaryOrder 순으로 gate≤1·choice≤8·총평가≤8×maxBoundaryCount와 모든 선택 branch의 cap/limit/codec eligibility preflight ③ decision prerequisite/gate와 ordered suffix codec/payload/hash commit ④ 선택 후 새 continuation의 suffix 검증·소비 ⑤ late same-time/past candidate와 effectiveMinute batch order 검사 ⑥ gate commit 전후·child claim 전후·outcome 적용 전후 fault restore |
+| 예상 결과 | halt는 event/order 밖 즉시 정지, 9번째 선택·cap+1·cycle·중첩 gate·증명 불가 branch는 seal 전 typed reject/effect 0, cap-1/cap과 bounded diamond는 동일 순서로 종료, decision은 gate 이후 후보를 원형 그대로 보류, stop은 같은 시각 전체 commit 후 정지, suffix 변조 또는 late candidate는 slice 전체 rollback+SYSTEM_HALT, no-gate/gated/recovery의 effectiveMinute 상대 order가 동일하며 partial mutation/event와 double apply 0 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-FT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 마지막 성공 경계에서 정지; 다음 실행에서 이미 처리한 일마감 재실행 없음 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | interrupted terminal과 crash-recoverable RUNNING을 혼동하지 않음 |
+| 성공 기준 | durable cursor/goal exact recovery, duplicate boundary/event/RNG draw 0 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ct-004"></a>
@@ -1685,17 +1901,17 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P2-004 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 08:00→내일08:00,10:30 치료완료 중단 설정; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 10:30 에서 정지·치료1 회완료·남은 목표 유지; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
+| 입력값 | AdvanceTime→TIME_ADVANCE_STOP 또는 DECISION_REQUIRED→서로 다른 child command A/B, wrong epoch, same-id retry; 정상 source와 past/current·recursive·duplicate·unstable·RNG-consuming·invalid-codec·over-byte source |
+| 수행 절차 | ① original receipt terminal ② same-id replay ③ gate resolution ④ A/B가 같은 predecessor suffix를 동시·순차 claim ⑤ 선택/첫 continuation commit fault ⑥ 모든 source에 BoundarySourceConformanceSuite.v1 적용 |
+| 예상 결과 | predecessor receipt 재활성화 0, A/B 중 정확히 하나만 commit, suffix 효과 1회. 정상 source만 통과하고 각 위반 source는 부분 mutation 없이 정확한 failure reason으로 실패 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-CT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 10:30 에서 정지·치료1 회완료·남은 목표 유지; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | continuation은 new `(epoch,commandId)`, predecessor당 UNIQUE child, old receipt/pending suffix는 terminal 감사 근거, eventSequence는 outcome counter |
+| 성공 기준 | terminal receipt 재활성화 0, continuation exactly-once lineage/remaining goal/order 동치 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-it-004"></a>
-### P2-IT-004 — 이벤트 경계 시간진행·자동중단 / adapter·영속 경계
+### P2-IT-004 — WorldTimeTraversal / boundary batch conformance
 
 | 항목 | 설계 |
 |---|---|
@@ -1703,13 +1919,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P2-004 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 08:00→내일08:00,10:30 치료완료 중단 설정; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 10:30 에서 정지·치료1 회완료·남은 목표 유지; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 입력값 | 동일 시각 action 4개, ACTION_START+COMPLETE, health/death→succession conditional candidate, 10:29→10:31 COMBAT_ELAPSED 중 10:30 gate, 서로 다른 future candidate를 만드는 decision A/B, 10:31 lifecycle/action-complete/economy, 선택 9개/중첩 gate, sealed 뒤 PAUSE/CANCEL/limit 요청과 fault port |
+| 수행 절차 | ① nextTime 최소값 뒤 모든 source candidatesAt 수집·동결 및 gate≤1·choice≤8와 모든 선택 branch의 target까지 cap/limit/codec eligibility preflight ② ordered fold와 partial decision suffix ③ gate commit 전/후 kill에서 sealed combat outcome/RNG/target 복원 ④ sealed continuation에 PAUSE/CANCEL/limit 요청 ⑤ child continuation으로 suffix와 target까지 원자 진행 ⑥ effectiveMinute frozen batch·conformance suite·sourceVersion·continuous/bounded 비교 |
+| 예상 결과 | gate commit 뒤 clock=10:30, combat outcome/RNG/hash 불변, 10:30 예약 누락 0. 9번째 선택·중첩 gate·증명 불가 branch는 seal 전 effect 0, sealed protected completion은 취소·limit terminal·재추첨되지 않고 10:31 outcome/lifecycle/action/economy가 BoundaryOrder.v1로 정렬된다. 전투/boundary는 정확히 1회다. no-gate/gated는 target business order·domain projection이 같고, 동일 gated 입력의 무중단/kill-recovery는 전체 stateHash/time/RNG/actions/events가 동일 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-IT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 10:30 에서 정지·치료1 회완료·남은 목표 유지; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | 과거 event sourceVersion을 final receipt version으로 rewrite하지 않음 |
+| 성공 기준 | sourceVersion semantics·goal/cursor reload·continuous/bounded equivalence 확인 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ut-005"></a>
@@ -1721,13 +1937,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P2-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 앱 종료 후 현실24 시간 경과 후 재실행 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | worldTime·치료 잔여시간 동일 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-005, testId=P2-UT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | worldTime·치료 잔여시간 동일 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | OPEN session의 pause→resume→close, 앱 종료 뒤 현실24시간 재실행 |
+| 수행 절차 | ① runtime lifecycle 전이 호출 ② close 후 child job join/handle close 확인 ③ reopen하여 clock/action 상태 비교 ④ F005 direct receipt/event/stateVersion 변화를 조회 |
+| 예상 결과 | OPEN/PAUSED/CLOSED 전이와 worldTime·치료 잔여시간 동일, lifecycle direct receipt/event/stateVersion 증가 0 |
+| DB/파일 확인 | F005 단독은 live save.db/command_receipt/world_event 쓰기 0건이다. |
+| 로그 확인 | feature=FUNC-P2-005, testId=P2-UT-005, lifecycle state/epoch/job count만 기록한다. |
+| 상태 확인 | 현실시간 catchup 0, lifecycle은 gameplay command가 아님 |
+| 성공 기준 | runtime transition/drain/join 정상, direct persistence 0, reopen state 동치 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-bt-005"></a>
@@ -1740,12 +1956,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | FUNC-P2-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
 | 입력값 | 슬롯 A 이미지/DB 응답 지연 중 슬롯 B 로드 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
+| 수행 절차 | ① slot A async result를 지연 ② B epoch를 active로 전환 ③ A publish/commit 시도를 관찰 |
 | 예상 결과 | epoch A 응답을 버려 B 에 쓰기0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-005, testId=P2-BT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | F005 자체 receipt/event/stateVersion 증가 0, stale A write/publish 0. |
+| 로그 확인 | feature=FUNC-P2-005, testId=P2-BT-005, old/new epoch과 discard reason만 기록. |
 | 상태 확인 | epoch A 응답을 버려 B 에 쓰기0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | stale epoch write/publish 0과 lifecycle direct persistence 0 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ft-005"></a>
@@ -1757,13 +1973,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | FT |
 | 대상 기능 | FUNC-P2-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 프로세스 즉시 kill 로 onStop 미실행 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 마지막 committed 상태만 복원 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-005, testId=P2-FT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 마지막 committed 상태만 복원 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | active AdvanceTime 중 close request와 process 즉시 kill(onStop 미실행) |
+| 수행 절차 | ① control request를 safe boundary 전/후에 주입 ② 기존 AdvanceTime receipt의 terminal transition 여부 관찰 ③ kill/reopen 후 durable state 조회 |
+| 예상 결과 | safe boundary 이전 delta는 미commit, 성공 boundary만 보존; CLOSE는 기존 AdvanceTime receipt만 INTERRUPTED, F005 receipt/event 0 |
+| DB/파일 확인 | time_advance/receipt 변화는 active gameplay command에서만 발생하며 F005 전용 row/event는 0건. |
+| 로그 확인 | feature=FUNC-P2-005, testId=P2-FT-005, control request와 active command correlation을 분리 기록. |
+| 상태 확인 | callback 미실행도 마지막 committed state만 복원 |
+| 성공 기준 | partial boundary/double apply/F005 direct receipt·event 0 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-ct-005"></a>
@@ -1775,17 +1991,17 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P2-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 앱 종료 후 현실24 시간 경과 후 재실행; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | worldTime·치료 잔여시간 동일; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-005, testId=P2-CT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | worldTime·치료 잔여시간 동일; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | pause/close/resume을 각각 두 번 호출 |
+| 수행 절차 | ① lifecycle state machine 조립 ② control operation 재호출 ③ terminal/NoOp runtime result와 job/handle 상태 비교 |
+| 예상 결과 | lifecycle state에 대해 idempotent이며 commandId/payloadHash/IdempotencyKeyReuse를 사용하지 않음 |
+| DB/파일 확인 | lifecycle 재호출의 receipt/event/stateVersion/SavePort call 0건. |
+| 로그 확인 | feature=FUNC-P2-005, testId=P2-CT-005, lifecycle state 전이만 기록. |
+| 상태 확인 | gameplay command replay surface 0 |
+| 성공 기준 | control idempotence·direct persistence 0·stale publish 0 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-it-005"></a>
-### P2-IT-005 — 세션·생명주기·작업 종료 / adapter·영속 경계
+### P2-IT-005 — 세션·생명주기 / runtime-in-memory 경계
 
 | 항목 | 설계 |
 |---|---|
@@ -1793,13 +2009,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P2-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 앱 종료 후 현실24 시간 경과 후 재실행; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | worldTime·치료 잔여시간 동일; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P2-005, testId=P2-IT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | worldTime·치료 잔여시간 동일; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 입력값 | actual WorldSession과 in-memory SavePort에서 active AdvanceTime pause/cancel/close/새 session restore |
+| 수행 절차 | ① active command safe-boundary drain ② PAUSE/CANCEL_ADVANCE/CLOSE별 terminal 비교 ③ runtime session close/새 instance restore ④ original gameplay receipt/state와 F005 direct persistence 조회. 실제 DB reopen은 P3 Gate |
+| 예상 결과 | PAUSE/CLOSE는 INTERRUPTED와 새 continuation 가능, CANCEL_ADVANCE는 CANCELLED/COMMITTED와 continuation 거절·독립 새 command만 허용하며 F005 자체 receipt/event 없음 |
+| DB/파일 확인 | active gameplay receipt만 변경 가능하며 F005 전용 receipt/event/stateVersion은 0건. |
+| 로그 확인 | feature=FUNC-P2-005, testId=P2-IT-005, runtime close/reopen evidence와 outer command를 분리 기록. |
+| 상태 확인 | lifecycle은 persistence writer가 아님 |
+| 성공 기준 | in-memory snapshot 기반 새 session 복원과 direct lifecycle persistence 0 확인; 실제 DB reopen은 P3 Gate |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-rt-001"></a>
@@ -1829,13 +2045,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | CN |
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100; 요청2 개동시에제출/이전 epoch 응답지연 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 |
+| 입력값 | active AdvanceTime, UI gameplay command 10개, 이미 수락된 scheduler command, PAUSE/CANCEL_ADVANCE, 이전 epoch 지연 응답 |
+| 수행 절차 | ① UI command의 즉시 `AdvanceInProgress` 확인 ② `PAUSE_REQUESTED`/`CANCEL_REQUESTED` UI feedback 지연 측정 ③ accepted scheduler FIFO 확인 ④ coroutine delay/CPU speed 변형 ⑤ 다음 deterministic safe boundary의 terminal 반영 지연 측정 |
+| 예상 결과 | UI gameplay mutation 0, accepted scheduler는 terminal 뒤 FIFO, PAUSE는 INTERRUPTED·CANCEL_ADVANCE는 CANCELLED/COMMITTED, control만 safe boundary. UI feedback P95≤100ms, safe-boundary terminal 반영은 MIN≤500ms·STD≤250ms이며 초과는 성능 실패로만 기록하고 stateHash/time/RNG/actions/event order는 실행 환경과 무관 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-CN-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | mutation 은직렬화·동일 명령효과1 회·오래된 epoch 쓰기0; 순수/도구기능은출력동치및독립임시경로,live 쓰기0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | wall-clock/dispatcher completion은 command·boundary·event 정렬키가 아님 |
+| 성공 기준 | gameplay interleave 0, control safe-boundary 처리, stale write/publish 0, deterministic terminal result |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-rec-001"></a>
@@ -1847,13 +2063,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | REC |
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | commit 실패; 정상요청직전/커밋직전/직후 kill |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
+| 입력값 | segment 계산 중, commit 직전, commit 성공 직후/publish 직전, 다음 segment 진입 직전의 test-only fault cutpoint |
+| 수행 절차 | ① FaultInjectingSavePort cutpoint별 중단 ② 저장된 in-memory image로 새 session 복원 ③ RUNNING goal/cursor 또는 terminal state 복구 ④ command/continuation 진행 ⑤ oracle 비교. OS process kill/Room/WAL은 P3 재검증 |
+| 예상 결과 | double apply/event 누락·중복/RNG double draw/reservation mismatch 0, 마지막 완전 boundary만 보존하고 이미 committed BoundaryKey 재실행 0 |
+| DB/파일 확인 | stateHash 외에 clock, stream별 state/counter, scheduled_action, time_advance_state, receipt status/version, event key/payload/order/count를 모두 비교. 실제 Room/WAL process kill은 P3에서 같은 cutpoint를 재검증. |
 | 로그 확인 | feature=PHASE-2, testId=P2-REC-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 원문 규칙상예상실패를유지하면서완전이전또는완전다음세대/산출물만보존·부분 혼합0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 상태 확인 | RUNNING은 same-id crash recovery만, INTERRUPTED는 new continuation만 허용 |
+| 성공 기준 | 4 cutpoint 각각에 durable complete-or-previous state와 full persistent oracle evidence |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-pt-001"></a>
@@ -1865,13 +2081,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | PT |
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | mailbox 64+1개 burst, UI command 10개와 30일 AdvanceTime(최소 10,000 경계), 중간 process kill; PCG32 reference/golden vector |
-| 수행 절차 | ① 64개 접수와 65번째 Busy 확인 ② 시간 진행을 segment 32/8ms 제한으로 실행하며 UI command 최대 대기와 FIFO 순서를 기록 ③ segment 3회 뒤 kill/reopen ④ 동일 commandId로 재개 ⑤ stateHash/RNG counter/eventSequence/receipt 수를 단일 실행과 비교 |
-| 예상 결과 | mailbox 무한증가·drop 0, segment별 transaction 상한 준수, UI starvation 없음, 외부 receipt 1개, 이미 완료한 boundary 재실행 0, 단일 실행과 terminal stateHash/RNG counter 동일 |
+| 입력값 | mailbox 64+1, 30일/10,000 boundary, continuous와 one-batch-per-segment, 65,536-byte candidate/1,048,576-byte pending cap 경계값, explicit small limits, PCG golden |
+| 수행 절차 | ① capacity/AdvanceInProgress 확인 ② in-memory compute/commit 비용을 분리 측정 ③ 두 실행 비교 ④ count/minute/byte limit 확인 ⑤ P3 Room conformance에서 transaction/파일 증가·MIN/STD latency 재측정 |
+| 예상 결과 | bounded queue, no interleave, committed key 재실행 0, 동일 stateHash/time/RNG/actions/events, deterministic LIMIT_REACHED. byte cap 및 NFR 충족 여부가 별도 수치 증거로 남음 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | queue high-water mark≤64, segment_no 단조 증가, 동일 receipt RUNNING→terminal, nextEventSequence 연속, kill 전 마지막 경계 stateHash 보존 |
-| 성공 기준 | 위 수치와 정합성이 모두 충족되고 최대 command 대기·segment latency·DB bytes를 증거로 저장한다. 미측정 PASS 금지. |
+| 상태 확인 | segment_no 단조 증가, nextEventSequence는 output counter, sourceVersion은 각 생성 segment version, 8ms는 authority input 0 |
+| 성공 기준 | deterministic equivalence와 queue/latency/DB bytes evidence. sourceVersion은 각 event의 생성 commit과 separately 검증 |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p2-op-001"></a>
@@ -1920,8 +2136,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
 | 입력값 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100→앱 종료 후 현실24 시간 경과 후 재실행 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 잔액60·receipt 1 개·stateVersion 1 회 증가 및 worldTime·치료 잔여시간 동일; 선행 port/DTO/version 인계완료 |
+| 수행 절차 | Phase 2 Gate의 SavePortConformanceSuite, traversal/boundary/schedule/RNG 계약 artifact와 P3 재실행 manifest를 대조한다. Room adapter 실행을 Phase 2 완료조건으로 요구하지 않는다. |
+| 예상 결과 | P2 contract/test-double suite 완료 및 P3 actual Room/WAL/reopen/process-kill 재검증 항목이 단방향 인계됨 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-IT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 잔액60·receipt 1 개·stateVersion 1 회 증가 및 worldTime·치료 잔여시간 동일; 선행 port/DTO/version 인계완료 |

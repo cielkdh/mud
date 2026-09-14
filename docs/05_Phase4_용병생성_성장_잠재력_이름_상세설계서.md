@@ -444,7 +444,7 @@ portrait key 콘텐츠 FK 는 애플리케이션 validator 로 검사; 이름/�
 | reservation_group_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | payload_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | completion_event_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| CHECK(due_minute>=start_minute) | 불변/유일성 제약 |
+| CHECK(due_minute>start_minute) | Phase 2 v1 0-duration/same-time recursive scheduling 금지 |
 
 ### FK·대량처리·Lock·Isolation
 권위관계는선언된 FK/UNIQUE 와명령불변식을함께사용한다. polymorphic owner/subject/contentId 는 cross-DB FK 를만들지않고 ReferenceValidator 로검사한다. 가족/역사/증표/유일물품은 ON DELETE RESTRICT/보존요약으로보호한다. FK 다형성검사를 DB 가자동보장한다고가정하지않는다.
@@ -589,15 +589,16 @@ CREATE TABLE IF NOT EXISTS scheduled_action (
   action_kind TEXT NOT NULL,
   start_minute INTEGER NOT NULL,
   due_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PLANNED','RESERVED','RUNNING','PAUSED','NEEDS_RESCHEDULE','COMPLETED','CANCELLED','FAILED')),
   reservation_group_id TEXT,
   payload_json TEXT NOT NULL,
   completion_event_id TEXT,
-  CHECK(due_minute>=start_minute),
+  CHECK(due_minute>start_minute),
   UNIQUE(completion_event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_scheduled_action_1 ON scheduled_action(status,due_minute,id);
-CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(actor_id,start_minute);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(status,start_minute,id);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_3 ON scheduled_action(actor_id,start_minute);
 ```
 
 ## 7. Transaction / 동시성 / Thread 설계

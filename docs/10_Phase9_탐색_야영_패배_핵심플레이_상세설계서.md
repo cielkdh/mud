@@ -46,6 +46,8 @@
 ### 공통 계약의 적용 범위
 이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
+탐색·야영·던전 행동의 경과 시간은 Phase 2 `WorldTimeTraversal(DUNGEON_ACTION|NORMAL_ACTION|TRAVEL)`을 사용한다. 이 Phase는 Phase 2 `ScheduledAction`의 start/complete·중단·claim 계약을 소비하고 별도 clock/boundary engine을 만들지 않는다. 장시간 안전 복귀와 SAFE_RECOVERY는 ScheduledAction이며 중간 DECISION_GATE에서 잔여 여정을 보존해 continuation한다. 야영/구조 action kind마다 resumable·progress basis·stage별 취소 결과·namespaced consequence event를 `ActionKindPolicyProfile.v1` fixture로 제공한다.
+
 `CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
 게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
@@ -126,7 +128,7 @@
 
 #### 처리 순서 및 데이터 흐름
 1. `route`는 공개 projection과 현재 `routeVersion`만 읽어 알려진 통로의 `RoutePlan`을 반환하며 live DB/RNG/receipt를 바꾸지 않는다.
-2. `SaveAnnotation`/`RemoveAnnotation`/`StartSafeReturn`은 CommandEnvelope의 epoch/version/idempotency와 대상 권한을 검증하고 기존 receipt를 조회한다.
+2. `SaveAnnotation`/`RemoveAnnotation`/`StartSafeReturn`은 CommandEnvelope의 epoch/version/idempotency와 대상 권한을 검증하고 기존 receipt를 조회한다. `StartSafeReturn`은 장시간 이동 결과를 즉시 확정하지 않고 `ScheduledAction`과 최초 route/progress만 시작 commit한다.
 3. 플레이어 주석/위험표시/구역 레이어는 정적 graph와 분리해 `map_annotation`에 저장한다.
 4. 안전 복귀는 이동시간0 순간이동이 아니며 각 시간/이동 경계에서 사건·순찰·routeVersion 변경을 처리한다.
 5. 통로가 바뀌면 다음 이동 전에 재계산하며 경로가 끊기면 `INTERRUPTED`로 멈추고 도달하지 않은 효과를 적용하지 않는다.
@@ -137,7 +139,7 @@
 #### Use Case와 실패 범위
 | 상황 | 처리 |
 |---|---|
-| 정상 | 경로 조회는 A-B-C/30 분을 반환하고 live write0. `StartSafeReturn` 실행은 A/B/C 경계를 순차 처리해 총30 분 후 C에 도착하며 `CMD-P9-F002` receipt와 Event를 한 번만 기록한다. |
+| 정상 | 경로 조회는 A-B-C/30 분을 반환하고 live write0. `StartSafeReturn`은 장시간 `ScheduledAction` 시작을 commit하며 이후 P2 traversal/continuation이 A/B/C 경계를 순차 처리해 총30 분 후 C 도착을 정확히 한 번 확정한다. 중간 DecisionGate는 원 command를 사후 reject하지 않고 잔여 route/progress를 보존한다. |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
 | 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
 | 일부 실패 | 지도 원본은 유지·손상 주석 격리·경고 |
@@ -214,16 +216,16 @@
 |---|---|
 | 기능 목적 | 패배·구조·SAFE_RECOVERY 을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§35](#src-0035), [§99](#src-0099), [§1367](#src-1367), [§1368](#src-1368), [§1369](#src-1369), [§1370](#src-1370), [§1371](#src-1371), [§1372](#src-1372), [§1373](#src-1373), [§1374](#src-1374), [§1375](#src-1375), [§1376](#src-1376), [§1377](#src-1377), [§1378](#src-1378), [§1379](#src-1379) 외 5 개 |
-| 기능 요구사항 | 1. 전투불능은 영구사망이 아니며 외부구조를 먼저 판정한다<br>2. 구조실패는 안전거점 이동·휴대금10%·현재 장착내구10%·HP30%·기본12 시간과 거리/깊이추가·부상유지로 처리한다<br>3. 안전회귀는 패배와 세계 시간을 되감지 않고 보호물품/가문창고를 삭제하지 않는다<br>4. 반올림과 추가시간은 승인된 RecoveryPolicy 로 고정하고 receipt 에 실제 손실값을 보존한다 |
+| 기능 요구사항 | 1. 전투불능은 영구사망이 아니며 외부구조를 먼저 판정한다<br>2. 구조실패는 패배 손실과 SAFE_RECOVERY ScheduledAction 시작을 먼저 commit하고 기본12 시간+거리/깊이추가 동안 P2 traversal을 사용한다<br>3. 중간 DecisionGate는 잔여 여정과 손실 receipt를 보존하며 action을 취소하지 않고 새 continuation으로 재개한다<br>4. 완료 boundary에서만 HUB 도착·HP30%·최종 회복을 한 번 적용하며 시간 되감기·보호물품/가문창고 삭제가 없다<br>5. 반올림과 추가시간은 승인된 RecoveryPolicy 로 고정하고 receipt 에 실제 손실값을 보존한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `DefeatRecoveryService.resolve(result: DefeatResult) -> RecoveryPlan` |
 | 입력 필드/값 | defeatId, runId, carriedAccount, equippedItems[], rescueContext, depth; 구체적값: 휴대금1000,내구80,최대 HP100,구조실패,추가0 |
-| 반환값 | recoveryKind, penalties, travelMinutes, protectedItemsKept; 정상결과: 금900·내구72·HP30·12 시간 증가·패배기록 유지 |
+| 반환값 | recoveryKind, penalties, scheduledActionId, travelMinutes, protectedItemsKept; 정상결과: 금900·내구72·SAFE_RECOVERY 시작, 완료 시 HP30·12 시간 경과·패배기록 유지 |
 | 입력 검증 | 휴대금9,정책=floor(gold*10%) → 금9 유지·손실0; 창고금화 미변경; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | 같은 defeatId 두 번 복귀 → 두 번째 금/내구/시간 추가손실0; typed DomainError 로상위호출에전달 |
-| Transaction | WorldEngine 의 권위 명령으로 처리한다. 계산은 transaction 밖에서 수행하고, SaveCoordinator 의 단일 write transaction 으로 확정한 뒤 게시한다. 원자적 효과의 중간 성공은 허용하지 않는다. |
-| 상태 변화 | DEFEATED → RESCUE_CHECK → RESCUED/SAFE_RECOVERY → HUB |
+| Transaction | 첫 command는 패배 사실·실제 손실·취소 불가 SAFE_RECOVERY ScheduledAction 시작을 한 transaction에 commit한다. 이후 세계시간은 P2 WorldTimeTraversal segment/decision continuation이 처리하고 완료 boundary에서 HUB 도착·HP/회복을 정확히 한 번 commit한다. |
+| 상태 변화 | DEFEATED → RESCUE_CHECK → RESCUED 또는 SAFE_RECOVERY(RUNNING↔PAUSED_DECISION) → HUB |
 | 소유 모듈 | :core:simulation/exploration / :feature:dungeon |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P9-TASK-016](#p9-task-016) · [P9-TASK-017](#p9-task-017) · [P9-TASK-018](#p9-task-018) · [P9-TASK-019](#p9-task-019) · [P9-TASK-020](#p9-task-020) |
@@ -232,17 +234,17 @@
 #### 처리 순서 및 데이터 흐름
 1. 명령 envelope/현재 epoch/version 과 대상 존재·권한을확인하고 기존 receipt 를 조회한다.
 2. 전투불능은 영구사망이 아니며 외부구조를 먼저 판정한다
-3. 구조실패는 안전거점 이동·휴대금10%·현재 장착내구10%·HP30%·기본12 시간과 거리/깊이추가·부상유지로 처리한다
-4. 안전회귀는 패배와 세계 시간을 되감지 않고 보호물품/가문창고를 삭제하지 않는다
-5. 반올림과 추가시간은 승인된 RecoveryPolicy 로 고정하고 receipt 에 실제 손실값을 보존한다
-6. Delta 불변식→해당행/RNG/event/receipt/codec 원자 commit→PublicView/후속 event 발행. 실패 시메모리/DB 게시를하지않는다.
+3. 구조실패는 휴대금10%·현재 장착내구10%·부상유지와 SAFE_RECOVERY action 시작을 원자 commit한다.
+4. P2 traversal이 기본12 시간+거리/깊이 추가를 진행하고 crossed boundary를 모두 처리한다. DecisionGate에서는 잔여 여정과 action을 durable pause한다.
+5. 새 continuation만 여정을 재개하고 완료 boundary에서 안전거점 이동·HP30%를 한 번 적용한다.
+6. 안전회귀는 패배와 세계 시간을 되감지 않고 보호물품/가문창고를 삭제하지 않는다. 동일 defeatId 재요청은 손실·action·완료 효과를 중복시키지 않는다.
 
 입력 `defeatId, runId, carriedAccount, equippedItems[], rescueContext, depth` → `DefeatRecoveryService.resolve` → 검증된 `recoveryKind, penalties, travelMinutes, protectedItemsKept` → SavePort/영속세대 → PublicProjection/후속 handler.
 
 #### Use Case와 실패 범위
 | 상황 | 처리 |
 |---|---|
-| 정상 | 휴대금1000,내구80,최대 HP100,구조실패,추가0 → 금900·내구72·HP30·12 시간 증가·패배기록 유지 |
+| 정상 | 휴대금1000,내구80,최대 HP100,구조실패,추가0 → 금900·내구72·SAFE_RECOVERY 시작; 12시간 traversal 뒤 HUB·HP30·패배기록 유지 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성, 기존 아이템 대체, 금화 차감은 하지 않는다. |
 | 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
 | 일부 실패 | 두 번째 금/내구/시간 추가손실0 |
@@ -319,7 +321,7 @@
 
 기본 패널티는 휴대금10%, 현재장착내구10%, HP 최대30%, 기본12 시간+거리/깊이추가, 부상유지다. 금/내구 손실은 floor,복귀 HP 는 max(1,floor(maxHP×.3))을 **보완후보**로 제시한다. 거리추가시간은 검증된탈출경로 이동시간을기초로 두고깊이별추가표는콘텐츠승인이필요하다. 구조가성공하면별도구조계약패널티를사용하고기본안전회귀와중복차감하지않는다.
 
-정복/전리품 receipt 와복귀 receipt 는같은 encounter/source ID 를공유하되효과유형은분리한다. 패배진행12 시간 중긴급사건은 경계별발생기록을남기며 거점복귀필수연쇄를 중간상태로방치하지않도록 RecoveryPlan 안에잔여여정을저장한다.
+정복/전리품 receipt 와복귀 receipt 는같은 encounter/source ID 를공유하되효과유형은분리한다. 패배 손실과 SAFE_RECOVERY 시작은 먼저 확정한다. 12시간+거리 진행 중 긴급사건은 경계별 기록하며 DECISION_GATE에서는 action과 RecoveryPlan의 잔여여정을 durable pause한다. 사용자의 새 continuation이 같은 action을 재개하므로 이동 불가 소프트락이나 손실 재적용이 없고, 완료 boundary에서만 HUB 도착과 HP 회복을 적용한다.
 
 
 ## 6. DB 상세 설계
@@ -532,7 +534,7 @@
 | reservation_group_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | payload_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | completion_event_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| CHECK(due_minute>=start_minute) | 불변/유일성 제약 |
+| CHECK(due_minute>start_minute) | Phase 2 v1 0-duration/same-time recursive scheduling 금지 |
 #### `status_effect` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -804,15 +806,16 @@ CREATE TABLE IF NOT EXISTS scheduled_action (
   action_kind TEXT NOT NULL,
   start_minute INTEGER NOT NULL,
   due_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PLANNED','RESERVED','RUNNING','PAUSED','NEEDS_RESCHEDULE','COMPLETED','CANCELLED','FAILED')),
   reservation_group_id TEXT,
   payload_json TEXT NOT NULL,
   completion_event_id TEXT,
-  CHECK(due_minute>=start_minute),
+  CHECK(due_minute>start_minute),
   UNIQUE(completion_event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_scheduled_action_1 ON scheduled_action(status,due_minute,id);
-CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(actor_id,start_minute);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(status,start_minute,id);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_3 ON scheduled_action(actor_id,start_minute);
 
 CREATE TABLE IF NOT EXISTS status_effect (
   id TEXT PRIMARY KEY NOT NULL,
@@ -840,7 +843,7 @@ CREATE TABLE IF NOT EXISTS world_event (
   event_sequence INTEGER NOT NULL CHECK(event_sequence>=0),
   game_minute INTEGER NOT NULL CHECK(game_minute>=0),
   sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999),
-  visibility TEXT NOT NULL,
+  visibility TEXT NOT NULL CHECK(visibility IN ('PUBLIC','PARTICIPANTS','OBSERVER_SCOPED','SYSTEM_HIDDEN')),
   importance INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   consumed_mask INTEGER NOT NULL DEFAULT 0,
@@ -1934,9 +1937,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P9-004 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 휴대금1000,내구80,최대 HP100,구조실패,추가0; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 금900·내구72·HP30·12 시간 증가·패배기록 유지; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 입력값 | 휴대금1000,내구80,최대 HP100,구조실패, 12시간 중간에 NPC death·예약 완료·경제 정산·DECISION_GATE; gate commit 전/후 kill |
+| 수행 절차 | ① 패배 손실+SAFE_RECOVERY 시작 commit ② P2 traversal로 gate까지 진행 ③ commit 전/후 kill 복원 ④ 새 decision continuation ⑤ due boundary까지 진행·재오픈 ⑥ 동일 defeatId 재요청 |
+| 예상 결과 | 패배/금900/내구72/action과 crossed 사건이 보존된다. gate에서 잔여여정을 잃지 않고 continuation 후 HUB·HP30을 한 번 적용하며 손실·시간·사건·RNG 중복/누락 0 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P9-004, testId=P9-IT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 금900·내구72·HP30·12 시간 증가·패배기록 유지; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |

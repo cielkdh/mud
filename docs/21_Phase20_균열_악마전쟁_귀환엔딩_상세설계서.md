@@ -612,7 +612,7 @@ CREATE TABLE IF NOT EXISTS world_event (
   event_sequence INTEGER NOT NULL CHECK(event_sequence>=0),
   game_minute INTEGER NOT NULL CHECK(game_minute>=0),
   sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999),
-  visibility TEXT NOT NULL,
+  visibility TEXT NOT NULL CHECK(visibility IN ('PUBLIC','PARTICIPANTS','OBSERVER_SCOPED','SYSTEM_HIDDEN')),
   importance INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   consumed_mask INTEGER NOT NULL DEFAULT 0,

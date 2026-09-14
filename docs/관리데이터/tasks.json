@@ -1879,7 +1879,9 @@
     "earliest_start": 5.3,
     "earliest_finish": 6.36,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -1917,7 +1919,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 8.48,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -1954,7 +1958,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.95,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -1963,8 +1969,8 @@
     "name": "단일 작성자 명령 처리 — UI·호출 경로",
     "function": "FUNC-P2-001",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:simulation / :core:common",
+    "detail": "app UI의 mutation CTA는 WorldSession.execute만 호출하고 중복 탭·AdvanceInProgress를 표시한다. authoritative 데이터를 직접 수정하지 않는다.",
+    "module": ":app -> :core:simulation",
     "depends": [
       "P2-TASK-001"
     ],
@@ -1991,7 +1997,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.42,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2033,7 +2041,9 @@
     "earliest_start": 8.48,
     "earliest_finish": 9.54,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2075,7 +2085,9 @@
     "earliest_start": 5.3,
     "earliest_finish": 6.36,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2113,7 +2125,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 8.48,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2122,7 +2136,7 @@
     "name": "게임 달력·잔여 밀리초·RNG 스트림 — 저장·연계",
     "function": "FUNC-P2-002",
     "stage": "어댑터",
-    "detail": "대상 world_state, rng_state. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
+    "detail": "kernel 결과를 outer gameplay command의 DomainDelta와 WorldTimeTraversal에만 연결한다. F002 전용 receipt/event/SavePort 호출은 0건이다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-006"
@@ -2150,7 +2164,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.95,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2159,7 +2175,7 @@
     "name": "게임 달력·잔여 밀리초·RNG 스트림 — UI·호출 경로",
     "function": "FUNC-P2-002",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
+    "detail": "F002에는 직접 UI/CLI를 만들지 않는다. outer gameplay UseCase만 kernel 결과를 WorldTimeTraversal에 전달하고 commit 후 snapshot으로 관측한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-006"
@@ -2187,7 +2203,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.42,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2229,7 +2247,9 @@
     "earliest_start": 8.48,
     "earliest_finish": 9.54,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2238,7 +2258,7 @@
     "name": "예약·점유·자원 선점 — 계약·Fixture",
     "function": "FUNC-P2-003",
     "stage": "계약",
-    "detail": "ScheduleService.reserve(request: ScheduleRequest, calendar: OccupancyView) -> ReservationDelta의 DTO/오류/불변식 정의. 입력 actorIds[], resourceClaims[], startMinute, endMinute, actionType. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
+    "detail": "reserve/cancel/resolveConflict DTO·오류·불변식과 SchedulePriority/ActionKindPolicyProfile/claim별 정책을 정의하고 정상·경계·실패 fixture를 작성한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P0-TASK-021"
@@ -2271,7 +2291,9 @@
     "earliest_start": 5.3,
     "earliest_finish": 6.36,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2280,7 +2302,7 @@
     "name": "예약·점유·자원 선점 — 핵심 규칙",
     "function": "FUNC-P2-003",
     "stage": "알고리즘",
-    "detail": "인물 점유 구간은 반열린 [start,end)로 정의한다; 제작재료 선점은 available=owned-reserved로 계산하고 다른 예약과 재사용하지 못한다; 실제 동시 활동은 하나의 월드시간 위에서 여러 due event로 모델링하며 Thread를 NPC별로 생성하지 않는다; 취소·만료·대상 소멸 시 해제할 자원과 이미 소비된 비용을 구분한다. 정해진 입력에서는 '경계 접점은 충돌 없음'을 만족해야 한다.",
+    "detail": "반열린 [start,end), dueMinute>startMinute, claim별 available=owned-heldTotal, ScheduleConflictResult와 선택된 원자 resolution, stage별 취소·중단·자원 정산 및 ACTION_START/ACTION_COMPLETE를 구현한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-011"
@@ -2309,7 +2331,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 8.48,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2318,7 +2342,7 @@
     "name": "예약·점유·자원 선점 — 저장·연계",
     "function": "FUNC-P2-003",
     "stage": "어댑터",
-    "detail": "대상 scheduled_action, occupancy, resource_reservation. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
+    "detail": "test-only SavePort에 scheduled_action/occupancy/resource claim과 receipt/event를 원자 연결하고 conflict resolution·취소 stage·fault 재실행을 검사한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-011"
@@ -2346,7 +2370,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.95,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2355,8 +2381,8 @@
     "name": "예약·점유·자원 선점 — UI·호출 경로",
     "function": "FUNC-P2-003",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:simulation / :core:common",
+    "detail": "위험 예약 변경은 hidden 값을 제거한 PublicConsequencePreview의 일정·금액·자원·진행률·공개 관계·재예약 상태를 Risk confirm으로 표시하고 preview hash/row version 재검증 뒤 resolveConflict를 제출한다.",
+    "module": ":app -> :core:simulation",
     "depends": [
       "P2-TASK-011"
     ],
@@ -2383,7 +2409,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.42,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2425,7 +2453,9 @@
     "earliest_start": 8.48,
     "earliest_finish": 9.54,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2434,7 +2464,7 @@
     "name": "이벤트 경계 시간진행·자동중단 — 계약·Fixture",
     "function": "FUNC-P2-004",
     "stage": "계약",
-    "detail": "TimeAdvanceEngine.advance(request: TimeAdvanceRequest) -> AdvanceResult의 DTO/오류/불변식 정의. 입력 targetGameMinute, stopPolicy, stepBudget, previousCursor. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
+    "detail": "TIME_ADVANCE_GOAL/EventSelector, interrupt policy/limits, progression mode, BoundaryCandidate/BoundaryKey/cursor, 7개 result와 receipt/continuation 계약을 정의한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P0-TASK-021"
@@ -2467,7 +2497,9 @@
     "earliest_start": 5.3,
     "earliest_finish": 6.36,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2476,7 +2508,7 @@
     "name": "이벤트 경계 시간진행·자동중단 — 핵심 규칙",
     "function": "FUNC-P2-004",
     "stage": "알고리즘",
-    "detail": "다음 예약·날짜·질병·던전·위기 경계의 최소값으로 점프한다; 같은 시각은 예약완료→인물상태→던전→시장→랭킹→사건 순서를 고정하되 승인된 phase order 버전으로 관리한다; P0 중단은 해제 불가이며 P1~P4 정책을 평가해 남은 목표와 lastProcessedBoundary를 보존한다; 30일 전체를 하나의 장시간 transaction으로 묶지 않고 경계별 bounded commit한다. 정해진 입력에서는 '10:30에서 정지·치료1회완료·남은 목표 유지'을 만족해야 한다.",
+    "detail": "모든 elapsed mode가 WorldTimeTraversal을 사용한다. ATOMIC_SEALED.v1은 gate<=1·choice<=8·총평가<=8*maxBoundaryCount와 각 branch cap/limit/codec을 preflight하고 중간 DecisionGate의 sealed outcome을 domainResultId 기반 effectiveMinute BoundaryCandidate로 PAUSE/CANCEL/일반 limit 없는 protected continuation에서 정확히 1회 적용한다. 장시간 action은 ScheduledAction이다. BoundarySource conformance와 byte cap을 적용한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-016"
@@ -2505,7 +2537,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 8.48,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2514,7 +2548,7 @@
     "name": "이벤트 경계 시간진행·자동중단 — 저장·연계",
     "function": "FUNC-P2-004",
     "stage": "어댑터",
-    "detail": "대상 world_state, scheduled_action, time_advance_state, world_event. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
+    "detail": "SavePort와 test-only InMemory/FaultInjecting suite에 goal/cursor/gate/pending suffix, sealed elapsed outcome, candidate/pending byte cap과 segment atomicity를 연결한다. Room/reopen/WAL/process kill/DB CHECK는 P3 Gate다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-016"
@@ -2542,7 +2576,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.95,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2551,8 +2587,8 @@
     "name": "이벤트 경계 시간진행·자동중단 — UI·호출 경로",
     "function": "FUNC-P2-004",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:simulation / :core:common",
+    "detail": "AdvanceTime terminal/AdvanceInProgress와 control-requested 상태를 구분하고 계속은 새 continuation command로 제출한다. terminal 뒤 public TimeAdvanceSummaryView를 표시한다.",
+    "module": ":app -> :core:simulation",
     "depends": [
       "P2-TASK-016"
     ],
@@ -2579,7 +2615,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.42,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2588,7 +2626,7 @@
     "name": "이벤트 경계 시간진행·자동중단 — Test·리뷰",
     "function": "FUNC-P2-004",
     "stage": "검증",
-    "detail": "P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
+    "detail": "전투 중 DecisionGate의 sealed outcome/continuation, BoundarySourceConformanceSuite, payload cap, control responsiveness와 public summary를 P2-UT/BT/FT/CT/IT-004로 검증하고 transaction·정보공개를 독립 리뷰한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-017",
@@ -2621,7 +2659,9 @@
     "earliest_start": 8.48,
     "earliest_finish": 9.54,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2663,7 +2703,9 @@
     "earliest_start": 5.3,
     "earliest_finish": 6.36,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2701,7 +2743,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 8.48,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2710,7 +2754,7 @@
     "name": "세션·생명주기·작업 종료 — 저장·연계",
     "function": "FUNC-P2-005",
     "stage": "어댑터",
-    "detail": "대상 world_state, time_advance_state. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
+    "detail": "lifecycle은 SavePort를 직접 호출하지 않음을 검증하고 active gameplay command의 safe-boundary terminal과 stale epoch publish/write 차단만 연결한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-021"
@@ -2738,7 +2782,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.95,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2775,7 +2821,9 @@
     "earliest_start": 6.36,
     "earliest_finish": 7.42,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2817,7 +2865,9 @@
     "earliest_start": 8.48,
     "earliest_finish": 9.54,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -2826,7 +2876,7 @@
     "name": "Phase 2 통합 검증·인계 Gate",
     "function": "PHASE-2",
     "stage": "Gate",
-    "detail": "시간 역행·중복 경계 처리 0건·배속과 RNG 독립; 기능별리뷰/예외/회귀/세이브호환/후속port확인. 미승인설계보완안은해당기능구현활성화를차단하고상태를은폐하지않는다.",
+    "detail": "crossed boundary 누락·중복 0, sealed atomic/long ScheduledAction, RNG, canonical resource/singleton 의미 invariant, Risk preview, BoundarySource conformance, payload cap과 SavePort suite를 검증한다. actual Room/reopen/WAL/process-kill/DB CHECK는 P3 Gate에 인계한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-005",
@@ -2920,7 +2970,9 @@
     "earliest_start": 9.54,
     "earliest_finish": 11.13,
     "decision_dependencies": [
-      "C15"
+      "C15",
+      "C27",
+      "C28"
     ]
   },
   {
@@ -9722,7 +9774,7 @@
     "name": "지도·주석·안전 복귀 경로 — 핵심 규칙",
     "function": "FUNC-P9-002",
     "stage": "알고리즘",
-    "detail": "맵은 실제 그래프의 공개 projection이며 알려진 통로만 경로계산한다; 플레이어 주석/위험표시/구역 레이어는 정적 graph와 별도 저장한다; 안전복귀는 이동시간0 순간이동이 아니며 지나갈 경계에서 사건/순찰을 처리한다; 단축로 개방과 붕괴 시 routeVersion을 변경하고 진행 중 경로는 다음 이동 전에 재계산한다. 정해진 입력에서는 '30분 진행 후C·중간 사건은 해당 경계 처리'을 만족해야 한다.",
+    "detail": "맵은 실제 그래프의 공개 projection이며 알려진 통로만 경로계산한다; 플레이어 주석/위험표시/구역 레이어는 정적 graph와 별도 저장한다; 안전복귀는 이동시간0 순간이동이 아니며 ScheduledAction 시작 뒤 P2 traversal/continuation이 지나갈 경계에서 사건/순찰을 처리한다; 중간 DecisionGate는 잔여 route/progress를 보존한다; 단축로 개방과 붕괴 시 routeVersion을 변경하고 진행 중 경로는 다음 이동 전에 재계산한다. 정해진 입력에서는 '30분 진행 후C·중간 사건은 해당 경계 처리'을 만족해야 한다.",
     "module": ":core:simulation/exploration / :feature:dungeon",
     "depends": [
       "P9-TASK-006"

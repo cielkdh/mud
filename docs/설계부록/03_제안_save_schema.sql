@@ -2,11 +2,11 @@
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS world_state (
-  id TEXT PRIMARY KEY NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL CHECK(id='WORLD'),
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   total_game_minutes INTEGER NOT NULL CHECK(total_game_minutes>=0),
   sub_minute_ms INTEGER NOT NULL CHECK(sub_minute_ms BETWEEN 0 AND 59999),
-  world_seed TEXT NOT NULL,
+  world_seed TEXT NOT NULL CHECK(length(world_seed)=16 AND world_seed=lower(world_seed) AND world_seed NOT GLOB '*[^0-9a-f]*'),
   session_epoch TEXT NOT NULL,
   branch_id TEXT NOT NULL,
   content_version TEXT NOT NULL,
@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS world_state (
   player_id TEXT,
   state_hash TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 
 CREATE TABLE IF NOT EXISTS command_receipt (
   id TEXT PRIMARY KEY NOT NULL,
@@ -48,7 +47,7 @@ CREATE TABLE IF NOT EXISTS world_event (
   event_sequence INTEGER NOT NULL CHECK(event_sequence>=0),
   game_minute INTEGER NOT NULL CHECK(game_minute>=0),
   sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999),
-  visibility TEXT NOT NULL,
+  visibility TEXT NOT NULL CHECK(visibility IN ('PUBLIC','PARTICIPANTS','OBSERVER_SCOPED','SYSTEM_HIDDEN')),
   importance INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   consumed_mask INTEGER NOT NULL DEFAULT 0,
@@ -64,8 +63,8 @@ CREATE TABLE IF NOT EXISTS rng_state (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   stream_key TEXT NOT NULL,
   algorithm_version TEXT NOT NULL,
-  state_hex TEXT NOT NULL,
-  increment_hex TEXT NOT NULL,
+  state_hex TEXT NOT NULL CHECK(length(state_hex)=16 AND state_hex=lower(state_hex) AND state_hex NOT GLOB '*[^0-9a-f]*'),
+  increment_hex TEXT NOT NULL CHECK(length(increment_hex)=16 AND increment_hex=lower(increment_hex) AND increment_hex NOT GLOB '*[^0-9a-f]*' AND substr(increment_hex,16,1) IN ('1','3','5','7','9','b','d','f')),
   draw_counter INTEGER NOT NULL CHECK(draw_counter>=0),
   UNIQUE(stream_key)
 );
@@ -77,40 +76,42 @@ CREATE TABLE IF NOT EXISTS scheduled_action (
   action_kind TEXT NOT NULL,
   start_minute INTEGER NOT NULL,
   due_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PLANNED','RESERVED','RUNNING','PAUSED','NEEDS_RESCHEDULE','COMPLETED','CANCELLED','FAILED')),
   reservation_group_id TEXT,
   payload_json TEXT NOT NULL,
   completion_event_id TEXT,
-  CHECK(due_minute>=start_minute),
+  CHECK(due_minute>start_minute),
   UNIQUE(completion_event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_scheduled_action_1 ON scheduled_action(status,due_minute,id);
-CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(actor_id,start_minute);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(status,start_minute,id);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_3 ON scheduled_action(actor_id,start_minute);
 
 CREATE TABLE IF NOT EXISTS occupancy (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  resource_key TEXT NOT NULL,
+  resource_kind TEXT NOT NULL CHECK(length(resource_kind) BETWEEN 1 AND 32 AND resource_kind=upper(resource_kind) AND resource_kind NOT GLOB '*[^A-Z0-9_]*' AND substr(resource_kind,1,1) GLOB '[A-Z]'),
+  resource_id TEXT NOT NULL CHECK(length(resource_id) BETWEEN 1 AND 128 AND resource_id=trim(resource_id)),
   action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT,
   start_minute INTEGER NOT NULL,
   end_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('RESERVED','ACTIVE','RELEASED','CANCELLED')),
   CHECK(end_minute>start_minute),
-  UNIQUE(resource_key,action_id)
+  UNIQUE(resource_kind,resource_id,action_id)
 );
-CREATE INDEX IF NOT EXISTS ix_occupancy_1 ON occupancy(resource_key,status,start_minute,end_minute);
+CREATE INDEX IF NOT EXISTS ix_occupancy_1 ON occupancy(resource_kind,resource_id,status,start_minute,end_minute);
 
 CREATE TABLE IF NOT EXISTS resource_reservation (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
-  resource_kind TEXT NOT NULL,
-  resource_id TEXT NOT NULL,
+  resource_kind TEXT NOT NULL CHECK(length(resource_kind) BETWEEN 1 AND 32 AND resource_kind=upper(resource_kind) AND resource_kind NOT GLOB '*[^A-Z0-9_]*' AND substr(resource_kind,1,1) GLOB '[A-Z]'),
+  resource_id TEXT NOT NULL CHECK(length(resource_id) BETWEEN 1 AND 128 AND resource_id=trim(resource_id)),
   action_id TEXT NOT NULL REFERENCES scheduled_action(id) ON DELETE RESTRICT,
   quantity INTEGER NOT NULL CHECK(quantity>0),
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('HELD','CONSUMED','RELEASED','CANCELLED')),
   UNIQUE(resource_kind,resource_id,action_id)
 );
-CREATE INDEX IF NOT EXISTS ix_resource_reservation_1 ON resource_reservation(resource_id,status);
+CREATE INDEX IF NOT EXISTS ix_resource_reservation_1 ON resource_reservation(resource_kind,resource_id,status);
 CREATE INDEX IF NOT EXISTS ix_resource_reservation_2 ON resource_reservation(action_id);
 
 CREATE TABLE IF NOT EXISTS time_advance_state (
@@ -119,14 +120,42 @@ CREATE TABLE IF NOT EXISTS time_advance_state (
   command_epoch TEXT NOT NULL,
   request_id TEXT NOT NULL,
   segment_no INTEGER NOT NULL DEFAULT 0 CHECK(segment_no>=0),
-  target_minute INTEGER NOT NULL,
+  start_minute INTEGER NOT NULL,
+  progression_mode TEXT NOT NULL CHECK(progression_mode IN ('FAST_FORWARD','COMBAT_ELAPSED','DUNGEON_ACTION','TRAVEL','NORMAL_ACTION')),
+  engine_order_version INTEGER NOT NULL,
+  target_type TEXT NOT NULL CHECK(target_type IN ('UNTIL_MINUTE','UNTIL_FIRST_ACTION_COMPLETED','UNTIL_ALL_ACTIONS_COMPLETED','UNTIL_CONDITION','UNTIL_EVENT')),
+  goal_codec TEXT NOT NULL,
+  goal_payload TEXT NOT NULL,
+  continuation_of_epoch TEXT,
+  continuation_of_command_id TEXT,
+  processed_boundary_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_boundary_count>=0),
+  max_advance_minute INTEGER NOT NULL CHECK(max_advance_minute>=start_minute),
+  max_boundary_count INTEGER NOT NULL CHECK(max_boundary_count>0),
+  max_candidates_per_batch INTEGER NOT NULL CHECK(max_candidates_per_batch>0),
+  max_candidate_payload_bytes INTEGER NOT NULL DEFAULT 65536 CHECK(max_candidate_payload_bytes BETWEEN 1 AND 65536),
+  max_pending_batch_bytes INTEGER NOT NULL DEFAULT 1048576 CHECK(max_pending_batch_bytes BETWEEN 1 AND 1048576),
   last_boundary_key TEXT,
   next_boundary_minute INTEGER,
   next_event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_event_sequence>=0),
-  interrupt_policy_json TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED')),
+  pending_decision_gate_id TEXT,
+  pending_batch_codec TEXT,
+  pending_batch_payload BLOB,
+  pending_batch_hash TEXT,
+  pending_elapsed_codec TEXT,
+  pending_elapsed_payload BLOB,
+  pending_elapsed_hash TEXT,
+  pending_elapsed_effective_minute INTEGER,
+  time_advance_interrupt_policy_json TEXT NOT NULL,
+  progress_summary_json TEXT,
+  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED','DECISION_REQUIRED','CANCELLED','UNREACHABLE','LIMIT_REACHED','FAILED')),
   UNIQUE(command_epoch,request_id),
-  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT
+  UNIQUE(continuation_of_epoch,continuation_of_command_id),
+  CHECK((continuation_of_epoch IS NULL AND continuation_of_command_id IS NULL) OR (continuation_of_epoch IS NOT NULL AND continuation_of_command_id IS NOT NULL)),
+  CHECK((status='DECISION_REQUIRED' AND pending_decision_gate_id IS NOT NULL AND pending_batch_codec IS NOT NULL AND pending_batch_payload IS NOT NULL AND pending_batch_hash IS NOT NULL) OR (status<>'DECISION_REQUIRED' AND pending_decision_gate_id IS NULL AND pending_batch_codec IS NULL AND pending_batch_payload IS NULL AND pending_batch_hash IS NULL)),
+  CHECK((pending_elapsed_codec IS NULL AND pending_elapsed_payload IS NULL AND pending_elapsed_hash IS NULL AND pending_elapsed_effective_minute IS NULL) OR (status='DECISION_REQUIRED' AND progression_mode<>'FAST_FORWARD' AND pending_elapsed_codec IS NOT NULL AND pending_elapsed_payload IS NOT NULL AND pending_elapsed_hash IS NOT NULL AND pending_elapsed_effective_minute IS NOT NULL)),
+  CHECK(coalesce(length(pending_batch_payload),0)+coalesce(length(pending_elapsed_payload),0)<=max_pending_batch_bytes),
+  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT,
+  FOREIGN KEY(continuation_of_epoch,continuation_of_command_id) REFERENCES time_advance_state(command_epoch,request_id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS ix_time_advance_state_1 ON time_advance_state(status,next_boundary_minute,request_id);
 

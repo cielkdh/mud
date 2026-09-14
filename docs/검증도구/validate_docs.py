@@ -84,6 +84,34 @@ def assert_constraint(connection: sqlite3.Connection, sql: str, args=()) -> bool
     return False
 
 
+def decision_contract_failures(decisions: list[dict], tasks: list[dict], phase_bodies: dict[int, str], decision_doc: str) -> list[str]:
+    ids = [item.get('id') for item in decisions]
+    known = set(ids)
+    failures = [f'duplicate decision: {item}' for item, count in Counter(ids).items() if count > 1]
+    failures += [f'{item.get("id")}: approved_at 누락' for item in decisions if not item.get('approved_at')]
+    headings = set(re.findall(r'^## (C\d+)\.', decision_doc, re.M))
+    failures += [f'decision registry only: {item}' for item in sorted(known - headings)]
+    failures += [f'decision document only: {item}' for item in sorted(headings - known)]
+    for task in tasks:
+        task_id = task['id']
+        dependencies = set(task.get('decision_dependencies', []))
+        failures += [f'{task_id}: unknown decision {item}' for item in sorted(dependencies - known)]
+        body = phase_bodies.get(task.get('phase'))
+        if body is None:
+            continue
+        if not re.search(r'^### P\d+-TASK-', body, re.M):
+            continue
+        block_match = re.search(rf'^### {re.escape(task_id)}\b.*?(?=^### P\d+-TASK-|\Z)', body, re.M | re.S)
+        if not block_match:
+            failures.append(f'{task_id}: Phase 문서 Task block 누락')
+            continue
+        row_match = re.search(r'^\| 설계 결정 의존 \|([^|]+)\|', block_match.group(0), re.M)
+        document_dependencies = set(re.findall(r'C\d+', row_match.group(1))) if row_match else set()
+        if document_dependencies != dependencies:
+            failures.append(f'{task_id}: 문서 {sorted(document_dependencies)} != registry {sorted(dependencies)}')
+    return failures
+
+
 def function_registry(contract: str, expected: set[str]) -> tuple[list[str], set[str], dict[str, set[str]], set[str]]:
     try:
         mutation_section = contract.split('## 6. ', 1)[1].split('## 7. ', 1)[0]
@@ -215,6 +243,14 @@ def validator_self_checks() -> None:
         failures.append('generic critical test template not detected')
     if test_detail_failures({'steps': 'WorldSession.execute', 'db': '구체 행·hash 비교'}, ('WorldSession.execute',)):
         failures.append('specific critical test rejected')
+    decision_failures = decision_contract_failures(
+        [{'id': 'C01', 'approved_at': '2026-01-01'}],
+        [{'id': 'P9-TASK-001', 'phase': 9, 'decision_dependencies': ['C02']}],
+        {9: '### P9-TASK-001 — fixture\n| 설계 결정 의존 | C01 |'},
+        '## C01. fixture',
+    )
+    if not any('unknown decision C02' in item for item in decision_failures) or not any('문서' in item and 'registry' in item for item in decision_failures):
+        failures.append('decision registry/document mismatch not detected')
     record('검증기 false-negative 회귀', failures, 'Function 중복·미지 탭·MUTATING CMD 누락·핵심 Test 범용 템플릿을 synthetic fixture로 거절')
 
 
@@ -289,6 +325,37 @@ def sql_checks() -> None:
                 amount = con.execute("SELECT balance FROM money_account WHERE id='a'").fetchone()[0]
                 record('SQL-잔액 경계: 부족금액 조건부 갱신', [] if (count,amount)==(0,60) else [str((count,amount))], '100 차감 요청의 영향행 0; 잔액 60 유지')
                 record('SQL-CHECK: 음수 잔액 차단', [] if assert_constraint(con,"UPDATE money_account SET balance=-1 WHERE id='a'") else ['음수 잔액이 허용됨'])
+                for command_id in ('child1', 'child2', 'child3', 'child4'):
+                    con.execute("INSERT INTO command_receipt(id,command_id,epoch,payload_hash,result_code,result_json,state_version,game_minute) VALUES(?,?,?,?,?,?,?,0)",
+                                (f'r-{command_id}', command_id, 'e1', f'h-{command_id}', 'OK', '{}', 2))
+                con.execute("INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,pending_decision_gate_id,pending_batch_codec,pending_batch_payload,pending_batch_hash,time_advance_interrupt_policy_json,status) VALUES('ta-parent','e1','cmd1',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'gate','BoundaryBatch.v1',X'01','hash','{}','DECISION_REQUIRED')")
+                con.execute("INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child1','e1','child1',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','e1','cmd1',10,10,10,'{}','COMPLETED')")
+                continuation_probes = (
+                    ('predecessor child UNIQUE', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child2','e1','child2',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','e1','cmd1',10,10,10,'{}','COMPLETED')"),
+                    ('predecessor composite FK', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child3','e1','child3',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','wrong','cmd1',10,10,10,'{}','COMPLETED')"),
+                    ('continuation epoch/id pair', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child4','e1','child4',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','cmd1',10,10,10,'{}','COMPLETED')"),
+                )
+                continuation_failures = [label for label, sql in continuation_probes if not assert_constraint(con, sql)]
+                record('SQL-TimeAdvance continuation exactly-once', continuation_failures,
+                       'predecessor (epoch,commandId)당 child 하나, composite FK, epoch/id pair CHECK를 실제 SQLite로 검증')
+                con.execute("INSERT INTO world_state(id,total_game_minutes,sub_minute_ms,world_seed,session_epoch,branch_id,content_version,balance_version,rng_version,engine_order_version,state_hash) VALUES('WORLD',0,0,'0123456789abcdef','e1','b1','c1','b1','PCG32-XSH-RR.v1',1,'h')")
+                con.execute("INSERT INTO scheduled_action(id,action_kind,start_minute,due_minute,status,payload_json) VALUES('act1','TEST',10,20,'RESERVED','{}')")
+                con.execute("INSERT INTO occupancy(id,resource_kind,resource_id,action_id,start_minute,end_minute,status) VALUES('occ1','FACILITY','CLINIC-001','act1',10,20,'RESERVED')")
+                con.execute("INSERT INTO resource_reservation(id,resource_kind,resource_id,action_id,quantity,status) VALUES('rr1','FACILITY','CLINIC-001','act1',1,'HELD')")
+                invariant_probes = (
+                    ('world_state singleton id', "INSERT INTO world_state(id,total_game_minutes,sub_minute_ms,world_seed,session_epoch,branch_id,content_version,balance_version,rng_version,engine_order_version,state_hash) VALUES('OTHER',0,0,'0123456789abcdef','e1','b1','c1','b1','PCG32-XSH-RR.v1',1,'h')"),
+                    ('world_seed fixed16 lower hex', "UPDATE world_state SET world_seed='0123456789abcdeG' WHERE id='WORLD'"),
+                    ('scheduled action status', "UPDATE scheduled_action SET status='OTHER' WHERE id='act1'"),
+                    ('occupancy resource kind canonical', "UPDATE occupancy SET resource_kind='facility/clinic' WHERE id='occ1'"),
+                    ('occupancy status', "UPDATE occupancy SET status='RUNNING' WHERE id='occ1'"),
+                    ('resource reservation status', "UPDATE resource_reservation SET status='OTHER' WHERE id='rr1'"),
+                    ('RNG hex and odd increment', "INSERT INTO rng_state(id,stream_key,algorithm_version,state_hex,increment_hex,draw_counter) VALUES('rng-bad','world/test','PCG32-XSH-RR.v1','0123456789ABCDEG','0000000000000002',0)"),
+                    ('TimeAdvance progression mode', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-mode','e1','child2',0,'OTHER',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'{}','COMPLETED')"),
+                    ('pending aggregate byte cap', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,pending_decision_gate_id,pending_batch_codec,pending_batch_payload,pending_batch_hash,time_advance_interrupt_policy_json,status) VALUES('ta-over','e1','child3',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'gate','BoundaryBatch.v1',zeroblob(1048577),'hash','{}','DECISION_REQUIRED')"),
+                )
+                invariant_failures = [label for label, sql in invariant_probes if not assert_constraint(con, sql)]
+                record('SQL-P2 authoritative singleton·resource identity·enum/hex·payload cap', invariant_failures,
+                       "world_state 1행, canonical (resource_kind,resource_id), 고정 status/mode, fixed16 lower hex+odd increment, 1MiB pending cap을 실제 SQLite가 거절")
                 # 2. Whole-generation manifests reference actual historical chunk bytes.
                 for idx, value in ((1,100),(2,60)):
                     payload = json.dumps({'balance':value}, separators=(',',':')).encode()
@@ -321,6 +388,11 @@ def main() -> int:
     record('원문 절 전체 매핑', [] if sorted(section_ids)==sorted(r['section'] for r in reqs)==list(range(1,3136)) else ['절 번호 누락/중복'], f'{len(reqs)}개 절 묶음. 하위규칙 의미 검토는 포함하지 않음.')
     for items,key,title in ((phases,'n','Phase ID 고유성'),(features,'id','기능 ID 고유성'),(tasks,'id','Task ID 고유성'),(tests,'id','Test ID 고유성'),(reqs,'id','요구 묶음 ID 고유성')):
         unique(items,key,title)
+    decisions = load('decisions')
+    decision_doc = (ROOT/'94_설계보완안_및_결정대장.md').read_text(encoding='utf-8')
+    phase_bodies = {phase['n']: (ROOT/phase['file']).read_text(encoding='utf-8') for phase in phases}
+    record('결정대장·Task 결정 의존 정합성', decision_contract_failures(decisions, tasks, phase_bodies, decision_doc),
+           f'{len(decisions)}개 승인 결정과 {len(tasks)}개 Task의 문서/관리데이터 의존을 비교')
     expected={'phases':len(phases),'functions':len(features),'tasks':len(tasks),'phase_tests':sum(t.get('phase') in by_phase for t in tests),'global_tests':sum(t.get('phase') not in by_phase for t in tests)}
     record('마스터 수량 정합성',[f'{k}: {manifest[k]} != {v}' for k,v in expected.items() if manifest[k]!=v],json.dumps(expected,ensure_ascii=False))
     failures=[]
@@ -650,11 +722,17 @@ def main() -> int:
         '| 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 |',
         '| 표현 변환 | 기존 feature mapper 또는 순수 함수 재사용 |',
     )
-    expected_responsibility_rows=len(features)-len(by_phase[0]['features'])-len(by_phase[1]['features'])
+    # P2 internal compute/lifecycle still validate input but intentionally have no aggregate SavePort/mapper row.
+    base_responsibility_rows=len(features)-len(by_phase[0]['features'])-len(by_phase[1]['features'])
+    expected_responsibility_rows={
+        responsibility_rows[0]: base_responsibility_rows,
+        responsibility_rows[1]: base_responsibility_rows-2,
+        responsibility_rows[2]: base_responsibility_rows-2,
+    }
     component_failures=[pattern for pattern in obsolete_patterns if re.search(pattern, phase_text, re.M)]
-    component_failures += [f'{row}: {phase_text.count(row)} != {expected_responsibility_rows}' for row in responsibility_rows if phase_text.count(row)!=expected_responsibility_rows]
+    component_failures += [f'{row}: {phase_text.count(row)} != {expected_responsibility_rows[row]}' for row in responsibility_rows if phase_text.count(row)!=expected_responsibility_rows[row]]
     record('기능별 기계적 Port/Validator/Projection 제거', component_failures,
-           f'P0 기반 4개와 P1 build/read/compute 4개를 제외한 {expected_responsibility_rows}개 게임 기능은 UseCase 검증·Aggregate typed Port·기존 mapper를 기본 재사용')
+           f'P0/P1 제외 {base_responsibility_rows}개 기능은 UseCase 검증, 그중 P2 internal/lifecycle 2개를 제외하고 Aggregate typed Port·기존 mapper를 기본 재사용')
     allowlist_sources={
         '마스터': master,
         'P0 상세설계': p0_body,

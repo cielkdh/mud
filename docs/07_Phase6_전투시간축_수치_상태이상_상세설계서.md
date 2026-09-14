@@ -46,6 +46,8 @@
 ### 공통 계약의 적용 범위
 이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
+전투 경과로 세계 시간이 증가하면 Phase 2 `WorldTimeTraversal(COMBAT_ELAPSED)`에 target과 canonical combat outcome을 전달한다. combat outcome은 `sourceId=elapsed.action`, `candidateKind=elapsed.action.apply.v1`, `category=COMBAT_CRISIS`, `stableEntityId=combatResultId`, `stableSubKey=combat`인 effectiveMinute `BoundaryCandidate`로 등록해 같은 시각의 lifecycle/action/economy/decision 후보와 `BoundaryOrder.v1`로 정렬한다. gate가 없으면 기존 outer transaction으로 확정하고, target 이전 DECISION_GATE가 있으면 P2의 gate≤1·choice≤8 및 모든 허용 선택 branch eligibility를 먼저 증명한 뒤 `SealedElapsedOutcome.v1`에 combatResultId/outcome hash와 action-local RNG를 보존해 protected continuation target에서 정확히 한 번 적용한다. Phase 6은 결과를 재계산하거나 world clock을 직접 증가시키거나 crossed 예약/NPC/세계 boundary를 건너뛰지 않으며, 일반 알림만 전투 후 요약할 수 있다.
+
 `CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
 게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
@@ -1837,12 +1839,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P6-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 마지막 몹 HP0,200ms 뒤 사망폭발 대기; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 폭발 처리까지 승리확정 유보; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 입력값 | 마지막 몹 HP0,200ms 뒤 사망폭발 대기; 10:29→10:31 COMBAT_ELAPSED 중 10:30 DECISION_GATE; 모듈 adapter 를실제 구현으로교체 |
+| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 전투 결과 계산 ③ gate prefix와 sealed outcome/RNG/suffix/target commit ④ 새 decision continuation ⑤ connection/session 닫기·동일 data 재오픈 ⑥ 기대값/출처 version 확인. 외부서비스는필수없음. |
+| 예상 결과 | 폭발 처리까지 승리확정 유보; 10:30 gate에서 이미 계산된 전투 결과는 취소·재계산되지 않고 continuation 후 전투 outcome과 crossed boundary가 정확히 1회 반영되며 새세션 재조회 결과가 동일 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P6-005, testId=P6-IT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 폭발 처리까지 승리확정 유보; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 상태 확인 | 폭발 처리까지 승리확정 유보; 10:30 gate에서 이미 계산된 전투 결과는 취소·재계산되지 않고 continuation 후 전투 outcome과 crossed boundary가 정확히 1회 반영되며 새세션 재조회 결과가 동일 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 

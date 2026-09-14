@@ -32,6 +32,10 @@
 
 P3 진입 시 `:core:save`를 실제 Room schema와 함께 처음 생성한다. 이 문서의 `:core:database`/`:core:data`는 독립 build 근거가 생기기 전까지 `:core:save` 내 논리 package로 해석하며 빈 Gradle module로 만들지 않는다. `:core:data` 논리 package는 P1 `ContentRepository`의 Android `content.db` read adapter도 소유하며 `OPEN_READONLY`와 `PRAGMA query_only=ON`을 적용하고 live content write를 제공하지 않는다. adapter는 검증된 `InstalledBundle` 하나에 고정된 `AutoCloseable`로서 P1의 `findTemplate(templateId)`, `listTemplates(kind)`, `findAlias(oldId)`, `findAssetBindings(templateId,usage)`, `findAsset(assetId)`, `listAssetFallbacks(usage)`만 구현하고, in-memory fixture와 같은 결과·정렬·미존재·지원하지 않는 definition version/JSON 손상 시 `IncompatibleContent` contract test를 통과해야 한다. 6개 method는 blocking read이므로 호출자가 background dispatcher를 보장하며 Main thread 호출을 실패 테스트로 차단한다. session owner가 child job을 cancel/join한 뒤 idempotent close하며 OPEN 동시 read와 불법 read/close 경합·close 뒤 `ContentRepositoryClosed`를 contract test로 검증한다. SQL은 P1 `CDB-Q01..Q06` allowlist와 prepared parameter만 사용하고 대표 FULL fixture의 `EXPLAIN QUERY PLAN`을 회귀 증거로 보존한다. P3 검증은 `:core:save` JVM/instrumented test source를 사용하고 `:tools:headless`를 선행 요구하지 않는다.
 
+Phase 2 Gate는 `:core:simulation`의 SavePort 계약과 test-only `InMemorySavePort`/`FaultInjectingSavePort`로 종료된다. Phase 3은 이를 선행 입력으로 받아 Room SavePort·SaveCoordinator·WAL·실제 DB close/reopen·OS process-kill을 구현하고, Phase 2의 `SavePortConformanceSuite`를 Room adapter에 재실행한다. 이 재실행과 P3 recovery spike는 **Phase 3 Gate**이며 Phase 2 Gate를 다시 요구하거나 재승인하는 순환 dependency가 아니다.
+
+Room greenfield schema는 P2 v31.4의 DB 불변식을 그대로 구현한다. `world_state.id='WORLD'` PK로 최대 한 행을 강제하고 bootstrap/quick-load가 정확히 한 행을 검사한다. occupancy와 resource reservation은 동일한 `(resource_kind,resource_id)` canonical identity를 사용하며 고정 status/mode/visibility와 RNG fixed16 hex는 DB CHECK로 방어한다. P2의 candidate/pending byte cap과 non-FAST_FORWARD sealed elapsed payload도 exported schema·reopen·fault test에서 검증한다.
+
 Room/SQLite 물리 구현을 기능별 adapter Task로 확장하기 전에 실제 단말 storage/recovery spike를 통과해야 한다. 최소 시나리오는 `save→process kill→recovery`, restore 중 kill, storage full, WAL 존재, candidate DB swap 중 kill, 손상 generation 거절, `save.previous.db` fallback이다. 각 시나리오는 이전 또는 다음 완전 세대만 선택하고 live slot 부분 갱신이 0건임을 증명한다. 실패하면 구조를 단순화하거나 결정대장에 차단 결정을 기록하며 성공으로 간주하지 않는다.
 
 ## 4. 기능 범위 및 요구 연결
@@ -63,7 +67,7 @@ Room/SQLite 물리 구현을 기능별 adapter Task로 확장하기 전에 실�
 | 기능 요구사항 | 1. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다<br>2. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다<br>3. 일반 mutation은 current normalized row·RNG·receipt·events만 동일 write transaction에서 갱신하고 SaveGeneration을 매번 만들지 않는다<br>4. 명시/자동/위험경계 checkpoint만 current snapshot의 불변 청크·완전 manifest를 만들며 성공한 commit 뒤 save-layer dirty shard key를 해제한다<br>5. `SaveCoordinator`는 `:core:simulation`의 `SavePort` 구현이며 CommandEnvelope·새 commandId·중첩 receipt/Event를 만들지 않는다. WorldEngine은 구체 SaveCoordinator나 Room을 참조하지 않는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
-| 주요 메소드 | 외부 `WorldSession.execute(command: SaveCommand) -> CommandResult`, `SaveCommand = CheckpointWorld | CreateNewWorld`<br>계약 `SavePort.commit(envelope, domainDelta)` / `SavePort.checkpoint(envelope, snapshot)`<br>구현 `SaveCoordinator` mapper·commit/checkpoint |
+| 주요 메소드 | 외부 `WorldSession.execute(command: SaveCommand) -> CommandResult`, `SaveCommand = CheckpointWorld | CreateNewWorld`<br>계약 `SavePort.commit` / `commitSegment` / `checkpoint`<br>구현 `SaveCoordinator` mapper·commit/segment/checkpoint |
 | 입력 필드/값 | 외부 CheckpointWorld{reason,expectedVersion} 또는 CreateNewWorld{slot,worldSeed,contentVersion}; 내부 typed DomainDelta 또는 frozen WorldSnapshot; `dirtyRows[]` 금지 |
 | 반환값 | 일반 mutation은 CommitReceipt{committedVersion}, checkpoint/new game은 CommandResult{receipt,checkpointGenerationId,committedVersion,stateHash} |
 | 입력 검증 | Dirty set 공집합 → 필요 metadata 변경 없으면 NoOp; required ID/enum/범위/상태/version 은변경 전에검사 |
@@ -101,7 +105,7 @@ Room/SQLite 물리 구현을 기능별 adapter Task로 확장하기 전에 실�
 #### 객체 및 메소드 책임 분리
 | 모듈/객체 | 신규/수정 | 책임 | 메소드 계약 |
 |---|---|---|---|
-| SavePort | 기존 공통 계약 | `:core:simulation` 소유 receipt 조회·일반 commit·checkpoint 경계 | findReceipt, commit(envelope, DomainDelta), checkpoint(envelope, WorldSnapshot) |
+| SavePort | 기존 공통 계약 | `:core:simulation` 소유 receipt 조회·일반 commit·resumable segment·checkpoint 경계 | findReceipt, commit, `commitSegment(envelope, expectedSegmentNo, delta, timeAdvanceState, terminalResult)`, checkpoint |
 | SaveCoordinator | 신규/기존 adapter | `:core:save` 소유 mapper·현재상태 commit·완전 checkpoint | commit/checkpoint; dirty shard key는 구현 내부 |
 | 입력 검증 | UseCase 내부 또는 기존 도메인 정책 재사용 | 필수 ID·범위·권한·원문제약 검증; 별도 Validator 클래스는 둘 이상의 UseCase가 공유할 때만 추가 | use case 입력별 명시적 ValidationResult |
 | 저장 경계 | 기존 Aggregate별 typed Port/SavePort 재사용 | 코덱·조회 snapshot·commit 연결; simulation 직접 DAO 금지; 기능 전용 RepositoryPort 신규 생성 금지 | use case별 typed read/commit 계약 |
@@ -435,7 +439,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | save_slot | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | slot_kind,ordinal | generation_id |
 | time_advance_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | command_epoch,request_id | status,next_boundary_minute,request_id |
 | world_event | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | source_epoch,source_command_id,event_sequence | game_minute,id, event_type,game_minute, source_epoch,source_command_id,event_sequence |
-| world_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK | session_epoch |
+| world_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | id PK + CHECK(id='WORLD') | 없음(singleton scan) |
 
 모든일반 SQL 테이블은 `id TEXT NOT NULL PRIMARY KEY`, `row_version INTEGER NOT NULL DEFAULT 0`을공통필드로갖는다. nullable 는 DDL 에 NOT NULL 없는필드만이다. 단위는 `_minute`게임분/`_ms`밀리초/`_bp`0.01%p/`_ppm`0.0001%p,금액/수량 Long 정수. ID 는재사용하지않는다.
 
@@ -567,12 +571,34 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | command_epoch TEXT NOT NULL | command_receipt.epoch FK 구성 열 |
 | request_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | segment_no INTEGER NOT NULL | 완료 segment 번호 |
-| target_minute INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| start_minute INTEGER NOT NULL | command 수락 시 authoritative game minute |
+| progression_mode TEXT NOT NULL | Phase 2 world traversal mode |
+| engine_order_version INTEGER NOT NULL | BoundaryRegistryBinding catalog version |
+| target_type TEXT NOT NULL | TIME_ADVANCE_GOAL.v1 discriminator |
+| goal_codec TEXT NOT NULL | versioned goal codec |
+| goal_payload TEXT NOT NULL | canonical durable goal payload |
+| continuation_of_epoch TEXT | prior terminal TimeAdvance epoch; commandId와 함께 있거나 함께 NULL |
+| continuation_of_command_id TEXT | prior terminal TimeAdvance commandId; predecessor당 child 하나만 허용 |
+| processed_boundary_count INTEGER NOT NULL | 완전히 처리한 timestamp batch 수 |
+| max_advance_minute INTEGER NOT NULL | 수락 시 snapshot한 absolute minute limit |
+| max_boundary_count INTEGER NOT NULL | 수락 시 snapshot한 batch count limit |
+| max_candidates_per_batch INTEGER NOT NULL | timestamp candidate 상한 |
+| max_candidate_payload_bytes INTEGER NOT NULL | candidate canonical payload 상한, v1 65,536 bytes |
+| max_pending_batch_bytes INTEGER NOT NULL | pending suffix+sealed elapsed payload 합계 상한, v1 1,048,576 bytes |
 | last_boundary_key TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | next_boundary_minute INTEGER | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | next_event_sequence INTEGER NOT NULL | 외부 command 전체의 다음 event sequence |
-| interrupt_policy_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| status TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| pending_decision_gate_id TEXT | same-time BoundarySlice decision gate ref |
+| pending_batch_codec TEXT | DECISION_REQUIRED의 `BoundaryBatch.v1` suffix codec |
+| pending_batch_payload BLOB | ordered candidate suffix canonical bytes |
+| pending_batch_hash TEXT | resume 전 검증할 codec+payload SHA-256 |
+| pending_elapsed_codec TEXT | non-FAST_FORWARD DecisionGate의 SealedElapsedOutcome codec |
+| pending_elapsed_payload BLOB | 재추첨 금지된 outcome canonical bytes |
+| pending_elapsed_hash TEXT | sealed outcome SHA-256 |
+| pending_elapsed_effective_minute INTEGER | outcome을 정확히 한 번 적용할 target minute |
+| time_advance_interrupt_policy_json TEXT NOT NULL | TimeAdvanceInterruptPolicy.v1 |
+| progress_summary_json TEXT | 비권위 파생 UI/debug summary |
+| status TEXT NOT NULL | Phase 2의 RUNNING 및 7개 terminal result |
 #### `world_event` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -581,12 +607,12 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | source_event_id TEXT | 다른 사건에서 파생됐을 때의 원본 Event ID |
 | source_epoch TEXT NOT NULL CHECK(length(source_epoch)>0) | 원인 command receipt의 epoch. source_command_id와 복합 FK |
 | source_command_id TEXT NOT NULL CHECK(length(source_command_id)>0) | 원인 command receipt의 command_id. source_epoch와 복합 FK |
-| source_version INTEGER NOT NULL CHECK(source_version>=0) | 원인 command receipt와 동일한 state_version |
+| source_version INTEGER NOT NULL CHECK(source_version>=0) | event가 실제 생성된 transaction/segment commit의 state_version. 일반 command는 최종 receipt와 같고 resumable command는 이후 receipt watermark와 달라도 정상이며 과거 event를 rewrite하지 않는다. |
 | event_type TEXT NOT NULL | versioned `EventCodecId` (`<event-name>.v<schema-version>`). 기존 ID 의미를 변경하지 않고 새 `.vN` codec으로 진화 |
 | event_sequence INTEGER NOT NULL CHECK(event_sequence>=0) | 같은 (source_epoch,source_command_id) 안에서 0부터 단조 증가하는 발행 순서 |
 | game_minute INTEGER NOT NULL CHECK(game_minute>=0) | 월드 시작 후 누적 게임 분 |
 | sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999) | 같은 game_minute 안의 0..59,999 밀리초 |
-| visibility TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| visibility TEXT NOT NULL | EventVisibility.v1 PUBLIC/PARTICIPANTS/OBSERVER_SCOPED/SYSTEM_HIDDEN |
 | importance INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | payload_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | consumed_mask INTEGER NOT NULL DEFAULT 0 | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
@@ -598,7 +624,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 |---|---|
 | total_game_minutes INTEGER NOT NULL CHECK(total_game_minutes>=0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | sub_minute_ms INTEGER NOT NULL CHECK(sub_minute_ms BETWEEN 0 AND 59999) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| world_seed TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| world_seed TEXT NOT NULL | DB CHECK가 강제하는 lower-case fixed16 hex |
 | session_epoch TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | branch_id TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
@@ -609,7 +635,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | player_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | state_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 
-1 개 캠페인 DB 에서 현재 materialized world 는 한 행. Seed 는 unsigned64 를 고정16 진수 TEXT 로 직렬화.
+PK id는 `WORLD`만 허용한다. bootstrap/quick-load가 정확히 1행을 확인한다. Seed 는 unsigned64 를 고정16 진수 TEXT 로 직렬화.
 
 ### FK·대량처리·Lock·Isolation
 권위관계는선언된 FK/UNIQUE 와명령불변식을함께사용한다. polymorphic owner/subject/contentId 는 cross-DB FK 를만들지않고 ReferenceValidator 로검사한다. 가족/역사/증표/유일물품은 ON DELETE RESTRICT/보존요약으로보호한다. FK 다형성검사를 DB 가자동보장한다고가정하지않는다.
@@ -746,8 +772,8 @@ CREATE TABLE IF NOT EXISTS rng_state (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   stream_key TEXT NOT NULL,
   algorithm_version TEXT NOT NULL,
-  state_hex TEXT NOT NULL,
-  increment_hex TEXT NOT NULL,
+  state_hex TEXT NOT NULL CHECK(length(state_hex)=16 AND state_hex=lower(state_hex) AND state_hex NOT GLOB '*[^0-9a-f]*'),
+  increment_hex TEXT NOT NULL CHECK(length(increment_hex)=16 AND increment_hex=lower(increment_hex) AND increment_hex NOT GLOB '*[^0-9a-f]*' AND substr(increment_hex,16,1) IN ('1','3','5','7','9','b','d','f')),
   draw_counter INTEGER NOT NULL CHECK(draw_counter>=0),
   UNIQUE(stream_key)
 );
@@ -787,14 +813,42 @@ CREATE TABLE IF NOT EXISTS time_advance_state (
   command_epoch TEXT NOT NULL,
   request_id TEXT NOT NULL,
   segment_no INTEGER NOT NULL DEFAULT 0 CHECK(segment_no>=0),
-  target_minute INTEGER NOT NULL,
+  start_minute INTEGER NOT NULL,
+  progression_mode TEXT NOT NULL CHECK(progression_mode IN ('FAST_FORWARD','COMBAT_ELAPSED','DUNGEON_ACTION','TRAVEL','NORMAL_ACTION')),
+  engine_order_version INTEGER NOT NULL,
+  target_type TEXT NOT NULL CHECK(target_type IN ('UNTIL_MINUTE','UNTIL_FIRST_ACTION_COMPLETED','UNTIL_ALL_ACTIONS_COMPLETED','UNTIL_CONDITION','UNTIL_EVENT')),
+  goal_codec TEXT NOT NULL,
+  goal_payload TEXT NOT NULL,
+  continuation_of_epoch TEXT,
+  continuation_of_command_id TEXT,
+  processed_boundary_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_boundary_count>=0),
+  max_advance_minute INTEGER NOT NULL CHECK(max_advance_minute>=start_minute),
+  max_boundary_count INTEGER NOT NULL CHECK(max_boundary_count>0),
+  max_candidates_per_batch INTEGER NOT NULL CHECK(max_candidates_per_batch>0),
+  max_candidate_payload_bytes INTEGER NOT NULL DEFAULT 65536 CHECK(max_candidate_payload_bytes BETWEEN 1 AND 65536),
+  max_pending_batch_bytes INTEGER NOT NULL DEFAULT 1048576 CHECK(max_pending_batch_bytes BETWEEN 1 AND 1048576),
   last_boundary_key TEXT,
   next_boundary_minute INTEGER,
   next_event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(next_event_sequence>=0),
-  interrupt_policy_json TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED')),
+  pending_decision_gate_id TEXT,
+  pending_batch_codec TEXT,
+  pending_batch_payload BLOB,
+  pending_batch_hash TEXT,
+  pending_elapsed_codec TEXT,
+  pending_elapsed_payload BLOB,
+  pending_elapsed_hash TEXT,
+  pending_elapsed_effective_minute INTEGER,
+  time_advance_interrupt_policy_json TEXT NOT NULL,
+  progress_summary_json TEXT,
+  status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED','DECISION_REQUIRED','CANCELLED','UNREACHABLE','LIMIT_REACHED','FAILED')),
   UNIQUE(command_epoch,request_id),
-  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT
+  UNIQUE(continuation_of_epoch,continuation_of_command_id),
+  CHECK((continuation_of_epoch IS NULL AND continuation_of_command_id IS NULL) OR (continuation_of_epoch IS NOT NULL AND continuation_of_command_id IS NOT NULL)),
+  CHECK((status='DECISION_REQUIRED' AND pending_decision_gate_id IS NOT NULL AND pending_batch_codec IS NOT NULL AND pending_batch_payload IS NOT NULL AND pending_batch_hash IS NOT NULL) OR (status<>'DECISION_REQUIRED' AND pending_decision_gate_id IS NULL AND pending_batch_codec IS NULL AND pending_batch_payload IS NULL AND pending_batch_hash IS NULL)),
+  CHECK((pending_elapsed_codec IS NULL AND pending_elapsed_payload IS NULL AND pending_elapsed_hash IS NULL AND pending_elapsed_effective_minute IS NULL) OR (status='DECISION_REQUIRED' AND progression_mode<>'FAST_FORWARD' AND pending_elapsed_codec IS NOT NULL AND pending_elapsed_payload IS NOT NULL AND pending_elapsed_hash IS NOT NULL AND pending_elapsed_effective_minute IS NOT NULL)),
+  CHECK(coalesce(length(pending_batch_payload),0)+coalesce(length(pending_elapsed_payload),0)<=max_pending_batch_bytes),
+  FOREIGN KEY(command_epoch,request_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT,
+  FOREIGN KEY(continuation_of_epoch,continuation_of_command_id) REFERENCES time_advance_state(command_epoch,request_id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS ix_time_advance_state_1 ON time_advance_state(status,next_boundary_minute,request_id);
 
@@ -810,7 +864,7 @@ CREATE TABLE IF NOT EXISTS world_event (
   event_sequence INTEGER NOT NULL CHECK(event_sequence>=0),
   game_minute INTEGER NOT NULL CHECK(game_minute>=0),
   sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999),
-  visibility TEXT NOT NULL,
+  visibility TEXT NOT NULL CHECK(visibility IN ('PUBLIC','PARTICIPANTS','OBSERVER_SCOPED','SYSTEM_HIDDEN')),
   importance INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   consumed_mask INTEGER NOT NULL DEFAULT 0,
@@ -822,11 +876,11 @@ CREATE INDEX IF NOT EXISTS ix_world_event_2 ON world_event(event_type,game_minut
 CREATE INDEX IF NOT EXISTS ix_world_event_3 ON world_event(source_epoch,source_command_id,event_sequence);
 
 CREATE TABLE IF NOT EXISTS world_state (
-  id TEXT PRIMARY KEY NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL CHECK(id='WORLD'),
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   total_game_minutes INTEGER NOT NULL CHECK(total_game_minutes>=0),
   sub_minute_ms INTEGER NOT NULL CHECK(sub_minute_ms BETWEEN 0 AND 59999),
-  world_seed TEXT NOT NULL,
+  world_seed TEXT NOT NULL CHECK(length(world_seed)=16 AND world_seed=lower(world_seed) AND world_seed NOT GLOB '*[^0-9a-f]*'),
   session_epoch TEXT NOT NULL,
   branch_id TEXT NOT NULL,
   content_version TEXT NOT NULL,
@@ -837,7 +891,6 @@ CREATE TABLE IF NOT EXISTS world_state (
   player_id TEXT,
   state_hash TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_world_state_1 ON world_state(session_epoch);
 ```
 
 ## 7. Transaction / 동시성 / Thread 설계
@@ -1784,9 +1837,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P3-001 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 아이템 이동+금화지출+RNG 1 회; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 세 요소와 receipt 가 같은 generation 에서 보임; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
+| 입력값 | Phase 2 `SavePortConformanceSuite`, 일반 commit과 event를 각각 만드는 2개 이상 admission/BoundarySlice segment, world singleton/canonical resource/fixed enum·hex/byte cap invalid INSERT, 실제 Room adapter |
+| 수행 절차 | ① Room SavePort에 동일 suite 실행 ② segment1 event.sourceVersion=v1, segment2/final receipt.stateVersion=v2 생성 ③ 정상/중복/fault commit ④ close/reopen ⑤ cursor/receipt/sourceVersion/RNG/action/event oracle ⑥ WAL/process-kill은 P3 REC fixture 연계 |
+| 예상 결과 | in-memory 계약과 Room 결과 동치, exported schema가 P2 v31.4와 일치. 두 번째/비WORLD world_state, 비정규 resource identity, 미등록 enum, 대문자·비hex·짝수 increment, over-cap pending payload INSERT가 실패한다. reopen 뒤 singleton 1행과 sealed outcome/hash/cursor가 보존되고 segment1 event.sourceVersion=v1·final receipt.stateVersion=v2가 유지된다. |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P3-001, testId=P3-IT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 세 요소와 receipt 가 같은 generation 에서 보임; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |

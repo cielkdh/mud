@@ -42,6 +42,8 @@
 ### 공통 계약의 적용 범위
 이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
 
+도시 이동·치료·훈련 시간은 Phase 2 `WorldTimeTraversal(TRAVEL|NORMAL_ACTION)`과 `ScheduledActionPayload.v1`을 사용한다. 치료실·비용·중단/취소는 claim별 policy와 action policy를 선언하고 별도 예약 우선순위나 clock 증가 규칙을 만들지 않는다. 치료/훈련/이동별 resumable·progress basis·stage별 취소·악화/손실 event codec은 `ActionKindPolicyProfile.v1` fixture로 제공한다.
+
 `CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`를 사용한다. `DomainDelta`는 typed aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
 게임은 한 프로세스·한 활성 `WorldSession`을 기준으로 한다. 여러 노드/서버/분산 Lock은 해당 없으며 UI 연속 탭·코루틴 완료·예약 이벤트·슬롯 전환·프로세스 재실행 동시성은 실제로 검증한다. `GameMinute`, `CombatMillis`, `Money(Long)`, 확률 ppm의 혼합·부동소수 권위 계산을 금지한다.
@@ -372,7 +374,7 @@
 | reservation_group_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | payload_json TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | completion_event_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| CHECK(due_minute>=start_minute) | 불변/유일성 제약 |
+| CHECK(due_minute>start_minute) | Phase 2 v1 0-duration/same-time recursive scheduling 금지 |
 #### `storage_location` 필드 및 관계
 
 | 필드/제약 | 용도 |
@@ -405,13 +407,12 @@ Index 는조회조건/정렬을기준으로추가하고 EXPLAIN QUERY PLAN 과�
 
 ### 예상 SQL / DAO 처리
 ```sql
-SELECT id,due_minute FROM scheduled_action
-WHERE status IN ('RESERVED','RUNNING') AND due_minute<=:boundary
-ORDER BY due_minute,id;
--- 완료처리에서 치료/질병/비용/완료event 및 action상태를 함께 갱신.
-UPDATE scheduled_action SET status='COMPLETED',completion_event_id=:eventId,row_version=row_version+1
-WHERE id=:actionId AND status IN ('RESERVED','RUNNING') AND row_version=:expected;
+SELECT id,mercenary_id,facility_id,action_id,treatment_json,cost,refund_policy,status,row_version
+FROM treatment_order
+WHERE action_id=:actionId;
 ```
+
+`scheduled_action`의 `ACTION_START`/`ACTION_COMPLETE` 시각 조회, 후보 생성과 상태 전이는 Phase 2 `ScheduledActionBoundarySource`/`WorldTimeTraversal`이 소유한다. Phase 10은 전달받은 `actionId`로 치료 도메인 상태를 읽고 순수한 치료·질병·비용·resource claim 정산 `DomainDelta`와 완료 사건만 계산한다. Phase 10 DAO가 별도 due scanner를 만들거나 `scheduled_action`을 직접 완료 처리해서는 안 되며, 최종 변경은 Phase 2 경계 slice의 단일 `SavePort` transaction에 함께 반영한다.
 
 ### 관련 DDL 계약
 content.db 와 save.db 는**별도로**생성하며 cross-DB JOIN/transaction 을하지않는다. 아래구문은각각해당 DB 에서실행한다. 부모 FK 테이블은선행 Phase 의완료스키마가제공해야한다. 전체초기 schema 는공통부록 SQL 에있다.
@@ -528,15 +529,16 @@ CREATE TABLE IF NOT EXISTS scheduled_action (
   action_kind TEXT NOT NULL,
   start_minute INTEGER NOT NULL,
   due_minute INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PLANNED','RESERVED','RUNNING','PAUSED','NEEDS_RESCHEDULE','COMPLETED','CANCELLED','FAILED')),
   reservation_group_id TEXT,
   payload_json TEXT NOT NULL,
   completion_event_id TEXT,
-  CHECK(due_minute>=start_minute),
+  CHECK(due_minute>start_minute),
   UNIQUE(completion_event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_scheduled_action_1 ON scheduled_action(status,due_minute,id);
-CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(actor_id,start_minute);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_2 ON scheduled_action(status,start_minute,id);
+CREATE INDEX IF NOT EXISTS ix_scheduled_action_3 ON scheduled_action(actor_id,start_minute);
 
 CREATE TABLE IF NOT EXISTS storage_location (
   id TEXT PRIMARY KEY NOT NULL,

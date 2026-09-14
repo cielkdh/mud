@@ -71,8 +71,8 @@ P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 
 | SCR-GIL-003 | 길드 결정 | guild/decision | P16 | AGENDA/DEBATE/VOTE/RESOLVED | 토론/투표 | SCR-GIL-001 | 직위/권한 | `CMD-P16-F003` |
 | SCR-GIL-004 | 길드 예산 | guild/budget | P16 | DRAFT/BUDGETED/ASSIGNED | 배정/승인 | SCR-GIL-001 | 재정 권한 | `CMD-P16-F002` |
 | SCR-STR-001 | 전술 실험실/자동화 | strategy | P19/P22 | IDLE/SIMULATING/DIRTY/MUTATING/ERROR | 실험/전략 저장/자동화 규칙/위임 실행 | 이전 화면 | 정보범위·예산·중단정책·행동권한 | `QUERY FUNC-P19-004` / `CMD-P19-F004` |
-| SCR-TIME-001 | 시간 진행 | time/advance | P2/P22 | IDLE/ADVANCING/INTERRUPTED/COMPLETED | 프리셋/대상/중단 | 이전 | interrupt policy | `CMD-P2-F004` |
-| SCR-TIME-002 | 일정/예약 | schedule | P2 | READY/EMPTY | 예약 상세/취소 | SCR-TIME-001 | 점유/자원 | `CMD-P2-F003` |
+| SCR-TIME-001 | 시간 진행 | time/advance | P2/P22 | IDLE/ADVANCING/PAUSE_REQUESTED/CANCEL_REQUESTED/INTERRUPTED/DECISION_REQUIRED/COMPLETED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED/ADVANCE_IN_PROGRESS/SUMMARY | 프리셋/대상/일시중단/취소/결정/새 continuation/요약 확인 | 이전 또는 결정 대상 | control 즉시 피드백+다음 safe boundary 정지; terminal receipt 재활성화 금지; public summary에 경과/정지/주요 사건/완료/경고/묶음/미확인 수 표시 | `CMD-P2-F004` / `CONTROL pause,cancel` |
+| SCR-TIME-002 | 일정/예약 | schedule | P2/P22 | READY/EMPTY/CONFLICT/RISK_CONFIRM/MUTATING/STALE_PREVIEW/ERROR | 예약 상세/취소/충돌 해결 선택/위험 변경 확인 | SCR-TIME-001 | PREEMPT/CANCEL_AND_INSERT/진행 중·FINAL_BOUNDARY 취소/손실은 PublicConsequencePreview의 현재·새·취소 일정, 금액, 자원, 진행률, 공개 관계·평판, 재예약 가능 여부와 NONE/UNDETERMINED/UNKNOWN을 표시; hidden 정보 금지; preview hash+row version 재검증 | `CMD-P2-F003` reserve/cancel/resolveConflict |
 | SCR-FAM-001 | 가문 | family | P18/P22 | READY | 가족/교육/후계 | SCR-FAM-002 | 공개 가족 상태 | `QUERY` |
 | SCR-FAM-002 | 후계자 | family/succession | P18 | CANDIDATES/NOMINATED/READY | 지정/승계 | SCR-FAM-001 | 적격/의사/안전장치 | `CMD-P18-F002` / `CMD-P18-F003` |
 | SCR-RECOR-001 | 연대기 | records/chronicle | P21/P22 | LOADING/READY/MUTATING/EMPTY/ERROR | 필터/상세/북마크 전환 | SCR-SEARCH-001 | 공개 정책·observer 권한 | `QUERY FUNC-P21-003` / `CMD-P21-F003` |
@@ -117,6 +117,7 @@ P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 
 |---|---|---|
 | 강화 고단계 시도 | 확률/실패 하락/보호석/비용 명시 + 확인 | 결과 RNG commit 후 일반 Undo 금지 |
 | 파티원 퇴출/계약 해지 | 사유·위약금·관계영향 미리보기 | 실행 전 취소, 실행 후 규약에 따른 후속 처리 |
+| 일정 PREEMPT/CANCEL_AND_INSERT·진행 중/FINAL_BOUNDARY 취소·손실 동반 변경 | `PublicConsequencePreview.v1`로 현재/새/취소 일정, 환불·손실, 소비·반환 자원, 잃는 진행률, 공개 관계·평판, 재예약 가능 여부를 표시하고 hidden 값은 제거. preview hash/row version stale이면 재확인 | confirm 전 취소 가능. commit 후 일반 Undo 금지, action kind 취소/재예약 정책만 사용 |
 | 세대 교체 | 상속/개인귀속/후계자 상태 최종 확인 | commit 전 취소, commit 후 SaveGeneration 복원 정책만 사용 |
 | 귀환 엔딩 | 조건·종료 영향·후일담 안내, Hold/Confirm | ENDING_COMMITTED 후 일반 Undo 금지 |
 | 세이브 삭제/Import | 대상 슬롯·백업/새 슬롯 정책 명시 | 기존 슬롯 자동 덮어쓰기 금지 |

@@ -36,6 +36,11 @@ P24는 최초 성능 확인 시점이 아니다. P2의 queue/시간 진행, P3�
 | NFR-PERF-009 | 일반 load P95 | ≤ 4.0s | ≤ 2.5s | load fixture | BASELINE_V1 / NOT_RUN |
 | NFR-PERF-010 | 2,000 NPC list jank | ≤ 8% slow frames | ≤ 5% slow frames | Macrobenchmark frame timing | BASELINE_V1 / NOT_RUN |
 | NFR-PERF-011 | 명령 입력 접수 피드백 P95 | ≤ 100ms | ≤ 100ms | Compose interaction trace | BASELINE_V1 / NOT_RUN |
+| NFR-PERF-012 | TimeAdvance pause/cancel/control 접수 피드백 P95 / 표준 bounded fixture의 safe-boundary terminal P95 | ≤ 100ms / ≤ 500ms | ≤ 100ms / ≤ 250ms | Compose interaction trace + control-to-commit trace | BASELINE_V1 / NOT_RUN |
+
+`NFR-PERF-004`는 최종적으로 실제 Room adapter를 포함한 end-to-end 값이다. Phase 2 Gate는 30일/10,000 boundary fixture에서 traversal 계산과 test-only SavePort commit 비용을 분리 기록하고, Phase 3 Gate가 동일 fixture를 Room SavePort·WAL·reopen 조건으로 재실행한다. P2 결과만으로 Room 성능 PASS를 주장하지 않으며, semantic boundary batch와 durability segment 수는 wall-clock 측정값으로 바꾸지 않는다.
+
+`NFR-PERF-012`의 고정 fixture ID는 `P2-CONTROL-SAFE-BOUNDARY-v1`이다. active FAST_FORWARD의 다음 시각 batch에 canonical payload 256 bytes인 candidate 32개를 두고 1번째 candidate 평가 직후 PAUSE/CANCEL을 요청한다. P2는 fault 없는 InMemory SavePort, P3는 동일 seed/state/candidate set의 Room SavePort를 사용하며 MIN/STD 각 30회 warm run의 P95, UI feedback timestamp와 safe-boundary terminal commit timestamp를 별도로 기록한다. candidate 수·payload·요청 위치를 측정 중 바꾸지 않고 예산 초과는 성능 실패일 뿐 stateHash나 boundary 분할을 바꾸지 않는다.
 
 ### 개발 배치 목표
 
