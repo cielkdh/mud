@@ -628,7 +628,7 @@
     "i": 1,
     "id": "FUNC-P2-001",
     "name": "단일 작성자 명령 처리",
-    "method": "WorldEngine.execute(envelope: CommandEnvelope) -> CommandResult",
+    "method": "WorldSession.execute(envelope: CommandEnvelope) -> CommandResult; WorldEngine.plan(snapshot, envelope) is internal",
     "tables": [
       "world_state",
       "command_receipt",
@@ -834,7 +834,7 @@
     "i": 4,
     "id": "FUNC-P2-004",
     "name": "이벤트 경계 시간진행·자동중단",
-    "method": "TimeAdvanceEngine.advance(request: TimeAdvanceRequest) -> AdvanceResult",
+    "method": "WorldSession.execute(AdvanceTimePayload) -> CommandResult; WorldEngine.plan -> WorldTimeTraversal.traverse",
     "tables": [
       "world_state",
       "scheduled_action",

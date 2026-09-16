@@ -22,6 +22,124 @@ import org.junit.Test
 
 class WorldSessionTest {
     @Test
+    fun `P2-UT-001 spends 40 gold once and increments the committed version once`() = runBlocking {
+        val savePort = RecordingSavePort()
+        val session = moneySession(savePort)
+        val envelope = moneyEnvelope("p2-ut-001")
+
+        assertAccepted(session.execute(envelope), 1)
+        assertAccepted(session.execute(envelope), 1)
+
+        assertEquals(60L, savePort.deltas.single().worldChange!!.after.calendar.resources.owned[gold])
+        assertEquals(1, savePort.receiptCount)
+        assertEquals(StateVersion(1), savePort.stateVersion)
+        assertEquals(1, savePort.commandIds.size)
+        session.close()
+    }
+
+    @Test
+    fun `P2-BT-001 rejects stale commands and authoritative world precondition mismatches without mutation`() = runBlocking {
+        val savePort = RecordingSavePort()
+        val session = moneySession(savePort)
+        assertAccepted(session.execute(moneyEnvelope("p2-bt-001-first")), 1)
+        val before = session.inMemoryStateHash()
+
+        val stale = session.execute(moneyEnvelope("p2-bt-001-stale", expectedVersion = StateVersion(0)))
+        assertEquals(DomainError.VersionConflict(StateVersion(0), StateVersion(1)), (stale as CommandResult.Rejected).error)
+        assertEquals(before, session.inMemoryStateHash())
+        assertEquals(1, savePort.commandIds.size)
+        val worldChange = checkNotNull(savePort.deltas.single().worldChange)
+        assertEquals(moneySnapshot().world, worldChange.before)
+        assertEquals(AuthoritativeWorldState.WORLD_ID, worldChange.before.worldId)
+        assertEquals(AuthoritativeWorldState.WORLD_ID, worldChange.after.worldId)
+        session.close()
+
+        val mismatchSavePort = RecordingSavePort()
+        val mismatchWorld = moneySnapshot().world.copy(clock = WorldClock(checkedValue(GameMinute.of(1))))
+        val mismatchSession = WorldSession(
+            SessionEpoch(1),
+            mismatchSavePort,
+            this,
+            ContentSnapshot.emptyForTest(),
+            moneySnapshot(),
+            Dispatchers.Unconfined
+        ) { _, _, rngState, submissionSequence ->
+            DomainDelta(
+                aggregateChanges = emptyList(),
+                rngState = rngState,
+                worldChange = WorldStateChange(mismatchWorld, mismatchWorld),
+                events = emptyList(),
+                result = CommandResult.Accepted(submissionSequence)
+            )
+        }
+        val mismatchBefore = mismatchSession.inMemoryStateHash()
+        val mismatch = mismatchSession.execute(unsupportedEnvelope("p2-bt-001-world", "world"))
+        assertEquals(
+            DomainError.InvariantViolation("authoritative world state precondition failed"),
+            (mismatch as CommandResult.Rejected).error
+        )
+        assertEquals(mismatchBefore, mismatchSession.inMemoryStateHash())
+        assertEquals(0, mismatchSavePort.commandIds.size)
+        assertEquals(null, mismatchSession.publications.value)
+        mismatchSession.close()
+    }
+
+    @Test
+    fun `P2-FT-001 preserves state hash RNG and receipt when commit fails`() = runBlocking {
+        val savePort = FailingSavePort()
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory())
+        val envelope = mutationEnvelope("p2-ft-001", "aggregate-failure", "before", rngState(42, 1))
+        val before = session.inMemoryStateHash()
+
+        val result = session.execute(envelope)
+
+        assertTrue((result as CommandResult.Rejected).error is DomainError.PersistenceFailure)
+        assertEquals(before, session.inMemoryStateHash())
+        assertEquals(null, savePort.findReceipt(SessionEpoch(1), CommandId("p2-ft-001")))
+        assertEquals(null, session.publications.value)
+        session.close()
+    }
+
+    @Test
+    fun `P2-CT-001 makes same payload idempotent and rejects payload reuse`() = runBlocking {
+        val savePort = RecordingSavePort()
+        val session = moneySession(savePort)
+        val envelope = moneyEnvelope("p2-ct-001")
+
+        assertAccepted(session.execute(envelope), 1)
+        assertAccepted(session.execute(envelope), 1)
+        val reused = session.execute(moneyEnvelope("p2-ct-001", actionId = "different-action", expectedVersion = StateVersion(1)))
+
+        assertTrue((reused as CommandResult.Rejected).error is DomainError.IdempotencyKeyReuse)
+        assertEquals(60L, savePort.deltas.single().worldChange!!.after.calendar.resources.owned[gold])
+        assertEquals(StateVersion(1), savePort.stateVersion)
+        assertEquals(1, savePort.receiptCount)
+        assertEquals(1, savePort.commandIds.size)
+        session.close()
+    }
+
+    @Test
+    fun `lifecycle pause resume close is idempotent and does not persist directly`() = runBlocking {
+        val savePort = RecordingSavePort()
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined)
+
+        SavePortConformanceSuite.assertNoLifecyclePersistence(savePort) {
+            assertEquals(SessionLifecycle.PAUSED, session.pause().lifecycle)
+            assertEquals(SessionLifecycle.PAUSED, session.pause().lifecycle)
+            assertTrue((session.execute(unsupportedEnvelope("paused", "phase")) as CommandResult.Rejected).error is DomainError.SessionClosed)
+            assertEquals(SessionLifecycle.OPEN, session.resume().lifecycle)
+            assertEquals(SessionLifecycle.OPEN, session.resume().lifecycle)
+
+            val first = session.close(CloseReason.APPLICATION_REQUEST)
+            val second = session.close(CloseReason.PARENT_SCOPE)
+            assertEquals(CloseResult(SessionEpoch(1), StateVersion(0), 0), first)
+            assertEquals(first, second)
+            assertEquals(SessionLifecycle.CLOSED, session.runtimeState.value.lifecycle)
+            assertEquals(SessionLifecycle.CLOSED, session.resume().lifecycle)
+        }
+    }
+
+    @Test
     fun `value objects keep units and reject invalid ranges`() {
         val sixty = checkedValue(
             checkedValue(Money.of(100))
@@ -36,8 +154,8 @@ class WorldSessionTest {
 
         val streams = RngState(
             listOf(
-                RngStreamState(RngStreamKey("world"), "pcg32.v1", 1, 1),
-                RngStreamState(RngStreamKey("encounter"), "pcg32.v1", 2, 3)
+                RngStreamState(RngStreamKey("world"), "pcg32.v1", 1, 1, 1),
+                RngStreamState(RngStreamKey("encounter"), "pcg32.v1", 2, 3, 3)
             )
         )
         assertEquals(2, streams.streams.size)
@@ -68,7 +186,7 @@ class WorldSessionTest {
             gameMinute = checkedValue(GameMinute.of(0)),
             subMinuteMs = SubMinuteMillis(0),
             eventSequence = EventSequence(0),
-            visibility = EventVisibility.SYSTEM,
+            visibility = EventVisibility.SYSTEM_HIDDEN,
             importance = EventImportance.NORMAL,
             payload = UnsupportedFeatureEventPayload("phase-event")
         )
@@ -137,6 +255,29 @@ class WorldSessionTest {
             firstClose.await()
             secondClose.await()
             assertEquals(listOf("command-a", "command-b"), savePort.commandIds)
+        }
+    }
+
+    @Test
+    fun `full command queue rejects overflow without blocking pause or close`() = runBlocking {
+        withTimeout(5_000) {
+            val savePort = RecordingSavePort()
+            val dispatcher = PausedDispatcher()
+            val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), dispatcher)
+            val accepted = (0 until 64).map { index ->
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    session.execute(unsupportedEnvelope("queued-$index", "phase-$index", expectedVersion = null))
+                }
+            }
+            val overflow = session.execute(unsupportedEnvelope("queued-overflow", "phase-overflow", expectedVersion = null))
+
+            assertEquals(DomainError.ValidationError("commandQueue", "capacity exceeded"), (overflow as CommandResult.Rejected).error)
+            assertEquals(SessionLifecycle.PAUSED, session.pause().lifecycle)
+            val close = async(start = CoroutineStart.UNDISPATCHED) { session.close() }
+            dispatcher.runUntilIdle()
+            accepted.forEachIndexed { index, command -> assertUnsupported(command.await(), index + 1L) }
+            close.await()
+            assertEquals((0 until 64).map { "queued-$it" }, savePort.commandIds)
         }
     }
 
@@ -301,6 +442,49 @@ class WorldSessionTest {
     }
 
     @Test
+    fun `authoritative state hash includes ledger binding and time advance state`() = runBlocking {
+        val resource = ResourceIdentity("MATERIAL", "ore")
+        val goal = TimeAdvanceGoal.UntilMinute(checkedValue(GameMinute.of(10)))
+        val completed = TimeAdvanceState(
+            goal, null, 0, TimeAdvanceResult.COMPLETED,
+            commandEpoch = SessionEpoch(1), commandId = CommandId("advance-hash"),
+            progressionMode = ProgressionMode.FAST_FORWARD,
+            limits = TimeTraversalLimits(checkedValue(GameMinute.of(10)), 8)
+        )
+        suspend fun hash(owned: Long, bindingCodec: String, state: TimeAdvanceState): PayloadHash {
+            val session = WorldSession(
+                SessionEpoch(1),
+                RecordingSavePort(),
+                this,
+                ContentSnapshot.emptyForTest(),
+                WorldSnapshot(
+                    StateVersion(3),
+                    AuthoritativeWorldState(
+                        WorldClock(checkedValue(GameMinute.of(7))),
+                        ScheduleCalendar(emptyList(), ResourceLedger(mapOf(resource to owned))),
+                        state,
+                        BoundaryRegistryBinding(1, emptyList(), candidateCodecs = setOf(bindingCodec))
+                    ),
+                    rngState(42, 3),
+                    emptyMap()
+                ),
+                WorldEngine(emptyList()),
+                Dispatchers.Unconfined
+            )
+            return try {
+                session.inMemoryStateHash()
+            } finally {
+                session.close()
+            }
+        }
+
+        val base = hash(10, "TestPayload.v1", completed)
+        assertNotEquals(base, hash(11, "TestPayload.v1", completed))
+        assertNotEquals(base, hash(10, "OtherPayload.v1", completed))
+        assertNotEquals(base, hash(10, "TestPayload.v1", completed.copy(status = TimeAdvanceResult.LIMIT_REACHED)))
+    }
+
+    @Test
     fun `invalid event metadata is rejected before persistence`() = runBlocking {
         val savePort = RecordingSavePort()
         val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory(validEventMetadata = false))
@@ -447,9 +631,70 @@ class WorldSessionTest {
         expectedVersion = expectedVersion,
         actorId = entityId("actor-1"),
         payload = UnsupportedFeaturePayload(
-            "$aggregateId|$aggregateHash|${rngState.streams.single().state}|${rngState.streams.single().counter}"
+            "$aggregateId|$aggregateHash|${rngState.streams.single().state}|${rngState.streams.single().drawCounter}"
         )
     )
+
+    private fun moneySnapshot(): WorldSnapshot = WorldSnapshot(
+        StateVersion(0),
+        AuthoritativeWorldState(
+            WorldClock(checkedValue(GameMinute.of(0))),
+            ScheduleCalendar(emptyList(), mapOf(gold to 100L)),
+            null,
+            BoundaryRegistryBinding(1, emptyList())
+        ),
+        RngState(emptyList()),
+        emptyMap()
+    )
+
+    private fun kotlinx.coroutines.CoroutineScope.moneySession(savePort: RecordingSavePort): WorldSession = WorldSession(
+        SessionEpoch(1),
+        savePort,
+        this,
+        ContentSnapshot.emptyForTest(),
+        moneySnapshot(),
+        WorldEngine(emptyList()),
+        Dispatchers.Unconfined
+    )
+
+    private fun moneyEnvelope(
+        commandId: String,
+        actionId: String = "purchase",
+        expectedVersion: StateVersion? = StateVersion(0)
+    ): CommandEnvelope<ScheduleReservePayload> = CommandEnvelope.create(
+        CommandId(commandId),
+        SessionEpoch(1),
+        expectedVersion,
+        entityId("actor-1"),
+        ScheduleReservePayload(
+            entityId(actionId),
+            "economy.purchase",
+            ScheduledActionPayload(
+                "PLAYER",
+                entityId("actor-1"),
+                listOf(ScheduledEntityRef("PLAYER", entityId("actor-1"))),
+                SchedulePriority.PERSONAL_COMMITMENT,
+                listOf(ResourceClaim(gold, 40L, ResourceClaimPolicy.CONSUME_ON_RESERVE)),
+                ActionKindPolicyProfile(
+                    resumable = true,
+                    progressBasis = "MINUTE",
+                    interruptionPolicy = ActionInterruptionPolicy(ActionInterruptionResult.CONTINUE),
+                    cancellationPolicy = ActionCancellationPolicy(
+                        CancellationStage.entries.associateWith { ActionCancellationRule(0, 0, true) }
+                    ),
+                    consequenceEventCodec = "economy.purchase.cancelled.v1"
+                ),
+                "economy.purchase.completed",
+                "economy.purchase.completed.v1",
+                canBePreempted = false
+            ),
+            checkedValue(GameMinute.of(1)),
+            checkedValue(GameMinute.of(2)),
+            checkedValue(GameMinute.of(0))
+        )
+    )
+
+    private val gold = ResourceIdentity("CURRENCY", "gold")
 
     private fun testDeltaFactory(validEventMetadata: Boolean = true): (
         CommandEnvelope<out WorldCommandPayload>,
@@ -482,7 +727,7 @@ class WorldSessionTest {
                         gameMinute = checkedValue(GameMinute.of(0)),
                         subMinuteMs = SubMinuteMillis(0),
                         eventSequence = EventSequence(if (validEventMetadata) 0 else 1),
-                        visibility = EventVisibility.SYSTEM,
+                        visibility = EventVisibility.SYSTEM_HIDDEN,
                         importance = EventImportance.NORMAL,
                         payload = UnsupportedFeatureEventPayload("test-mutation")
                     )
@@ -495,7 +740,7 @@ class WorldSessionTest {
     private fun entityId(value: String): EntityId = checkedValue(EntityId.of(value))
 
     private fun rngState(state: Long, counter: Long): RngState = RngState(
-        listOf(RngStreamState(RngStreamKey("world"), "phase0-test.v1", state, counter))
+        listOf(RngStreamState(RngStreamKey("world"), "phase0-test.v1", state, 1, counter))
     )
 
     private data class TestAggregate(
@@ -515,11 +760,17 @@ class WorldSessionTest {
     private class RecordingSavePort : SavePort {
         val commandIds = mutableListOf<String>()
         val deltas = mutableListOf<DomainDelta>()
+        var receiptLookups = 0
+        val callCount: Int get() = receiptLookups + commandIds.size
         private var committedVersion = StateVersion(0)
         private val receipts = mutableMapOf<Pair<SessionEpoch, CommandId>, PersistedReceipt>()
+        val stateVersion: StateVersion get() = committedVersion
+        val receiptCount: Int get() = receipts.size
 
-        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? =
-            receipts[sessionEpoch to commandId]
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? {
+            receiptLookups++
+            return receipts[sessionEpoch to commandId]
+        }
 
         override suspend fun commit(
             envelope: CommandEnvelope<out WorldCommandPayload>,
@@ -630,6 +881,14 @@ class WorldSessionTest {
             while (queued.isNotEmpty()) {
                 queued.removeFirst().run()
             }
+        }
+    }
+
+    private object SavePortConformanceSuite {
+        suspend fun assertNoLifecyclePersistence(port: RecordingSavePort, action: suspend () -> Unit) {
+            val before = port.callCount
+            action()
+            assertEquals(before, port.callCount)
         }
     }
 }

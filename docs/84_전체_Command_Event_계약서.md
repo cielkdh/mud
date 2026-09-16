@@ -67,26 +67,31 @@ sequenceDiagram
     participant PR as Projection
     UI->>VM: UiAction
     VM->>WS: CommandEnvelope
-    WS->>WE: execute(envelope)
-    WE->>WE: epoch/version/idempotency/guard
-    WE->>WE: compute Delta + RNG outcome
-    WE->>SP: commit(envelope, delta)
+    WS->>WS: epoch/version/idempotency/guard
+    WS->>WE: plan(envelope, immutable snapshot)
+    WE-->>WS: ExecutionPlan(Atomic/Segment)
+    WS->>SP: commit/commitSegment(envelope, plan)
     SP->>DB: atomic commit(delta, events, receipt)
     DB-->>SP: committed stateVersion
-    SP-->>WE: CommitReceipt
-    WE-->>PR: DomainEvent + PublicSnapshot
+    SP-->>WS: CommitReceipt
+    WS->>WS: verify receipt, apply committed delta
+    WS-->>PR: PublicDomainEvent + PublicSnapshot
     PR-->>UI: UiState
 ```
 
 `CommandEnvelope`는 UI/스케줄러가 시작하는 **gameplay** application UseCase 경계에서 한 번만 생성하고 `WorldSession.execute`로 제출한다. `WorldSession`·`WorldEngine`·순수 Kotlin `SavePort` 계약은 `:core:simulation`이 소유한다. P0 조립 루트는 `:app`만이며, P3에서 `:core:save`의 `SaveCoordinator`가 `SavePort`를 구현한다. `:tools:headless`는 P23/P25에서 독립 실행 요구가 확인될 때만 동일 계약을 조립한다. SaveCoordinator는 envelope를 새로 만들거나 `commandId`를 바꾸지 않고 `DomainDelta`를 persistence plan으로 변환한다. 일반 command는 envelope당 receipt 1개와 write transaction 1개다. 시간 진행처럼 중간 내구 경계가 제품 요구인 **resumable command**만 같은 receipt row를 `RUNNING → COMMITTED|INTERRUPTED`로 갱신하는 여러 bounded segment commit을 허용하며, segment별 receipt/CommandEnvelope는 만들지 않는다. process kill 뒤에는 RUNNING receipt만 durable cursor에서 복구할 수 있다. INTERRUPTED receipt는 terminal이고, 사용자의 continuation은 `continuationOfCommandId`를 가진 새 gameplay envelope/receipt로 제출한다. 재시도는 `expectedVersion` 검사와 delta 계산 전에 `SavePort.findReceipt(epoch, commandId)`로 durable receipt를 조회한다. 같은 payload hash면 원 result를 반환하고, 다른 hash면 `IdempotencyKeyReuse`로 거절한다. 메모리 cache는 조회 최적화일 뿐 멱등성의 권위가 아니다.
 
+`WorldSession`은 유일한 authoritative lane이자 commit/apply/publish 조정자다. 구체 `WorldEngine`은 `WorldSnapshot(stateVersion, AuthoritativeWorldState(clock,calendar,timeAdvance,boundaryBinding), rngState, aggregates)`에서 `ExecutionPlan.Atomic` 또는 `ExecutionPlan.Segment`만 계산하며 SavePort를 호출하지 않는다. `DomainDelta.worldChange`는 typed authoritative before/after를 가지며 P2 핵심 state를 JSON aggregate map에 숨기지 않는다. 실제 `BoundarySource` ordered list는 immutable engine dependency이고 snapshot에는 `BoundaryRegistryBinding` 값만 저장한다. 외부 payload/caller가 current snapshot, calendar 또는 source 객체를 공급하는 경로는 금지한다.
+
 세계 clock이 증가하는 모든 gameplay command는 원인과 무관하게 Phase 2 `WorldTimeTraversal`을 호출해 target 사이의 모든 boundary batch를 처리한다. 전투·던전·여행·일반 행동은 clock row를 직접 증가시키지 않는다. 진행 mode는 표시·알림 defer·fast-forward stop policy만 바꾸며 authoritative boundary source/order를 바꾸지 않는다.
 
 `SavePort.commitSegment(envelope, expectedSegmentNo, delta, timeAdvanceState, terminalResult)`는 admission segment 0 또는 다음 `BoundarySlice`만 current rows·RNG·events·state·같은 receipt와 원자 commit한다. `expectedSegmentNo` 불일치는 double apply 없이 기존 결과/Conflict다. COMPLETED/UNREACHABLE/LIMIT_REACHED/CANCELLED는 COMMITTED, INTERRUPTED/DECISION_REQUIRED와 durable progress 뒤 FAILED는 INTERRUPTED, admission 전 deterministic domain reject는 REJECTED다. SYSTEM_HALT는 신뢰할 수 없는 상태에서 새 receipt/Event를 쓰지 않는다. DECISION_REQUIRED는 미처리 ordered candidate suffix의 codec/payload/hash를 terminal time_advance_state에 보존한다. `ATOMIC_SEALED.v1`은 gate≤1, choice 1..8, 추가 gate 없음과 choice canonical 순 총 평가≤`8×maxBoundaryCount`인 모든 branch의 cap/limit/codec 적합성을 mutation 전에 증명할 수 있을 때만 허용하며, 증명 불가 action은 reject하거나 처음부터 ScheduledAction으로 분류한다. 이미 계산된 뒤 gate를 만나면 같은 state에 `SealedElapsedOutcome.v1` payload/hash/effectiveMinute/domainResultId와 소비된 action-local RNG를 추가해 재추첨·사후 취소를 막는다. decision continuation의 첫 transaction은 predecessor `(epoch,commandId)`·terminal 상태·gate 선택·suffix/outcome hash를 검증하고 UNIQUE child claim·선택 적용·suffix 소비·새 receipt/state/event를 원자 commit하며 target까지를 protected completion으로 처리한다. 이 구간에는 PAUSE/CANCEL/일반 limit terminal이 개입하지 않으며 kill은 이전 DECISION_REQUIRED 또는 완전한 target commit만 남긴다. sealed outcome은 command와 무관한 domainResultId를 stableEntityId로 하는 `elapsed.action.apply.v1` BoundaryCandidate로 effectiveMinute frozen batch에 포함되어 같은 `BoundaryOrder.v1`을 따른다. DomainEvent provenance는 event를 실제 생성한 continuation receipt를 가리키며 original receipt로 위장하지 않는다. 원 predecessor는 재활성화/삭제하지 않는다. 장시간 이동·안전 복귀·치료·훈련·운송·제작은 ScheduledAction으로 모델링한다. Phase 2는 test-only port conformance, Phase 3은 실제 Room/WAL/reopen/process-kill 재실행을 소유한다.
 
-권위 상태 쓰기는 capacity 64 `Channel<QueuedCommand>` 하나와 consumer 하나로만 실행한다. enqueue 완료 시 부여한 `submissionSequence`가 수락 순서다. active AdvanceTime 중 UI의 새 gameplay 제출은 enqueue하지 않고 `AdvanceInProgress(activeCommandId, allowedControls)`를 반환한다. 이미 수락된 scheduler/internal command는 terminal 뒤 FIFO를 지킨다. `PAUSE`, `CANCEL_ADVANCE`, `APP_BACKGROUND`, `CLOSE`는 별도 lifecycle/control plane에서 다음 safe boundary를 요청하지만 독립 envelope·receipt·Event를 만들지 않는다. `CANCEL_ADVANCE`는 취소 가능한 traversal만 `CANCELLED`/receipt `COMMITTED`로, 나머지는 remaining goal을 보존한 `INTERRUPTED`로 끝낸다. sealed atomic outcome의 protected completion은 `allowedControls=[]`이며 결과 적용 또는 다음 gate commit 뒤에 control을 관측한다. 이 경로 밖의 병렬 authoritative mutation은 금지한다.
+권위 상태 쓰기는 capacity 64 `Channel<QueuedCommand>` 하나와 consumer 하나로만 실행한다. enqueue 완료 시 부여한 `submissionSequence`가 수락 순서다. active AdvanceTime 중 UI의 새 gameplay 제출은 enqueue하지 않고 `AdvanceInProgress(activeCommandId, allowedControls)`를 반환한다. 이미 수락된 scheduler/internal command는 terminal 뒤 FIFO를 지킨다. `PAUSE`, `CANCEL_ADVANCE`, `APP_BACKGROUND`, `CLOSE`는 별도 lifecycle/control plane에서 다음 safe boundary를 요청하지만 독립 envelope·receipt·Event를 만들지 않는다. control request는 `sessionEpoch`, `expectedActiveCommandId`, `kind`, `allowCommitDrain`을 가지며 WorldSession의 pending latch에만 기록된다. consumer가 다음 segment plan 전에 latch를 읽고, 선택된 terminal은 기존 active gameplay receipt로만 commit한다. stale epoch/active ID는 write/publish 0, protected completion은 `allowedControls=[]`, CLOSE는 admission 차단→safe-boundary drain→consumer join→handle close 순서다. `CANCEL_ADVANCE`는 취소 가능한 traversal만 `CANCELLED`/receipt `COMMITTED`로, 나머지는 remaining goal을 보존한 `INTERRUPTED`로 끝낸다. 이 경로 밖의 병렬 authoritative mutation은 금지한다.
 
-`DomainDelta`는 typed aggregate change, 새 RNG state/counter, typed DomainEvent payload, command result만 포함한다. `AggregateChange`는 실제 typed `before`/`after` aggregate state와 aggregate ID를 가지며 hash만으로 row 변경을 표현하지 않는다. RNG는 `(streamKey, algorithmVersion, state, counter)`의 여러 stream state로 표현한다. table name, DAO, SQL, `dirtyRows[]`를 포함하지 않는다. SaveCoordinator의 mapper가 DomainDelta를 current row 변경과 dirty shard key로 변환하므로 `:core:simulation`은 저장 구조를 모른다.
+`DomainDelta`는 optional typed `WorldStateChange`, typed aggregate change, 새 RNG state/counter, typed DomainEvent payload, command result만 포함한다. `WorldStateChange`와 `AggregateChange`는 실제 typed `before`/`after` state를 가지며 hash만으로 row 변경을 표현하지 않는다. RNG는 `(streamKey, algorithmVersion, state, counter)`의 여러 stream state로 표현한다. table name, DAO, SQL, `dirtyRows[]`를 포함하지 않는다. SaveCoordinator의 mapper가 DomainDelta를 current row 변경과 dirty shard key로 변환하므로 `:core:simulation`은 저장 구조를 모른다.
+
+`PersistedReceipt`는 최소 `lifecycleStatus`, `stateVersion`, `lastCommittedSegmentNo`, `TimeAdvanceState?`를 포함한다. WorldSession은 admission segment 0부터 같은 receipt의 watermark를 검증하고, commit 불확정 시 `findReceipt`로 성공 여부를 reconcile한 뒤 정확히 한 번만 apply/publish한다. 확인 불가 또는 plan/receipt 불일치는 session을 안전 정지하며 추정 apply/publish하지 않는다. commit 성공 후 publication은 `CommittedPublication(PublicSnapshot, List<PublicDomainEvent>)` 하나로 갱신하고 raw/hidden event는 외부에 내보내지 않는다. StateFlow conflation은 durable event replay를 보장하지 않으며 그 책임은 P3 outbox/read model에 있다.
 
 도메인 guard 거절은 권위 상태/RNG를 바꾸지 않는 receipt-only transaction으로 `REJECTED` receipt를 먼저 확정한 뒤, 필요할 때만 같은 transaction의 `SYSTEM_HIDDEN` visibility failure DomainEvent를 기록한다. Registry의 Failure Event는 이 **결정론적 도메인 거절**에만 해당한다. malformed envelope, `StaleSession`, `IdempotencyKeyReuse`, 인증/정보노출 위험, DB/파일/프로세스 실패는 신뢰 가능한 receipt/Event를 만들 수 없으므로 typed 응답·로컬 진단만 남긴다. 모든 `world_event`는 해당 segment가 생성한 durable receipt를 FK로 가지며 커밋 전에 publish되지 않는다. resumable receipt가 이후 RUNNING/INTERRUPTED/COMMITTED로 전이해도 이미 생성된 event와 sourceVersion은 유효하다.
 
@@ -100,6 +105,8 @@ data class PublicSnapshot<V : PublicView>(
 ```
 
 ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVersion`을 단조 증가시킨다. 동일 version 재수신은 멱등 허용하고 더 낮은 version은 버린다. 슬롯/세션 전환 시 이전 collector를 취소하며 `checkpointGenerationId`는 가장 최근 완전 checkpoint와 복구 출처만 식별한다. 일반 command commit이 SaveGeneration을 만들었다는 뜻으로 사용하지 않는다.
+
+decision gate open event는 `decision.required.v1`, 선택 적용 event는 `decision.selection.applied.v1`로 분리한다. 두 codec은 payload 의미를 공유하거나 재사용하지 않으며, projection/replay가 선택 완료를 새 미해결 gate로 오인하지 않도록 한다.
 
 ## 4. 원문에서 직접 제시된 WorldCommand 예
 
@@ -146,7 +153,7 @@ ViewModel은 현재 `sessionEpoch`와 일치하는 snapshot만 받고 `stateVers
 
 | Command ID | Phase | Function | Payload/메소드 계약 | Tables | Transaction | Completion Event | Failure Event |
 |---|---|---|---|---|---|---|---|
-| `CMD-P2-F001` | P2 | `FUNC-P2-001` 단일 작성자 명령 처리 | `WorldEngine.execute(envelope: CommandEnvelope) -> CommandResult` | world_state, command_receipt, world_event, rng_state | authoritative 변경+receipt 원자 처리 | `EVT-P2-F001-COMMITTED` | `EVT-P2-F001-REJECTED` |
+| `CMD-P2-F001` | P2 | `FUNC-P2-001` 단일 작성자 명령 처리 | `WorldSession.execute(envelope)`; 내부 `WorldEngine.plan(envelope,snapshot)->ExecutionPlan` | world_state, command_receipt, world_event, rng_state | WorldSession만 authoritative commit/apply/publish 조정 | `EVT-P2-F001-COMMITTED` | `EVT-P2-F001-REJECTED` |
 | `CMD-P2-F003` | P2 | `FUNC-P2-003` 예약·점유·자원 선점 | `reserve`/`cancel`/`resolveConflict`; canonical ResourceIdentity, row versions·SchedulePriority·public consequence/claim 정책 | scheduled_action, occupancy, resource_reservation | Risk confirm의 preview hash+expected row version 재검증 뒤 일정 변경·claim 정산·receipt 원자 처리; P2 자동 선택/hidden 정보 노출 금지 | `EVT-P2-F003-COMMITTED` | `EVT-P2-F003-REJECTED` |
 | `CMD-P2-F004` | P2 | `FUNC-P2-004` 공통 세계시간 traversal·자동중단 | 외부 `AdvanceTime`; 모든 elapsed command는 내부 `WorldTimeTraversal` 사용 | world_state, scheduled_action, time_advance_state, world_event, command_receipt | gate 없는 짧은 action은 outer commit; 중간 gate는 sealed outcome/RNG+prefix/suffix를 durable 보존해 continuation; 장시간 action은 ScheduledAction | `EVT-P2-F004-COMMITTED` | `EVT-P2-F004-REJECTED` |
 | `CMD-P3-F001` | P3 | `FUNC-P3-001` 명시적 checkpoint·새 슬롯 bootstrap | `SaveCommand = CheckpointWorld | CreateNewWorld`; `SavePort.checkpoint` 1회 | world_state, command_receipt, rng_state, save_generation, save_slot | frozen current snapshot의 완전 generation+receipt; 이전 mutation 재적용 없음 | `EVT-P3-F001-COMMITTED` | `EVT-P3-F001-REJECTED` |

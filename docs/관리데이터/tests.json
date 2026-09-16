@@ -1120,9 +1120,9 @@
     "logs": "feature=FUNC-P2-001, testId=P2-UT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "잔액60·receipt 1 개·stateVersion 1 회 증가",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-15T19:27:43+09:00: WorldSessionTest의 공식 P2-UT-001이 직접 실행되어 Accepted(1), ResourceLedger 금화 100→60, receipt 1개, stateVersion 1을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-BT-001",
@@ -1130,17 +1130,17 @@
     "type": "BT",
     "function": "FUNC-P2-001",
     "title": "단일 작성자 명령 처리 / 경계·거절",
-    "input": "과거 expectedVersion, 두 번째 world_state 또는 `id!='WORLD'`, 비정규 ResourceIdentity",
-    "expected": "stale command는 Conflict·변경0. P2 conformance에서 singleton/identity 위반 delta 거절; P3 실제 SQLite/Room에서는 invalid INSERT 자체가 실패",
+    "input": "과거 expectedVersion, typed AuthoritativeWorldState 단일 before/after, current world와 다른 before precondition mismatch",
+    "expected": "stale command는 Conflict·변경0. P2 의미 conformance에서 non-null typed single before/after와 WORLD_ID='WORLD'를 확인하고 authoritative world precondition mismatch는 거절·변경0; P3 실제 SQLite/Room의 duplicate/non-WORLD/canonical CHECK invalid INSERT는 별도 검증",
     "precondition": "격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시.",
     "steps": "① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장",
     "db": "권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인.",
     "logs": "feature=FUNC-P2-001, testId=P2-BT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "Conflict, 재조회 안내·변경0",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-15T19:27:43+09:00: WorldSessionTest의 공식 P2-BT-001이 직접 실행되어 stale VersionConflict, valid non-null typed single before/after와 WORLD_ID='WORLD', current world와 다른 before의 authoritative world precondition mismatch 거절을 검증했으며 stale/mismatch 경로 stateHash/commit/publication 변경은 0이다. P3 SQLite/Room duplicate/non-WORLD/canonical CHECK invalid INSERT는 NOT_RUN이다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-FT-001",
@@ -1156,9 +1156,9 @@
     "logs": "feature=FUNC-P2-001, testId=P2-FT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "이전 stateHash/RNG/receipt 유지",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-15T19:27:43+09:00: WorldSessionTest의 공식 P2-FT-001이 직접 실행되어 commit 실패를 PersistenceFailure로 반환하고 이전 stateHash, RNG, receipt, publication을 유지하는 것을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-CT-001",
@@ -1174,9 +1174,9 @@
     "logs": "feature=FUNC-P2-001, testId=P2-CT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "잔액60·receipt 1 개·stateVersion 1 회 증가; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-15T19:27:43+09:00: WorldSessionTest의 공식 P2-CT-001이 직접 실행되어 동일 commandId/payload는 1회 효과와 기존 receipt를 반환하고 다른 payload는 IdempotencyKeyReuse로 거절하는 것을 검증했다. 금화 잔액60, stateVersion1, receipt1, commit1. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-IT-001",
@@ -1184,17 +1184,17 @@
     "type": "IT",
     "function": "FUNC-P2-001",
     "title": "단일 작성자 명령 처리 / adapter·영속 경계",
-    "input": "동일 commandId로 금화40 지출 2회, 잔액100; `InMemorySavePort`와 `FaultInjectingSavePort`",
-    "expected": "잔액60·receipt 1개·stateVersion 1회 증가, complete-or-previous, failed commit publish 0",
+    "input": "public WorldSession→concrete WorldEngine.plan→`InMemorySavePort`/`FaultInjectingSavePort`→CommittedPublication; 동일 commandId 금화40 지출 2회, 잔액100",
+    "expected": "잔액60·receipt 1개·stateVersion 1회 증가, complete-or-previous, commit/receipt 검증 전 publish 0, reconcile 뒤 apply/publication 정확히 1회",
     "precondition": "격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시.",
-    "steps": "`SavePortConformanceSuite`로 정상 commit, duplicate, before/during/after-commit fault와 publish 경계를 검증한다. 실제 DB reopen은 요구하지 않는다.",
+    "steps": "`SavePortConformanceSuite`로 정상 commit, duplicate, before/during/after-commit fault, 불확정 성공 receipt reconcile과 publication 경계를 검증한다. 실제 DB reopen은 요구하지 않는다.",
     "db": "권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인.",
     "logs": "feature=FUNC-P2-001, testId=P2-IT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "잔액60·receipt 1 개·stateVersion 1 회 증가; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-15T19:27:43+09:00: Phase2ConformanceTest의 공식 P2-IT-001이 직접 실행되어 SavePortConformanceSuite의 정상/중복/before·during·after-commit fault와 public WorldSession InMemory/FaultInjecting 경로를 검증했다. 금화100→60, receipt1, stateVersion1, write1, publication 관측, failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.Phase2ConformanceTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/Phase2ConformanceTest.kt; core/simulation/src/main/kotlin/com/imsi/mud/simulation/SavePortConformanceSuite.kt"
   },
   {
     "id": "P2-UT-002",
@@ -1210,9 +1210,9 @@
     "logs": "feature=FUNC-P2-002, testId=P2-UT-002, algorithm/seed/vector/counter만 기록하며 sourceCommandId는 없다.",
     "state": "same input + same clock/RNG state = same ClockDelta + RNG result + drawCounter",
     "success": "입력 불변·반환값/Golden/counter 동치·F002 전용 SavePort/receipt/event 0건",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-16T05:07:57.892Z: GameTimeRngTest의 공식 P2-UT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 10초×6과 60초 ClockDelta 동치, PCG golden vector 6개와 drawCounter 6을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.GameTimeRngTest.xml (SHA-256: 850ef1a6177aac8fcf610600b85f333f20a0b2eacaf26c6ad913be889df2fbec); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-BT-002",
@@ -1228,9 +1228,9 @@
     "logs": "feature=FUNC-P2-002, worldSeed/streamKey/raw bytes/initState/initSeq를 evidence로 기록.",
     "state": "unsigned wrap/rotate·calendar boundary·seed byte order가 고정됨",
     "success": "clock/seed codec/Golden이 일치하고 F002 전용 persistence 0건",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-16T05:07:57.892Z: GameTimeRngTest의 공식 P2-BT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 360일 calendar rollover와 raw big-endian world seed bytes, initState/initSeq 및 seeded output golden을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.GameTimeRngTest.xml (SHA-256: 850ef1a6177aac8fcf610600b85f333f20a0b2eacaf26c6ad913be889df2fbec); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-FT-002",
@@ -1246,9 +1246,9 @@
     "logs": "feature=FUNC-P2-002, testId=P2-FT-002, algorithm/key codec failure만 기록한다.",
     "state": "복구 중단; 다른 난수기로 자동 대체 금지",
     "success": "automatic fallback 0, input/persistence 불변, typed safe halt",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-16T05:07:57.892Z: GameTimeRngTest의 공식 P2-FT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 unsupported algorithm과 counter overflow를 typed rejection으로 fail-closed 처리하고 반복 호출에서도 동일 rejection을 반환하는 것을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.GameTimeRngTest.xml (SHA-256: 850ef1a6177aac8fcf610600b85f333f20a0b2eacaf26c6ad913be889df2fbec); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-CT-002",
@@ -1264,9 +1264,9 @@
     "logs": "feature=FUNC-P2-002, testId=P2-CT-002, streamKey별 draw counter와 result hash 기록.",
     "state": "idempotency/commandId/payloadHash는 F002에 적용하지 않음",
     "success": "leaf stream isolation과 pure repeatability가 확인되고 F002 direct persistence 0건",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "status": "PASS",
+    "actual": "2026-09-16T05:07:57.892Z: GameTimeRngTest의 공식 P2-CT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 canonical leaf key, hit draw 5회 변경에도 crit/loot/NPC stream 결과·counter 불변, hit repeatability를 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.GameTimeRngTest.xml (SHA-256: 850ef1a6177aac8fcf610600b85f333f20a0b2eacaf26c6ad913be889df2fbec); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-IT-002",
@@ -1281,10 +1281,10 @@
     "db": "부모 command의 receipt/state/RNG만 갱신되고 F002 식별자 receipt/event는 0건.",
     "logs": "feature=FUNC-P2-002, testId=P2-IT-002, JVM/Android vector evidence와 outer sourceCommandId를 분리 기록.",
     "state": "kernel은 parent DomainDelta 내부 계산이며 앱/헤드리스 모두 같은 golden을 얻음",
-    "success": "platform byte-for-byte Golden·outer receipt 1·F002 direct receipt/event 0·reload 동치",
-    "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "success": "platform byte-for-byte Golden·outer receipt 1·F002 direct receipt/event 0; Room round-trip은 P3 Gate",
+    "status": "PASS",
+    "actual": "2026-09-16T05:07:58.048Z JVM / 2026-09-16T12:30:06+09:00 Android: 공식 P2-IT-002가 WorldSession.execute를 통한 outer COMBAT command 경로에서 fresh 실행됐다. worldSeed=0123456789abcdef, streamKey=combat/p2-it-002-combat/hit, startClock=1439, endClock=1441 입력에서 crossed boundary 1440·1441을 모두 관측했고, outer receipt 1개, F002 direct receipt/event 0개, RNG state/increment/drawCounter 및 outcome hash golden이 플랫폼 간 일치했다. GameTimeRngTest와 WorldEngineTest는 동일한 JVM Gradle 실행에서 생성됐고, JVM suite 28건 중 공식 testcase 1건, Android suite 16건 중 공식 testcase 1건이 PASS했으며 양쪽 failures=0, errors=0, skipped=0이다. QA 독립 검증은 PASS로 완료됐다. Room round-trip은 P3 범위로 미검증이다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml (SHA-256: 3b4956b7a0ca74e359e518b6648bb228934ea7b261fb110b8abbc34848dadcdb); app/build/outputs/androidTest-results/connected/debug/TEST-emulator-5554 - 16.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt; app/src/androidTest/kotlin/com/imsi/mud/simulation/Phase2RngIntegrationTest.kt"
   },
   {
     "id": "P2-UT-003",
@@ -1301,8 +1301,8 @@
     "state": "`[10:00,11:00)`와 `[11:00,12:00)`는 non-conflict이며 payload codec은 v1로 고정",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 ScheduleServiceTest 26건(failure 0/error 0)의 반열린 interval·typed payload/profile·claim 정책 검증을 확인했다. 공식 관리 fixture와 전체 oracle의 별도 실행 증거가 없다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.ScheduleServiceTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/ScheduleServiceTest.kt"
   },
   {
     "id": "P2-BT-003",
@@ -1319,8 +1319,8 @@
     "state": "`heldTotal + request > owned`이면 총량 기준으로 거절",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 ScheduleServiceTest 26건 실행에서 zero-duration·overbook·priority conflict·자동 preemption 금지 경로를 확인했다. 공식 관리 fixture 실행 증거가 없어 PASS가 아니다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.ScheduleServiceTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/ScheduleServiceTest.kt"
   },
   {
     "id": "P2-FT-003",
@@ -1337,8 +1337,8 @@
     "state": "claim별 policy와 ActionCancellationPolicy 결과가 일치하고 `available=owned-held` 유지",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 ScheduleServiceTest 26건 실행에서 claim policy transition·cancel/fail settlement·partial preemption 방어를 확인했다. 네 policy와 지정 fault cutpoint 전체를 공식 관리 fixture로 실행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.ScheduleServiceTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/ScheduleServiceTest.kt"
   },
   {
     "id": "P2-CT-003",
@@ -1355,8 +1355,8 @@
     "state": "idempotency는 ScheduleService outer command에만 적용되고 payload codec 자체에 적용하지 않음",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 ScheduleServiceTest 26건 실행에서 public consequence preview·stale preview 거절·허용 resolution 및 외부 mutation 경계를 확인했다. 공식 관리 fixture별 hidden-field oracle은 별도 실행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.ScheduleServiceTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/ScheduleServiceTest.kt"
   },
   {
     "id": "P2-IT-003",
@@ -1382,17 +1382,17 @@
     "type": "UT",
     "function": "FUNC-P2-004",
     "title": "이벤트 경계 시간진행·자동중단 / 정상 규칙",
-    "input": "같은 minute의 forced stop+NPC death+ACTION_START/COMPLETE 4개+economy, health/death→succession과 NPC→economy conditional candidate, `TIME_ADVANCE_GOAL.v1` 5 variant",
-    "expected": "candidate 누락 0, conditional candidate는 batch 시작에 선언되어 정확히 1회 apply 또는 NoOp, phaseRank/tie-break 순 event order, 동일 stateHash/RNG/counter; UntilEvent 포함 goal payload 동치",
+    "input": "같은 minute의 forced stop+NPC death+ACTION_START/COMPLETE 4개+economy, `CalendarBoundarySource.v1`의 일/월/년 경계와 경계 전 target, conditional candidate, `TIME_ADVANCE_GOAL.v1` 5 variant",
+    "expected": "calendar day는 매 1,440분, month/year는 정확한 배수에만 day→month→year로 생성되고 경계 전 UntilMinute는 clock-only 완료한다. candidate 누락 0, 동일 stateHash/RNG/counter, UntilEvent 포함 goal payload 동치",
     "precondition": "격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시.",
-    "steps": "① goal canonical round-trip ② source별 nextTime/candidatesAt 수집 ③ conditional candidate apply/NoOp ④ provider/DB 입력 순열을 바꿔 batch/order 반복 비교",
+    "steps": "① goal canonical round-trip ② source별 nextTime/candidatesAt 수집 ③ 1,440/30일/360일 경계 candidate와 payload/order 확인 ④ conditional candidate apply/NoOp ⑤ provider/DB 입력 순열을 바꿔 batch/order 반복 비교",
     "db": "권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인.",
     "logs": "feature=FUNC-P2-004, testId=P2-UT-004, BoundaryKey.v1/order version/goal codec/stream counter 기록.",
     "state": "eventSequence는 결과값이며 candidate sort input이 아님",
     "success": "canonical goal/order·provider 순열 독립성·동일 deterministic outcome 확인",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldTimeTraversalTest 17건과 WorldEngineTest 26건 모두 failure 0/error 0이며 calendar day/month/year order·UntilMinute·boundary batch 경로를 확인했다. 공식 5-variant 관리 fixture 전체 실행은 아니다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml; core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldTimeTraversalTest.kt"
   },
   {
     "id": "P2-BT-004",
@@ -1409,8 +1409,8 @@
     "state": "goal codec/condition은 boundary state change에서만 평가하며 매분 scan하지 않음",
     "success": "admission/result→receipt mapping 일치, trust boundary별 reject/halt 구분, partial action/event/RNG draw 0",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldTimeTraversalTest/WorldEngineTest 실행에서 UNREACHABLE·LIMIT_REACHED·SYSTEM_HALT·invalid codec 및 zero-write 경로를 확인했다. 공식 경계 fixture의 전 조건 조합은 별도 실행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml; core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt"
   },
   {
     "id": "P2-FT-004",
@@ -1427,8 +1427,8 @@
     "state": "interrupted terminal과 crash-recoverable RUNNING을 혼동하지 않음",
     "success": "durable cursor/goal exact recovery, duplicate boundary/event/RNG draw 0",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldTimeTraversalTest/WorldEngineTest 실행에서 suffix corruption halt·choice 1..8/9·nested gate·forged outcome·no-write 및 reconcile 경로를 확인했다. 공식 fault cutpoint 전체와 full oracle은 미실행이다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml; core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt"
   },
   {
     "id": "P2-CT-004",
@@ -1445,8 +1445,8 @@
     "state": "continuation은 new (epoch,commandId), predecessor당 UNIQUE child, old receipt/pending suffix는 terminal 감사 근거, eventSequence는 outcome counter",
     "success": "terminal receipt 재활성화 0, continuation exactly-once lineage/remaining goal/order 동치",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldEngineTest 실행에서 gated prefix/sealed suffix·A/B branch·lineage validation·exact continuation reconcile 경로를 확인했다. 공식 CT fixture의 전체 predecessor/child 조합은 별도 실행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt"
   },
   {
     "id": "P2-IT-004",
@@ -1454,14 +1454,14 @@
     "type": "IT",
     "function": "FUNC-P2-004",
     "title": "WorldTimeTraversal / boundary batch conformance",
-    "input": "동일 시각 action 4개, ACTION_START+COMPLETE, health/death→succession conditional candidate, 10:29→10:31 COMBAT_ELAPSED 중 10:30 gate, 서로 다른 future candidate를 만드는 decision A/B, 10:31 lifecycle/action-complete/economy, 선택 9개/중첩 gate, sealed 뒤 PAUSE/CANCEL/limit 요청과 fault port",
+    "input": "public WorldSession과 typed snapshot calendar/stateless source에서 동일 시각 action 4개, ACTION_START+COMPLETE, health/death→succession conditional candidate, 10:29→10:31 COMBAT_ELAPSED 중 10:30 gate, decision A/B, binding mismatch, sealed 뒤 PAUSE/CANCEL/limit 요청과 fault port",
     "expected": "gate commit 뒤 clock=10:30, combat outcome/RNG/hash 불변, 10:30 예약 누락 0. 9번째 선택·중첩 gate·증명 불가 branch는 seal 전 effect 0, sealed protected completion은 취소·limit terminal·재추첨되지 않고 10:31 outcome/lifecycle/action/economy가 BoundaryOrder.v1로 정렬된다. 전투/boundary는 정확히 1회다. no-gate/gated는 target business order·domain projection이 같고, 동일 gated 입력의 무중단/kill-recovery는 전체 stateHash/time/RNG/actions/events가 동일",
     "precondition": "격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시.",
     "steps": "① nextTime 최소값 뒤 모든 source candidatesAt 수집·동결 및 gate≤1·choice≤8와 모든 선택 branch의 target까지 cap/limit/codec eligibility preflight ② ordered fold와 partial decision suffix ③ gate commit 전/후 kill에서 sealed combat outcome/RNG/target 복원 ④ sealed continuation에 PAUSE/CANCEL/limit 요청 ⑤ child continuation으로 suffix와 target까지 원자 진행 ⑥ effectiveMinute frozen batch·conformance suite·sourceVersion·continuous/bounded 비교",
     "db": "권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인.",
     "logs": "feature=FUNC-P2-004, testId=P2-IT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "과거 event sourceVersion을 final receipt version으로 rewrite하지 않음",
-    "success": "sourceVersion semantics·goal/cursor reload·continuous/bounded equivalence 확인",
+    "success": "caller-supplied current snapshot/source 0, sourceVersion semantics·goal/cursor/binding reload·continuous/bounded equivalence 확인",
     "status": "NOT_RUN",
     "actual": null,
     "evidence": null
@@ -1481,8 +1481,8 @@
     "state": "현실시간 catchup 0, lifecycle은 gameplay command가 아님",
     "success": "runtime transition/drain/join 정상, direct persistence 0, reopen state 동치",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldSessionTest 18건(failure 0/error 0)의 lifecycle pause/resume/close·drain·direct persistence 0 경계를 확인했다. 앱 종료 후 현실시간 재실행 fixture는 미실행이다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-BT-005",
@@ -1499,8 +1499,8 @@
     "state": "epoch A 응답을 버려 B 에 쓰기0",
     "success": "stale epoch write/publish 0과 lifecycle direct persistence 0",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldSessionTest 18건 실행에서 stale request·epoch/sequence 경계와 zero persistence 경로를 확인했다. 슬롯 A/B 지연 응답 공식 fixture는 별도 실행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-FT-005",
@@ -1517,8 +1517,8 @@
     "state": "callback 미실행도 마지막 committed state만 복원",
     "success": "partial boundary/double apply/F005 direct receipt·event 0",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldSessionTest 18건 실행에서 commit cancellation·receipt recovery·unresolved cancellation safe-stop·failed commit rollback을 확인했다. process kill/onStop 미실행 복구는 수행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-CT-005",
@@ -1535,8 +1535,8 @@
     "state": "gameplay command replay surface 0",
     "success": "control idempotence·direct persistence 0·stale publish 0",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldSessionTest의 lifecycle idempotence 테스트가 18건 실행에서 통과했다. 공식 pause/close/resume 관리 fixture의 두 번 호출 oracle은 별도 실행하지 않았다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-IT-005",
@@ -1544,10 +1544,10 @@
     "type": "IT",
     "function": "FUNC-P2-005",
     "title": "세션·생명주기·작업 종료 / adapter·영속 경계",
-    "input": "actual WorldSession과 in-memory SavePort에서 active AdvanceTime pause/cancel/close/새 session restore",
-    "expected": "PAUSE/CLOSE는 INTERRUPTED와 새 continuation 가능, CANCEL_ADVANCE는 CANCELLED/COMMITTED와 continuation 거절·독립 새 command만 허용하며 F005 자체 receipt/event 없음",
+    "input": "actual WorldSession과 in-memory SavePort에서 active AdvanceTime의 epoch/activeCommandId 일치·불일치 PAUSE/CANCEL/CLOSE, protected completion, 새 session restore",
+    "expected": "stale correlation write/publish 0, PAUSE/CLOSE는 INTERRUPTED, CANCEL_ADVANCE는 CANCELLED/COMMITTED, protected completion은 gate/target commit 뒤 control 관측, close drain→join→handle close, F005 자체 receipt/event 없음",
     "precondition": "격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시.",
-    "steps": "① active command safe-boundary drain ② PAUSE/CANCEL_ADVANCE/CLOSE별 terminal 비교 ③ runtime session close/새 instance restore ④ original gameplay receipt/state와 F005 direct persistence 조회. 실제 DB reopen은 P3 Gate",
+    "steps": "① control latch 상관관계/precedence 확인 ② active command safe-boundary drain ③ PAUSE/CANCEL_ADVANCE/CLOSE별 terminal과 protected allowedControls 비교 ④ runtime close/새 instance restore ⑤ original gameplay receipt/state와 F005 direct persistence 조회. 실제 DB reopen은 P3 Gate",
     "db": "active gameplay receipt만 변경 가능하며 F005 전용 receipt/event/stateVersion은 0건.",
     "logs": "feature=FUNC-P2-005, testId=P2-IT-005, runtime close/reopen evidence와 outer command를 분리 기록.",
     "state": "lifecycle은 persistence writer가 아님",
@@ -1598,10 +1598,10 @@
     "type": "REC",
     "function": "PHASE-2",
     "title": "종료 후 복구",
-    "input": "segment 계산 중, commit 직전, commit 성공 직후/publish 직전, 다음 segment 진입 직전의 test-only fault cutpoint",
+    "input": "segment 계산 중, commit 직전, commit 성공 직후/publish 직전, 다음 segment 진입 직전의 test-only fault cutpoint; enriched receipt와 typed snapshot",
     "expected": "double apply/event 누락·중복/RNG double draw/reservation mismatch 0, 마지막 완전 boundary만 보존하고 이미 committed BoundaryKey 재실행 0",
     "precondition": "본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행.",
-    "steps": "① FaultInjectingSavePort cutpoint별 중단 ② 저장된 in-memory image로 새 session 복원 ③ RUNNING goal/cursor 또는 terminal state 복구 ④ command/continuation 진행 ⑤ oracle 비교. OS process kill/Room/WAL은 P3 재검증",
+    "steps": "① FaultInjectingSavePort cutpoint별 중단 ② 저장된 in-memory image의 `PersistedReceipt(lifecycleStatus,stateVersion,lastCommittedSegmentNo,timeAdvanceState)`와 typed snapshot으로 새 WorldSession 구성 ③ RUNNING cursor 또는 terminal state 복구 ④ command/continuation 진행 ⑤ publication 포함 oracle 비교. OS process kill/Room/WAL은 P3 재검증",
     "db": "stateHash 외에 clock, stream별 state/counter, scheduled_action, time_advance_state, receipt status/version, event key/payload/order/count를 모두 비교. 실제 Room/WAL process kill은 P3에서 같은 cutpoint를 재검증.",
     "logs": "feature=PHASE-2, testId=P2-REC-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음.",
     "state": "RUNNING은 same-id crash recovery만, INTERRUPTED는 new continuation만 허용",
@@ -1625,8 +1625,8 @@
     "state": "segment_no 단조 증가, nextEventSequence는 output counter, sourceVersion은 각 생성 segment version, 8ms는 authority input 0",
     "success": "deterministic equivalence와 queue/latency/DB bytes evidence. sourceVersion은 각 event의 생성 commit과 separately 검증",
     "status": "NOT_RUN",
-    "actual": null,
-    "evidence": null
+    "actual": "NOT_RUN: 지원 증거로 WorldTimeTraversalTest의 30일 clock jump 및 10,000 boundary batch 결정론 테스트를 확인했다. queue/NFR/byte cap 수치와 full performance oracle은 미측정이다.",
+    "evidence": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml; core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldTimeTraversalTest.kt"
   },
   {
     "id": "P2-OP-001",
