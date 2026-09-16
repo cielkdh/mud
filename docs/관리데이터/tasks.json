@@ -1867,7 +1867,7 @@
       "P2-CT-001",
       "P2-IT-001"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -1909,7 +1909,7 @@
       "P2-BT-001",
       "P2-FT-001"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 2.12,
@@ -1948,7 +1948,7 @@
       "P2-CT-001",
       "P2-IT-001"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -1987,7 +1987,7 @@
       "P2-CT-001",
       "P2-IT-001"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -2031,7 +2031,7 @@
       "P2-CT-001",
       "P2-IT-001"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -2073,7 +2073,7 @@
       "P2-CT-002",
       "P2-IT-002"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,
@@ -2115,7 +2115,7 @@
       "P2-BT-002",
       "P2-FT-002"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 2.12,
@@ -2154,7 +2154,7 @@
       "P2-CT-002",
       "P2-IT-002"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.59,
@@ -2193,7 +2193,7 @@
       "P2-CT-002",
       "P2-IT-002"
     ],
-    "pr": "LOCAL-COMMIT:4e3e9fe9b8739088cc38eb70420b3001344f47f3",
+    "pr": "LOCAL-COMMIT:651bcf702a67beb9bf3f66467171e9903a217579 (R0 implementation ancestor)",
     "actual_days": null,
     "blocked_by": [],
     "expected_days": 1.06,

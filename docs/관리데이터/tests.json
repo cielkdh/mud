@@ -1121,8 +1121,8 @@
     "state": "잔액60·receipt 1 개·stateVersion 1 회 증가",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:24.937Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 WorldSessionTest의 공식 P2-UT-001이 직접 실행되어 Accepted(1), ResourceLedger 금화 100→60, receipt 1개, stateVersion 1을 검증했다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/WorldSessionTest.xml (SHA-256: f927f2e6950477e46f1f2027568cab12ed32f70d89270b0d135d7131c13eb144); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
+    "actual": "2026-09-16T06:05:46.235Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 WorldSessionTest의 공식 P2-UT-001이 직접 실행되어 Accepted(1), ResourceLedger 금화 100→60, receipt 1개, stateVersion 1을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldSessionTest.xml (SHA-256: d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-BT-001",
@@ -1139,8 +1139,8 @@
     "state": "Conflict, 재조회 안내·변경0",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:24.937Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 WorldSessionTest의 공식 P2-BT-001이 직접 실행되어 stale VersionConflict, valid non-null typed single before/after와 WORLD_ID='WORLD', current world와 다른 before의 authoritative world precondition mismatch 거절을 검증했으며 stale/mismatch 경로 stateHash/commit/publication 변경은 0이다. P3 SQLite/Room duplicate/non-WORLD/canonical CHECK invalid INSERT는 NOT_RUN이다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/WorldSessionTest.xml (SHA-256: f927f2e6950477e46f1f2027568cab12ed32f70d89270b0d135d7131c13eb144); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
+    "actual": "2026-09-16T06:05:46.235Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 WorldSessionTest의 공식 P2-BT-001이 직접 실행되어 stale VersionConflict, valid non-null typed single before/after와 WORLD_ID='WORLD', current world와 다른 before의 authoritative world precondition mismatch 거절을 검증했으며 stale/mismatch 경로 stateHash/commit/publication 변경은 0이다. P3 SQLite/Room duplicate/non-WORLD/canonical CHECK invalid INSERT는 NOT_RUN이다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldSessionTest.xml (SHA-256: d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-FT-001",
@@ -1157,8 +1157,8 @@
     "state": "이전 stateHash/RNG/receipt 유지",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:24.937Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 WorldSessionTest의 공식 P2-FT-001이 직접 실행되어 commit 실패를 PersistenceFailure로 반환하고 이전 stateHash, RNG, receipt, publication을 유지하는 것을 검증했다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/WorldSessionTest.xml (SHA-256: f927f2e6950477e46f1f2027568cab12ed32f70d89270b0d135d7131c13eb144); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
+    "actual": "2026-09-16T06:05:46.235Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 WorldSessionTest의 공식 P2-FT-001이 직접 실행되어 commit 실패를 PersistenceFailure로 반환하고 이전 stateHash, RNG, receipt, publication을 유지하는 것을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldSessionTest.xml (SHA-256: d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-CT-001",
@@ -1175,8 +1175,8 @@
     "state": "잔액60·receipt 1 개·stateVersion 1 회 증가; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:24.937Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 WorldSessionTest의 공식 P2-CT-001이 직접 실행되어 동일 commandId/payload는 1회 효과와 기존 receipt를 반환하고 다른 payload는 IdempotencyKeyReuse로 거절하는 것을 검증했다. 금화 잔액60, stateVersion1, receipt1, commit1. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/WorldSessionTest.xml (SHA-256: f927f2e6950477e46f1f2027568cab12ed32f70d89270b0d135d7131c13eb144); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
+    "actual": "2026-09-16T06:05:46.235Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 WorldSessionTest의 공식 P2-CT-001이 직접 실행되어 동일 commandId/payload는 1회 효과와 기존 receipt를 반환하고 다른 payload는 IdempotencyKeyReuse로 거절하는 것을 검증했다. 금화 잔액60, stateVersion1, receipt1, commit1. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldSessionTest.xml (SHA-256: d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt"
   },
   {
     "id": "P2-IT-001",
@@ -1193,8 +1193,8 @@
     "state": "잔액60·receipt 1 개·stateVersion 1 회 증가; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과",
     "success": "예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다.",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:23.606Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 Phase2ConformanceTest의 공식 P2-IT-001이 직접 실행되어 SavePortConformanceSuite의 정상/중복/before·during·after-commit fault와 public WorldSession InMemory/FaultInjecting 경로를 검증했다. 금화100→60, receipt1, stateVersion1, write1, publication 관측, failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/Phase2ConformanceTest.xml (SHA-256: 48ab5e4aab950830df9b54d3b4d47066008794e0fda30c2fbdb16d1134f92d9a); core/simulation/src/test/kotlin/com/imsi/mud/simulation/Phase2ConformanceTest.kt; core/simulation/src/main/kotlin/com/imsi/mud/simulation/SavePortConformanceSuite.kt"
+    "actual": "2026-09-16T06:05:45.331Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 Phase2ConformanceTest의 공식 P2-IT-001이 직접 실행되어 SavePortConformanceSuite의 정상/중복/before·during·after-commit fault와 public WorldSession InMemory/FaultInjecting 경로를 검증했다. 금화100→60, receipt1, stateVersion1, write1, publication 관측, failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/Phase2ConformanceTest.xml (SHA-256: de147a47016d875cba8bd76bbd9b41fab8e0cbddd6e829ea2d880756f94fff0c); core/simulation/src/test/kotlin/com/imsi/mud/simulation/Phase2ConformanceTest.kt; core/simulation/src/main/kotlin/com/imsi/mud/simulation/SavePortConformanceSuite.kt"
   },
   {
     "id": "P2-UT-002",
@@ -1211,8 +1211,8 @@
     "state": "same input + same clock/RNG state = same ClockDelta + RNG result + drawCounter",
     "success": "입력 불변·반환값/Golden/counter 동치·F002 전용 SavePort/receipt/event 0건",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:23.443Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 GameTimeRngTest의 공식 P2-UT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 10초×6과 60초 ClockDelta 동치, PCG golden vector 6개와 drawCounter 6을 검증했다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml (SHA-256: 25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
+    "actual": "2026-09-16T06:05:45.225Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 GameTimeRngTest의 공식 P2-UT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 10초×6과 60초 ClockDelta 동치, PCG golden vector 6개와 drawCounter 6을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml (SHA-256: 0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-BT-002",
@@ -1229,8 +1229,8 @@
     "state": "unsigned wrap/rotate·calendar boundary·seed byte order가 고정됨",
     "success": "clock/seed codec/Golden이 일치하고 F002 전용 persistence 0건",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:23.443Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 GameTimeRngTest의 공식 P2-BT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 360일 calendar rollover와 raw big-endian world seed bytes, initState/initSeq 및 seeded output golden을 검증했다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml (SHA-256: 25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
+    "actual": "2026-09-16T06:05:45.225Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 GameTimeRngTest의 공식 P2-BT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 360일 calendar rollover와 raw big-endian world seed bytes, initState/initSeq 및 seeded output golden을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml (SHA-256: 0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-FT-002",
@@ -1247,8 +1247,8 @@
     "state": "복구 중단; 다른 난수기로 자동 대체 금지",
     "success": "automatic fallback 0, input/persistence 불변, typed safe halt",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:23.443Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 GameTimeRngTest의 공식 P2-FT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 unsupported algorithm과 counter overflow를 typed rejection으로 fail-closed 처리하고 반복 호출에서도 동일 rejection을 반환하는 것을 검증했다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml (SHA-256: 25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
+    "actual": "2026-09-16T06:05:45.225Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 GameTimeRngTest의 공식 P2-FT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 unsupported algorithm과 counter overflow를 typed rejection으로 fail-closed 처리하고 반복 호출에서도 동일 rejection을 반환하는 것을 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml (SHA-256: 0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-CT-002",
@@ -1265,8 +1265,8 @@
     "state": "idempotency/commandId/payloadHash는 F002에 적용하지 않음",
     "success": "leaf stream isolation과 pure repeatability가 확인되고 F002 direct persistence 0건",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:23.443Z: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 GameTimeRngTest의 공식 P2-CT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 canonical leaf key, hit draw 5회 변경에도 crit/loot/NPC stream 결과·counter 불변, hit repeatability를 검증했다. failures=0, errors=0, skipped=0.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml (SHA-256: 25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
+    "actual": "2026-09-16T06:05:45.225Z: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 GameTimeRngTest의 공식 P2-CT-002가 WorldEngineTest와 동일한 JVM Gradle 실행에서 직접 실행되어 canonical leaf key, hit draw 5회 변경에도 crit/loot/NPC stream 결과·counter 불변, hit repeatability를 검증했다. failures=0, errors=0, skipped=0.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml (SHA-256: 0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c); core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt"
   },
   {
     "id": "P2-IT-002",
@@ -1283,8 +1283,8 @@
     "state": "kernel은 parent DomainDelta 내부 계산이며 앱/헤드리스 모두 같은 golden을 얻음",
     "success": "platform byte-for-byte Golden·outer receipt 1·F002 direct receipt/event 0; Room round-trip은 P3 Gate",
     "status": "PASS",
-    "actual": "2026-09-16T05:49:24.262Z JVM / 2026-09-16T05:54:10Z Android: R0=4e3e9fe9b8739088cc38eb70420b3001344f47f3에서 공식 P2-IT-002가 WorldSession.execute를 통한 outer COMBAT command 경로로 fresh 실행됐다. worldSeed=0123456789abcdef, streamKey=combat/p2-it-002-combat/hit, startClock=1439, endClock=1441 입력에서 crossed boundary 1440·1441을 모두 관측했고, outer receipt 1개, F002 direct receipt/event 0개, RNG state/increment/drawCounter 및 outcome hash golden이 플랫폼 간 일치했다. GameTimeRngTest와 WorldEngineTest는 동일한 JVM Gradle 실행에서 생성됐고, JVM suite 28건 중 공식 testcase 1건, Android suite 16건 중 공식 testcase 1건이 PASS했으며 양쪽 failures=0, errors=0, skipped=0이다. QA 독립 검증은 아직 별도 재검증 전이며 Room round-trip은 P3 범위로 미검증이다.",
-    "evidence": "docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/WorldEngineTest.xml (SHA-256: 88b4fc95944aab84c063816424476a1b6d01295b4d41a4b214f89d522818245b); docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/AndroidTest-emulator-5554-16.xml (SHA-256: 37b5db13b873d8a277dd783a83dcb24586ce3f50e935fc9029a508b95f5ae33e); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt; app/src/androidTest/kotlin/com/imsi/mud/simulation/Phase2RngIntegrationTest.kt"
+    "actual": "2026-09-16T06:05:45.742Z JVM / 2026-09-16T06:09:03Z Android: R2=651bcf702a67beb9bf3f66467171e9903a217579에서 공식 P2-IT-002가 WorldSession.execute를 통한 outer COMBAT command 경로로 fresh 실행됐다. worldSeed=0123456789abcdef, streamKey=combat/p2-it-002-combat/hit, startClock=1439, endClock=1441 입력에서 crossed boundary 1440·1441을 모두 관측했고, outer receipt 1개, F002 direct receipt/event 0개, RNG state/increment/drawCounter 및 outcome hash golden이 플랫폼 간 일치했다. GameTimeRngTest와 WorldEngineTest는 동일한 JVM Gradle 실행에서 생성됐고, JVM suite 28건 중 공식 testcase 1건, Android suite 16건 중 공식 testcase 1건이 PASS했으며 양쪽 failures=0, errors=0, skipped=0이다. QA 독립 재검증 전이며 Room round-trip은 P3 범위로 미검증이다.",
+    "evidence": "docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldEngineTest.xml (SHA-256: 09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d); docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/AndroidTest-emulator-5554-16.xml (SHA-256: b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242); core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt; app/src/androidTest/kotlin/com/imsi/mud/simulation/Phase2RngIntegrationTest.kt"
   },
   {
     "id": "P2-UT-003",

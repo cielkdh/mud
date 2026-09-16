@@ -923,7 +923,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`에서 구현·자체검증 완료; 공식 F001 XML은 revision별 증거 경로에 보존됨; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-002"></a>
 ### P2-TASK-002 — 단일 작성자 명령 처리 — 핵심 규칙
@@ -947,7 +947,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`에서 구현·자체검증 완료; 공식 F001 XML은 revision별 증거 경로에 보존됨; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-003"></a>
 ### P2-TASK-003 — 단일 작성자 명령 처리 — 저장·연계
@@ -971,7 +971,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-001, P2-IT-001 |
 | 완료 조건 | P2 SavePort 계약과 InMemory/FaultInjecting conformance 통합·codec·원자성 검증; Room/migration은 P3 Gate |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`에서 구현·자체검증 완료; 공식 F001 XML은 revision별 증거 경로에 보존됨; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-004"></a>
 ### P2-TASK-004 — 단일 작성자 명령 처리 — UI·호출 경로
@@ -995,7 +995,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-001, P2-IT-001 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`에서 구현·자체검증 완료; 공식 F001 XML은 revision별 증거 경로에 보존됨; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-005"></a>
 ### P2-TASK-005 — 단일 작성자 명령 처리 — Test·리뷰
@@ -1019,7 +1019,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`에서 구현·자체검증 완료; 공식 F001 XML은 revision별 증거 경로에 보존됨; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-006"></a>
 ### P2-TASK-006 — 게임 달력·잔여 밀리초·RNG 스트림 — 계약·Fixture
@@ -1043,7 +1043,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`; P2-UT/BT/FT/CT-002 및 P2-IT-002 fresh JVM·Android PASS 증거는 `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-007"></a>
 ### P2-TASK-007 — 게임 달력·잔여 밀리초·RNG 스트림 — 핵심 규칙
@@ -1067,7 +1067,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-002, P2-BT-002, P2-FT-002 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`; P2-UT/BT/FT/CT-002 및 P2-IT-002 fresh JVM·Android PASS 증거는 `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-008"></a>
 ### P2-TASK-008 — 게임 달력·잔여 밀리초·RNG 스트림 — 저장·연계
@@ -1091,7 +1091,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-002, P2-IT-002 |
 | 완료 조건 | outer command/WorldTimeTraversal 통합과 test-only SavePort에서 F002 직접 영속 0·RNG/clock 원자성 검증 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`; P2-UT/BT/FT/CT-002 및 P2-IT-002 fresh JVM·Android PASS 증거는 `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-009"></a>
 ### P2-TASK-009 — 게임 달력·잔여 밀리초·RNG 스트림 — outer 호출 경로
@@ -1115,7 +1115,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-002, P2-IT-002 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | LOCAL-COMMIT `4e3e9fe9b8739088cc38eb70420b3001344f47f3`; P2-UT/BT/FT/CT-002 및 P2-IT-002 fresh JVM·Android PASS 증거는 `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
 
 <a id="p2-task-010"></a>
 ### P2-TASK-010 — 게임 달력·잔여 밀리초·RNG 스트림 — Test·리뷰
@@ -1139,7 +1139,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3`에서 구현·자체검증 완료 → GameTimeRngTest fresh XML 8/8 PASS(2026-09-16T05:49:23.443Z, SHA-256 `25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7`) 및 WorldEngineTest fresh XML P2-IT-002 PASS(2026-09-16T05:49:24.262Z, SHA-256 `88b4fc95944aab84c063816424476a1b6d01295b4d41a4b214f89d522818245b`) → Android full suite fresh PASS(2026-09-16T05:54:10Z, SHA-256 `37b5db13b873d8a277dd783a83dcb24586ce3f50e935fc9029a508b95f5ae33e`) → 고급개발자·QA·수석 기술 재리뷰 대기; 사용자 최종 승인 전 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정 → GameTimeRngTest 8/8 PASS(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c`)·WorldEngineTest 28/28 PASS(2026-09-16T06:05:45.742Z, SHA-256 `09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d`)·WorldSessionTest 23/23 PASS(2026-09-16T06:05:46.235Z, SHA-256 `d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc`)·Phase2ConformanceTest 2/2 PASS(2026-09-16T06:05:45.331Z, SHA-256 `de147a47016d875cba8bd76bbd9b41fab8e0cbddd6e829ea2d880756f94fff0c`) → Android full suite 16/16 PASS(2026-09-16T06:09:03Z, SHA-256 `b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242`) → 고급개발자·QA·수석 기술 재리뷰 대기; 사용자 최종 승인 전 |
 
 <a id="p2-task-011"></a>
 ### P2-TASK-011 — 예약·점유·자원 선점 — 계약·Fixture
@@ -1728,7 +1728,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-UT-002, algorithm/seed/vector/counter만 기록하며 sourceCommandId는 없다. |
 | 상태 확인 | same input + same clock/RNG state = same ClockDelta + RNG result + drawCounter |
 | 성공 기준 | 입력 불변·반환값/Golden/counter 동치·F002 전용 SavePort/receipt/event 0건 |
-| 실행 상태/실제 결과/증거 | PASS / 10초×6과 60초 ClockDelta 동치·PCG golden vector 6개·drawCounter 6 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml`(2026-09-16T05:49:23.443Z, SHA-256 `25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7) |
+| 실행 상태/실제 결과/증거 | PASS / 10초×6과 60초 ClockDelta 동치·PCG golden vector 6개·drawCounter 6 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-bt-002"></a>
 ### P2-BT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / 경계·거절
@@ -1746,7 +1746,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, worldSeed/streamKey/raw bytes/initState/initSeq를 evidence로 기록. |
 | 상태 확인 | unsigned wrap/rotate·calendar boundary·seed byte order가 고정됨 |
 | 성공 기준 | clock/seed codec/Golden이 일치하고 F002 전용 persistence 0건 |
-| 실행 상태/실제 결과/증거 | PASS / calendar rollover·raw big-endian world seed bytes·initState/initSeq·seeded output golden 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml`(2026-09-16T05:49:23.443Z, SHA-256 `25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7) |
+| 실행 상태/실제 결과/증거 | PASS / calendar rollover·raw big-endian world seed bytes·initState/initSeq·seeded output golden 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-ft-002"></a>
 ### P2-FT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / 실패·복구 방어
@@ -1764,7 +1764,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-FT-002, algorithm/key codec failure만 기록한다. |
 | 상태 확인 | 복구 중단; 다른 난수기로 자동 대체 금지 |
 | 성공 기준 | automatic fallback 0, input/persistence 불변, typed safe halt |
-| 실행 상태/실제 결과/증거 | PASS / unsupported algorithm·counter overflow typed rejection, 반복 호출 동일 rejection 및 input 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml`(2026-09-16T05:49:23.443Z, SHA-256 `25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7) |
+| 실행 상태/실제 결과/증거 | PASS / unsupported algorithm·counter overflow typed rejection, 반복 호출 동일 rejection 및 input 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-ct-002"></a>
 ### P2-CT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / 컴포넌트 계약·재호출
@@ -1782,7 +1782,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-CT-002, streamKey별 draw counter와 result hash 기록. |
 | 상태 확인 | idempotency/commandId/payloadHash는 F002에 적용하지 않음 |
 | 성공 기준 | leaf stream isolation과 pure repeatability가 확인되고 F002 direct persistence 0건 |
-| 실행 상태/실제 결과/증거 | PASS / canonical leaf key·hit draw 5회 repeatability·crit/loot/NPC 결과와 counter 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/GameTimeRngTest.xml`(2026-09-16T05:49:23.443Z, SHA-256 `25aff53d849e34c970381200ecbd51e08c5992e1f28cd45215da17e094c7bcb7) |
+| 실행 상태/실제 결과/증거 | PASS / canonical leaf key·hit draw 5회 repeatability·crit/loot/NPC 결과와 counter 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-it-002"></a>
 ### P2-IT-002 — 게임 달력·RNG / 순수·outer traversal 통합
@@ -1800,7 +1800,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-IT-002, JVM/Android vector evidence와 outer sourceCommandId를 분리 기록. |
 | 상태 확인 | kernel은 parent DomainDelta 내부 계산이며 앱/헤드리스 모두 같은 golden을 얻음 |
 | 성공 기준 | platform byte-for-byte Golden·outer receipt 1·F002 direct receipt/event 0; Room round-trip은 P3 Gate |
-| 실행 상태/실제 결과/증거 | PASS / WorldSession.execute의 outer COMBAT command에서 `worldSeed=0123456789abcdef`, `startClock=1439`, `endClock=1441`을 사용해 crossed boundary 1440·1441 누락 0, outer receipt 1, F002 direct receipt/event 0, JVM·Android RNG/output golden 동치; JVM suite 28건·Android suite 16건 모두 failures/errors/skipped 0이며 공식 testcase는 각 1건 PASS; QA 독립 재검증 전; Room round-trip은 P3 미검증 / `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/WorldEngineTest.xml`(2026-09-16T05:49:24.262Z, SHA-256 `88b4fc95944aab84c063816424476a1b6d01295b4d41a4b214f89d522818245b`), `docs/검증증거/phase2-batch1/4e3e9fe9b8739088cc38eb70420b3001344f47f3/AndroidTest-emulator-5554-16.xml`(2026-09-16T05:54:10Z, SHA-256 `37b5db13b873d8a277dd783a83dcb24586ce3f50e935fc9029a508b95f5ae33e`) |
+| 실행 상태/실제 결과/증거 | PASS / WorldSession.execute의 outer COMBAT command에서 `worldSeed=0123456789abcdef`, `startClock=1439`, `endClock=1441`을 사용해 crossed boundary 1440·1441 누락 0, outer receipt 1, F002 direct receipt/event 0, JVM·Android RNG/output golden 동치; JVM suite 28건·Android suite 16건 모두 failures/errors/skipped 0이며 공식 testcase는 각 1건 PASS; QA 독립 재검증 전; Room round-trip은 P3 미검증 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldEngineTest.xml`(2026-09-16T06:05:45.742Z, SHA-256 `09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d`), `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/AndroidTest-emulator-5554-16.xml`(2026-09-16T06:09:03Z, SHA-256 `b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242`) |
 
 <a id="p2-ut-003"></a>
 ### P2-UT-003 — 예약·점유·자원 선점 / 정상 규칙
