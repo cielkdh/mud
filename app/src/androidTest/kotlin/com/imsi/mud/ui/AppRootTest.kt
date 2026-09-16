@@ -90,8 +90,9 @@ class AppRootTest {
     @Test
     fun emptyAndBlockedStatesOfferAnAccessibleBackAction() {
         var backCount = 0
+        val shellState = mutableStateOf<AppShellState>(AppShellState.Empty)
         compose.setContent {
-            AppRoot(AppShellState.Empty, onRetry = {}, onBack = { backCount += 1 })
+            AppRoot(shellState.value, onRetry = {}, onBack = { backCount += 1 })
         }
         compose.onNodeWithTag("app-shell-empty-back")
             .assertHeightIsAtLeast(48.dp)
@@ -99,9 +100,7 @@ class AppRootTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Back")))
             .performClick()
 
-        compose.setContent {
-            AppRoot(AppShellState.placeholderFor("SCR-START-001"), onRetry = {}, onBack = { backCount += 1 })
-        }
+        compose.runOnIdle { shellState.value = AppShellState.placeholderFor("SCR-START-001") }
         compose.onNodeWithTag("app-shell-blocked-back")
             .assertHeightIsAtLeast(48.dp)
             .assertWidthIsAtLeast(48.dp)
