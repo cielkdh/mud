@@ -398,21 +398,29 @@ data class Phase2TimeEntry(
 @Composable
 fun Phase2TimeRoute(entry: Phase2TimeEntry) {
     val scope = rememberCoroutineScope()
-    var dispatching by remember { mutableStateOf(false) }
+    var mutationDispatching by remember { mutableStateOf(false) }
+    var controlDispatching by remember { mutableStateOf(false) }
     Phase2TimeScreen(
         state = entry.state,
         onAction = { action ->
-            if (dispatching) return@Phase2TimeScreen
-            dispatching = true
+            val isControl = action is Phase2TimeUiAction.Pause || action is Phase2TimeUiAction.Cancel
+            if (isControl) {
+                if (controlDispatching) return@Phase2TimeScreen
+                controlDispatching = true
+            } else {
+                if (mutationDispatching) return@Phase2TimeScreen
+                mutationDispatching = true
+            }
             scope.launch {
                 try {
                     entry.onResult(entry.controller.dispatch(action, entry.state))
                 } finally {
-                    dispatching = false
+                    if (isControl) controlDispatching = false else mutationDispatching = false
                 }
             }
         },
-        interactionEnabled = !dispatching
+        mutationEnabled = !mutationDispatching,
+        controlEnabled = !controlDispatching
     )
 }
 
@@ -420,7 +428,8 @@ fun Phase2TimeRoute(entry: Phase2TimeEntry) {
 fun Phase2TimeScreen(
     state: Phase2TimeViewState,
     onAction: (Phase2TimeUiAction) -> Unit,
-    interactionEnabled: Boolean = true
+    mutationEnabled: Boolean = true,
+    controlEnabled: Boolean = true
 ) {
     var armedRiskResolution by remember(
         state.conflict?.conflictId,
@@ -457,14 +466,14 @@ fun Phase2TimeScreen(
                     label = "Start time advance",
                     description = "Start time advance",
                     index = 3f,
-                    enabled = interactionEnabled,
+                    enabled = mutationEnabled,
                     onClick = { onAction(Phase2TimeUiAction.StartAdvance(request)) }
                 )
             }
         }
 
         state.advanceInProgress?.let { progress ->
-            AdvanceInProgressPanel(progress, onAction, interactionEnabled)
+            AdvanceInProgressPanel(progress, onAction, controlEnabled)
         }
 
         if (state.status == TimeAdvanceStatus.INTERRUPTED) {
@@ -475,7 +484,7 @@ fun Phase2TimeScreen(
                         label = "Continue",
                         description = "Continue time advance",
                         index = 10f,
-                        enabled = interactionEnabled,
+                        enabled = mutationEnabled,
                         onClick = { onAction(Phase2TimeUiAction.ResumeInterrupted(commandId, request)) }
                     )
                 }
@@ -483,7 +492,7 @@ fun Phase2TimeScreen(
         }
 
         state.decisionRequired?.let { decision ->
-            DecisionPanel(decision, onAction, interactionEnabled)
+            DecisionPanel(decision, onAction, mutationEnabled)
         }
 
         state.summary?.let { summary ->
@@ -494,7 +503,7 @@ fun Phase2TimeScreen(
             ConflictPanel(
                 conflict = conflict,
                 armedRiskResolution = armedRiskResolution,
-                interactionEnabled = interactionEnabled,
+                mutationEnabled = mutationEnabled,
                 onArmRisk = { armedRiskResolution = it },
                 onRefresh = { onAction(Phase2TimeUiAction.RefreshPreview(it)) }
             ) { resolution ->
@@ -629,7 +638,7 @@ private fun SummaryItems(label: String, tag: String, items: List<String>) {
 private fun ConflictPanel(
     conflict: ScheduleConflictViewState,
     armedRiskResolution: ScheduleResolution?,
-    interactionEnabled: Boolean,
+    mutationEnabled: Boolean,
     onArmRisk: (ScheduleResolution) -> Unit,
     onRefresh: (String) -> Unit,
     onConfirm: (ScheduleResolution) -> Unit
@@ -638,12 +647,13 @@ private fun ConflictPanel(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("phase2-time-conflict")
-            .semantics { contentDescription = "Schedule conflict ${conflict.conflictId}" },
+            .semantics { contentDescription = "Schedule conflict" },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("Schedule conflict", style = MaterialTheme.typography.titleMedium)
-        conflict.conflictingSchedules.forEachIndexed { index, schedule ->
-            Text(schedule, modifier = textModifier("phase2-time-conflict-$index", schedule, 30f + index))
+        conflict.conflictingSchedules.forEachIndexed { index, _ ->
+            val description = "Conflicting scheduled action ${index + 1}"
+            Text(description, modifier = textModifier("phase2-time-conflict-$index", description, 30f + index))
         }
         conflict.preview.fields.forEachIndexed { index, (key, field) ->
             Text(
@@ -659,7 +669,7 @@ private fun ConflictPanel(
                 label = "Refresh preview",
                 description = "Refresh schedule impact preview",
                 index = 51f,
-                enabled = interactionEnabled,
+                enabled = mutationEnabled,
                 onClick = { onRefresh(conflict.conflictId) }
             )
         }
@@ -681,7 +691,7 @@ private fun ConflictPanel(
                 label = label,
                 description = if (risky) "Risk confirmation for ${resolution.label()}" else resolution.label(),
                 index = 60f + index,
-                enabled = interactionEnabled && !conflict.previewStale,
+                enabled = mutationEnabled && !conflict.previewStale,
                 onClick = {
                     if (risky && !armed) onArmRisk(resolution) else onConfirm(resolution)
                 }

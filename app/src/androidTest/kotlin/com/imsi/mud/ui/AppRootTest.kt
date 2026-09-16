@@ -31,7 +31,7 @@ class AppRootTest {
             Triple(AppShellState.Loading, "app-shell-loading", listOf("Loading", "Preparing the world session.")),
             Triple(AppShellState.Ready, "app-shell-ready", listOf("Ready", "The current world is ready for an implemented feature.")),
             Triple(AppShellState.Empty, "app-shell-empty", listOf("No world is available yet", "Create and import actions are introduced with Phase 3 save support.")),
-            Triple(AppShellState.Error("temporary failure"), "app-shell-error", listOf("Unable to continue", "temporary failure")),
+            Triple(AppShellState.Error("internal save.db path: /private/state"), "app-shell-error", listOf("Unable to continue", "We couldn't complete this action. Please try again.")),
             Triple(AppShellState.placeholderFor("SCR-START-001"), "app-shell-blocked", listOf("Feature unavailable", "This screen is owned by a later phase."))
         ).forEach { (state, prefix, descriptions) ->
             compose.runOnIdle { shellState.value = state }
@@ -85,5 +85,38 @@ class AppRootTest {
         compose.onNodeWithTag("app-shell-error-body")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1f))
         assertEquals(1, retryCount)
+    }
+
+    @Test
+    fun emptyAndBlockedStatesOfferAnAccessibleBackAction() {
+        var backCount = 0
+        compose.setContent {
+            AppRoot(AppShellState.Empty, onRetry = {}, onBack = { backCount += 1 })
+        }
+        compose.onNodeWithTag("app-shell-empty-back")
+            .assertHeightIsAtLeast(48.dp)
+            .assertWidthIsAtLeast(48.dp)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Back")))
+            .performClick()
+
+        compose.setContent {
+            AppRoot(AppShellState.placeholderFor("SCR-START-001"), onRetry = {}, onBack = { backCount += 1 })
+        }
+        compose.onNodeWithTag("app-shell-blocked-back")
+            .assertHeightIsAtLeast(48.dp)
+            .assertWidthIsAtLeast(48.dp)
+            .performClick()
+
+        assertEquals(2, backCount)
+    }
+
+    @Test
+    fun errorReasonIsRedactedForPublicUi() {
+        compose.setContent {
+            AppRoot(AppShellState.Error("sqlite=/private/save.db; token=secret"), onRetry = {})
+        }
+
+        compose.onNodeWithTag("app-shell-error-body")
+            .assertTextEquals("We couldn't complete this action. Please try again.")
     }
 }

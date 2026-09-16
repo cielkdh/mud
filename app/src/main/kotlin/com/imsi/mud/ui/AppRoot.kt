@@ -56,7 +56,12 @@ object ScreenRegistry {
 }
 
 @Composable
-fun AppRoot(state: AppShellState, onRetry: () -> Unit, phase2TimeEntry: Phase2TimeEntry? = null) {
+fun AppRoot(
+    state: AppShellState,
+    onRetry: () -> Unit,
+    phase2TimeEntry: Phase2TimeEntry? = null,
+    onBack: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -125,6 +130,18 @@ fun AppRoot(state: AppShellState, onRetry: () -> Unit, phase2TimeEntry: Phase2Ti
                         traversalIndex = 1f
                     }
                 )
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        .testTag("app-shell-empty-back")
+                        .semantics {
+                            contentDescription = "Back"
+                            traversalIndex = 2f
+                        }
+                ) {
+                    Text("Back")
+                }
             }
 
             is AppShellState.Error -> {
@@ -137,9 +154,9 @@ fun AppRoot(state: AppShellState, onRetry: () -> Unit, phase2TimeEntry: Phase2Ti
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Text(
-                    text = state.reason,
+                    text = publicErrorMessage(state.reason),
                     modifier = Modifier.testTag("app-shell-error-body").semantics {
-                        contentDescription = state.reason
+                        contentDescription = publicErrorMessage(state.reason)
                         traversalIndex = 1f
                     }
                 )
@@ -184,7 +201,22 @@ fun AppRoot(state: AppShellState, onRetry: () -> Unit, phase2TimeEntry: Phase2Ti
                         traversalIndex = if (state.screenId == null) 1f else 2f
                     }
                 )
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        .testTag("app-shell-blocked-back")
+                        .semantics {
+                            contentDescription = "Back"
+                            traversalIndex = if (state.screenId == null) 2f else 3f
+                        }
+                ) {
+                    Text("Back")
+                }
             }
         }
     }
 }
+
+private fun publicErrorMessage(@Suppress("UNUSED_PARAMETER") reason: String): String =
+    "We couldn't complete this action. Please try again."

@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -51,6 +52,7 @@ import com.imsi.mud.simulation.TimeAdvanceGoal
 import com.imsi.mud.simulation.TimeAdvanceInterruptPolicy
 import com.imsi.mud.simulation.TimeTraversalLimits
 import com.imsi.mud.simulation.WorldCommandPayload
+import com.imsi.mud.MainActivityContent
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -152,6 +154,9 @@ class Phase2TimeUiTest {
         compose.onNodeWithTag("phase2-time-preview-refund-or-loss")
             .assertTextEquals("Refund or loss: Unknown (Unknown)")
         compose.onNodeWithText("Resource loss").assertIsDisplayed()
+        compose.onNodeWithTag("phase2-time-conflict-0")
+            .assertTextEquals("Conflicting scheduled action 1")
+        compose.onNodeWithText("Treatment 14:00-18:00").assertDoesNotExist()
         compose.onNodeWithTag("phase2-time-resolution-pause_and_insert").performClick()
         assertEquals(emptyList<Phase2TimeUiAction>(), actions)
         compose.runOnIdle { state.value = state.value.copy(conflict = conflict.copy(previewToken = "v2")) }
@@ -397,6 +402,82 @@ class Phase2TimeUiTest {
         release.complete(CommandResult.Accepted(1))
         compose.waitForIdle()
         assertEquals(1, executeCount)
+    }
+
+    @Test
+    fun routeAllowsPauseWhileAdvanceExecuteIsStillPending() {
+        var executeCount = 0
+        var controlCount = 0
+        val release = CompletableDeferred<CommandResult>()
+        val state = mutableStateOf(
+            Phase2TimeViewState(
+                status = TimeAdvanceStatus.IDLE,
+                startRequest = advanceRequest()
+            )
+        )
+        val controller = Phase2TimeController(
+            execute = {
+                executeCount += 1
+                release.await()
+            },
+            requestControl = {
+                controlCount += 1
+                ControlRequestResult.Accepted(it.expectedActiveCommandId)
+            },
+            runtimeState = {
+                SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, CommandId("cmd-start"))
+            },
+            currentVersion = { StateVersion(1) },
+            newCommandId = { CommandId("cmd-start") }
+        )
+        compose.setContent {
+            Phase2TimeRoute(Phase2TimeEntry(state.value, controller))
+        }
+
+        compose.onNodeWithTag("phase2-time-start").performClick()
+        compose.runOnIdle {
+            state.value = Phase2TimeViewState(
+                status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
+                advanceInProgress = AdvanceInProgressViewState(
+                    goalLabel = "Until treatment completes",
+                    lastCommittedCursor = "10:30",
+                    allowedControls = setOf(AdvanceControl.PAUSE, AdvanceControl.CANCEL)
+                )
+            )
+        }
+        compose.onNodeWithTag("phase2-time-progress").assertIsDisplayed()
+        compose.onNodeWithTag("phase2-time-control-pause")
+            .assertIsEnabled()
+            .performClick()
+        compose.waitForIdle()
+
+        assertEquals(1, executeCount)
+        assertEquals(1, controlCount)
+        release.complete(CommandResult.Accepted(1))
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun mainActivityContentEntersPhase2RouteWhenEntryIsProvided() {
+        val controller = Phase2TimeController(
+            execute = { CommandResult.Accepted(1) },
+            requestControl = { ControlRequestResult.Accepted(CommandId("cmd-active")) },
+            runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
+            currentVersion = { StateVersion(1) },
+            newCommandId = { CommandId("cmd-start") }
+        )
+        compose.setContent {
+            MainActivityContent(
+                phase2TimeEntry = Phase2TimeEntry(
+                    state = Phase2TimeViewState(TimeAdvanceStatus.IDLE),
+                    controller = controller
+                ),
+                onBack = {}
+            )
+        }
+
+        compose.onNodeWithTag("phase2-time-screen").assertIsDisplayed()
+        compose.onAllNodesWithTag("app-shell-ready-title").assertCountEquals(0)
     }
 
     @Test
