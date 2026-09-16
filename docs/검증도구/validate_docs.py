@@ -244,12 +244,13 @@ def validator_self_checks() -> None:
     if test_detail_failures({'steps': 'WorldSession.execute', 'db': '구체 행·hash 비교'}, ('WorldSession.execute',)):
         failures.append('specific critical test rejected')
     decision_failures = decision_contract_failures(
-        [{'id': 'C01', 'approved_at': '2026-01-01'}],
+        [{'id': 'C01'}, {'id': 'C03', 'approved_at': '2026-01-01'}],
         [{'id': 'P9-TASK-001', 'phase': 9, 'decision_dependencies': ['C02']}],
         {9: '### P9-TASK-001 — fixture\n| 설계 결정 의존 | C01 |'},
-        '## C01. fixture',
+        '## C01. fixture\n## C04. document only',
     )
-    if not any('unknown decision C02' in item for item in decision_failures) or not any('문서' in item and 'registry' in item for item in decision_failures):
+    decision_markers = ('approved_at 누락', 'unknown decision C02', 'decision registry only: C03', 'decision document only: C04')
+    if any(not any(marker in item for item in decision_failures) for marker in decision_markers) or not any('문서' in item and 'registry' in item for item in decision_failures):
         failures.append('decision registry/document mismatch not detected')
     record('검증기 false-negative 회귀', failures, 'Function 중복·미지 탭·MUTATING CMD 누락·핵심 Test 범용 템플릿을 synthetic fixture로 거절')
 
@@ -1022,11 +1023,13 @@ def main() -> int:
     sql_checks()
     counts=Counter(x['status'] for x in RESULTS)
     now=datetime.now(timezone(timedelta(hours=9))).isoformat(timespec='seconds')
-    report={'executed_at':now,'scope':'documentation_and_proposed_sql_only','checks':RESULTS,'summary':dict(counts),'game_test_execution':'NOT_RUN'}
+    game_test_counts=Counter(test['status'] for test in tests)
+    game_test_status=', '.join(f'{status}={count}' for status,count in sorted(game_test_counts.items()))
+    report={'executed_at':now,'scope':'documentation_and_proposed_sql_only','checks':RESULTS,'summary':dict(counts),'game_test_execution':'NOT_RUN','management_game_test_status':game_test_status}
     (ROOT/'관리데이터/document_validation.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     lines=['# 97. 문서 정합성 검증보고서','',f'> 실제 검사시각: {now} · 검증도구: `검증도구/validate_docs.py`','',
            f'문서·제안 SQL 검사 **{len(RESULTS)}개 그룹**: PASS **{counts["PASS"]}**, FAIL **{counts["FAIL"]}**.','',
-           '**이 보고서는 게임 코드의 Unit/Integration/E2E 테스트 보고서가 아니다.** 게임 테스트 751개는 계획이며 아직 NOT_RUN이다. 실제로 실행한 것은 문서 구조·ID·참조·DAG 검사와 메모리 SQLite에 대한 제안 DDL/제약조건 smoke 검사다.','',
+           f'**이 보고서는 게임 코드의 Unit/Integration/E2E 테스트 보고서가 아니다.** 문서 validator 자체는 게임 Test를 실행하지 않으며, 관리데이터 상태는 {game_test_status}로 기록되어 있다. 실제 게임 Test 실행 증거는 각 관리 Test의 actual/evidence와 해당 XML을 참조한다. 본 validator가 실행한 것은 문서 구조·ID·참조·DAG 검사와 메모리 SQLite에 대한 제안 DDL/제약조건 smoke 검사다.','',
            '## 1. 실행 결과','','| 검사 | 결과 | 검사 범위 |','|---|---|---|']
     for result in RESULTS:
         lines.append(f'| {result["name"]} | {result["status"]} | {str(result["detail"]).replace("|","/")} |')

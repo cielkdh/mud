@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.imsi.mud.simulation.WorldEngineTest" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-09-16T05:49:24.262Z" hostname="NB-24072601" time="0.665">
+  <properties/>
+  <testcase name="queued atomic command is rejected after a prior system halt" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.06"/>
+  <testcase name="elapsed and boundary event payload codecs are strict canonical and versioned" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.032"/>
+  <testcase name="schedule gameplay payloads round trip and WorldSession commits each external mutation once" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.085"/>
+  <testcase name="target timestamp lifecycle outcome action and economy drafts keep boundary order and commit provenance" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.068"/>
+  <testcase name="gate free short combat commits clock outcome and rng once" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.009"/>
+  <testcase name="combat gate persists prefix and sealed result then child applies suffix and outcome exactly once" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.029"/>
+  <testcase name="internal atomic elapsed fixture is not decodable as a public gameplay command" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.001"/>
+  <testcase name="gate free and gated completion apply the same sealed authoritative aggregate projection" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.015"/>
+  <testcase name="schedule reservation must use the authoritative world minute" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.004"/>
+  <testcase name="world session commits the engine segment before applying its authoritative world state" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.032"/>
+  <testcase name="sealed atomic continuation codecs reject noncanonical tampered and mismatched payloads" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.016"/>
+  <testcase name="selected decision choice participates in the authoritative in memory state hash" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.005"/>
+  <testcase name="missing rng and forged outcome halt without writing state or publication" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.009"/>
+  <testcase name="atomic sealed preflight accepts one through eight choices and rejects nine or a nested gate" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.045"/>
+  <testcase name="default evaluator materializes scheduled completion for until event goals" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.048"/>
+  <testcase name="system halt from a running traversal does not write a terminal segment" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.013"/>
+  <testcase name="fast forward commits consecutive timestamp batches separately with durable event sequences" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.011"/>
+  <testcase name="advance codec round trips its interrupted resume lineage" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.003"/>
+  <testcase name="travel advance is rejected until it is represented by a scheduled action" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.001"/>
+  <testcase name="new advance preflight halt clears admission state before its reply" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.006"/>
+  <testcase name="forged atomic child lineage hashes and choices halt with zero child effects" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.041"/>
+  <testcase name="atomic child response loss reconciles the exact continuation and does not double apply" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.057"/>
+  <testcase name="atomic decision branches are individually deterministic and produce different authoritative states" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.035"/>
+  <testcase name="advance payload plans against the supplied world snapshot without caller sources" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.0"/>
+  <testcase name="P2-IT-002 outer combat command uses F002 result across boundary with one outer receipt" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.007"/>
+  <testcase name="candidate cap commits no boundary effect and retries the same boundary" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.008"/>
+  <testcase name="atomic synthetic source binding and sealed codec are mandatory and caller collision is rejected" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.008"/>
+  <testcase name="atomic branches are deterministic and enforce the whole prefix branch boundary budget" classname="com.imsi.mud.simulation.WorldEngineTest" time="0.014"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
