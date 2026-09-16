@@ -68,9 +68,9 @@ class AppRootTest {
     fun retryIsAccessibleAndDoesNotTurnAnErrorIntoSuccess() {
         var retryCount = 0
         compose.setContent {
-            AppRoot(AppShellState.Error("retry failed")) {
+            AppRoot(AppShellState.Error("retry failed"), onRetry = {
                 retryCount += 1
-            }
+            })
         }
 
         compose.onNodeWithTag("app-shell-retry")

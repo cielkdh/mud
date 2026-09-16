@@ -56,7 +56,7 @@ object ScreenRegistry {
 }
 
 @Composable
-fun AppRoot(state: AppShellState, onRetry: () -> Unit) {
+fun AppRoot(state: AppShellState, onRetry: () -> Unit, phase2TimeEntry: Phase2TimeEntry? = null) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -88,21 +88,25 @@ fun AppRoot(state: AppShellState, onRetry: () -> Unit) {
             }
 
             AppShellState.Ready -> {
-                Text(
-                    text = "Ready",
-                    modifier = Modifier.testTag("app-shell-ready-title").semantics {
-                        contentDescription = "Ready"
-                        traversalIndex = 0f
-                    },
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Text(
-                    text = "The current world is ready for an implemented feature.",
-                    modifier = Modifier.testTag("app-shell-ready-body").semantics {
-                        contentDescription = "The current world is ready for an implemented feature."
-                        traversalIndex = 1f
-                    }
-                )
+                if (phase2TimeEntry != null) {
+                    Phase2TimeRoute(phase2TimeEntry)
+                } else {
+                    Text(
+                        text = "Ready",
+                        modifier = Modifier.testTag("app-shell-ready-title").semantics {
+                            contentDescription = "Ready"
+                            traversalIndex = 0f
+                        },
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        text = "The current world is ready for an implemented feature.",
+                        modifier = Modifier.testTag("app-shell-ready-body").semantics {
+                            contentDescription = "The current world is ready for an implemented feature."
+                            traversalIndex = 1f
+                        }
+                    )
+                }
             }
 
             AppShellState.Empty -> {
