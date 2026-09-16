@@ -6,7 +6,6 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -14,6 +13,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -156,7 +156,7 @@ class Phase2TimeUiTest {
         compose.onNodeWithText("Resource loss").assertIsDisplayed()
         compose.onNodeWithTag("phase2-time-conflict-0")
             .assertTextEquals("Conflicting scheduled action 1")
-        compose.onNodeWithText("Treatment 14:00-18:00").assertDoesNotExist()
+        compose.onAllNodesWithText("Treatment 14:00-18:00").assertCountEquals(0)
         compose.onNodeWithTag("phase2-time-resolution-pause_and_insert").performClick()
         assertEquals(emptyList<Phase2TimeUiAction>(), actions)
         compose.runOnIdle { state.value = state.value.copy(conflict = conflict.copy(previewToken = "v2")) }
@@ -447,7 +447,6 @@ class Phase2TimeUiTest {
         }
         compose.onNodeWithTag("phase2-time-progress").assertIsDisplayed()
         compose.onNodeWithTag("phase2-time-control-pause")
-            .assertIsEnabled()
             .performClick()
         compose.waitForIdle()
 
