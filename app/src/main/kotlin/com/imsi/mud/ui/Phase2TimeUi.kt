@@ -425,6 +425,14 @@ fun Phase2TimeRoute(entry: Phase2TimeEntry) {
 }
 
 @Composable
+fun Phase2TimeRoute(
+    state: Phase2TimeViewState,
+    onAction: (Phase2TimeUiAction) -> Unit = {}
+) {
+    Phase2TimeScreen(state = state, onAction = onAction)
+}
+
+@Composable
 fun Phase2TimeScreen(
     state: Phase2TimeViewState,
     onAction: (Phase2TimeUiAction) -> Unit,
