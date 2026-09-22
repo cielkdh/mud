@@ -59,7 +59,7 @@ object ScreenRegistry {
 fun AppRoot(
     state: AppShellState,
     onRetry: () -> Unit,
-    phase2TimeEntry: Phase2TimeEntry? = null,
+    timeAdvanceEntry: TimeAdvanceEntry? = null,
     onBack: () -> Unit = {},
     loadingBody: String = "Preparing the world session."
 ) {
@@ -94,8 +94,8 @@ fun AppRoot(
             }
 
             AppShellState.Ready -> {
-                if (phase2TimeEntry != null) {
-                    Phase2TimeRoute(phase2TimeEntry)
+                if (timeAdvanceEntry != null) {
+                    TimeAdvanceRoute(timeAdvanceEntry)
                 } else {
                     Text(
                         text = "Ready",

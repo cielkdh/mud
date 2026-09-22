@@ -130,7 +130,7 @@ private suspend fun acquireSession(session: WorldSession): ProcessWorldSessionCo
 
 internal data class SessionBackedTestHandle(
     val session: ProcessWorldSessionCoordinator.WorldSessionHandle,
-    val entry: Phase2TimeEntry
+    val entry: TimeAdvanceEntry
 )
 
 internal object SessionBackedTestEntryHolder {
@@ -325,13 +325,13 @@ internal class SessionBackedActivityLifecycleCallbacks : Application.ActivityLif
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 }
 
-class Phase2TimeUiTest {
+class TimeAdvanceUiTest {
     @get:Rule
     val compose = createComposeRule()
 
     @Test
     fun rendersStatusesSummaryAndAllowedAdvanceControls() {
-        val actions = mutableListOf<Phase2TimeUiAction>()
+        val actions = mutableListOf<TimeAdvanceUiAction>()
         val summary = TimeAdvanceSummary(
             elapsed = "2h",
             stopReason = "Decision required",
@@ -344,8 +344,8 @@ class Phase2TimeUiTest {
             nextActionLabel = "Review decision"
         )
         compose.setContent {
-            Phase2TimeScreen(
-                Phase2TimeViewState(
+            TimeAdvanceScreen(
+                TimeAdvanceViewState(
                     status = TimeAdvanceStatus.ADVANCING,
                     goalLabel = "Until treatment completes",
                     advanceInProgress = AdvanceInProgressViewState("Until treatment completes", "10:30", setOf(AdvanceControl.PAUSE)),
@@ -365,15 +365,15 @@ class Phase2TimeUiTest {
         compose.onNodeWithTag("phase2-time-summary").assertIsDisplayed()
         compose.onNodeWithTag("phase2-time-summary-major-events-overflow").assertTextEquals("Major events: 2 more")
         compose.onNodeWithText("Unknown important items: 1").assertIsDisplayed()
-        assertEquals(listOf(Phase2TimeUiAction.Pause), actions)
+        assertEquals(listOf(TimeAdvanceUiAction.Pause), actions)
     }
 
     @Test
     fun longKoreanCopyRemainsScrollableWithAccessibleControls() {
         val longCopy = "긴 한국어 안내 문구가 작은 화면과 큰 글꼴에서도 잘리지 않고 다음 안전 경계까지 진행 상태를 설명합니다. ".repeat(4)
         compose.setContent {
-            Phase2TimeScreen(
-                Phase2TimeViewState(
+            TimeAdvanceScreen(
+                TimeAdvanceViewState(
                     status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
                     goalLabel = longCopy,
                     feedbackMessage = longCopy,
@@ -400,8 +400,8 @@ class Phase2TimeUiTest {
     @Test
     fun hidesCancelWhenProtectedCompletionHasNoAllowedControls() {
         compose.setContent {
-            Phase2TimeScreen(
-                Phase2TimeViewState(
+            TimeAdvanceScreen(
+                TimeAdvanceViewState(
                     status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
                     advanceInProgress = AdvanceInProgressViewState("Completing", "10:30", emptySet())
                 ),
@@ -415,7 +415,7 @@ class Phase2TimeUiTest {
 
     @Test
     fun requiresExplicitConfirmationBeforeRiskResolutionCallback() {
-        val actions = mutableListOf<Phase2TimeUiAction>()
+        val actions = mutableListOf<TimeAdvanceUiAction>()
         val preview = PublicConsequencePreview(
             currentSchedule = PublicConsequenceField("Current schedule", "Treatment 14:00-18:00", PublicValueStatus.KNOWN),
             proposedSchedule = PublicConsequenceField("New schedule", "Rescue 14:00-16:00", PublicValueStatus.KNOWN),
@@ -440,9 +440,9 @@ class Phase2TimeUiTest {
             allowedResolutions = listOf(ScheduleResolution.PAUSE_AND_INSERT),
             preview = preview
         )
-        val state = mutableStateOf(Phase2TimeViewState(status = TimeAdvanceStatus.IDLE, conflict = conflict))
+        val state = mutableStateOf(TimeAdvanceViewState(status = TimeAdvanceStatus.IDLE, conflict = conflict))
         compose.setContent {
-            Phase2TimeScreen(state.value, actions::add)
+            TimeAdvanceScreen(state.value, actions::add)
         }
 
         compose.onNodeWithTag("phase2-time-preview-current-schedule")
@@ -460,17 +460,17 @@ class Phase2TimeUiTest {
         compose.onNodeWithTag("phase2-time-conflict-0").assertTextEquals("Conflicting scheduled action 1")
         compose.onAllNodesWithText("hidden-affection=0.99").assertCountEquals(0)
         compose.onNodeWithTag("phase2-time-resolution-pause_and_insert").performClick()
-        assertEquals(emptyList<Phase2TimeUiAction>(), actions)
+        assertEquals(emptyList<TimeAdvanceUiAction>(), actions)
         compose.runOnIdle { state.value = state.value.copy(conflict = conflict.copy(previewToken = "v2")) }
         compose.onNodeWithTag("phase2-time-resolution-pause_and_insert").performClick()
-        assertEquals(emptyList<Phase2TimeUiAction>(), actions)
+        assertEquals(emptyList<TimeAdvanceUiAction>(), actions)
         compose.onNodeWithTag("phase2-time-resolution-pause_and_insert")
             .assertTextEquals("Confirm Pause and insert")
             .assertHeightIsAtLeast(48.dp)
             .performClick()
         assertEquals(
             listOf(
-                Phase2TimeUiAction.ConfirmConflict(
+                TimeAdvanceUiAction.ConfirmConflict(
                     conflictId = "conflict-1",
                     resolution = ScheduleResolution.PAUSE_AND_INSERT,
                     expectedRowVersions = listOf(ExpectedScheduleRowVersion("action-1", 3)),
@@ -486,9 +486,9 @@ class Phase2TimeUiTest {
 
     @Test
     fun preemptAndCancelAndInsertRequireSeparateRiskConfirmations() {
-        val actions = mutableListOf<Phase2TimeUiAction>()
+        val actions = mutableListOf<TimeAdvanceUiAction>()
         val state = mutableStateOf(
-            Phase2TimeViewState(
+            TimeAdvanceViewState(
                 status = TimeAdvanceStatus.IDLE,
                 conflict = ScheduleConflictViewState(
                     conflictId = "risk-conflict",
@@ -503,25 +503,25 @@ class Phase2TimeUiTest {
                 )
             )
         )
-        compose.setContent { Phase2TimeScreen(state.value, actions::add) }
+        compose.setContent { TimeAdvanceScreen(state.value, actions::add) }
 
         compose.onNodeWithTag("phase2-time-resolution-preempt").performClick()
-        assertEquals(emptyList<Phase2TimeUiAction>(), actions)
+        assertEquals(emptyList<TimeAdvanceUiAction>(), actions)
         compose.onNodeWithTag("phase2-time-resolution-preempt").assertTextEquals("Confirm Preempt").performClick()
         assertEquals(1, actions.size)
-        assertEquals(ScheduleResolution.PREEMPT, (actions.single() as Phase2TimeUiAction.ConfirmConflict).resolution)
+        assertEquals(ScheduleResolution.PREEMPT, (actions.single() as TimeAdvanceUiAction.ConfirmConflict).resolution)
 
         compose.onNodeWithTag("phase2-time-resolution-cancel_and_insert").performClick()
         compose.onNodeWithTag("phase2-time-resolution-cancel_and_insert").assertTextEquals("Confirm Cancel and insert").performClick()
         assertEquals(2, actions.size)
-        assertEquals(ScheduleResolution.CANCEL_AND_INSERT, (actions.last() as Phase2TimeUiAction.ConfirmConflict).resolution)
+        assertEquals(ScheduleResolution.CANCEL_AND_INSERT, (actions.last() as TimeAdvanceUiAction.ConfirmConflict).resolution)
     }
 
     @Test
     fun normalReservationUsesExecuteAndSingleFlight() {
         val envelopes = mutableListOf<CommandEnvelope<out WorldCommandPayload>>()
         val release = CompletableDeferred<CommandResult>()
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = {
                 envelopes += it
                 release.await()
@@ -533,9 +533,9 @@ class Phase2TimeUiTest {
         )
         val reservation = reservation()
         compose.setContent {
-            Phase2TimeRoute(
-                Phase2TimeEntry(
-                    Phase2TimeViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation),
+            TimeAdvanceRoute(
+                TimeAdvanceEntry(
+                    TimeAdvanceViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation),
                     controller
                 )
             )
@@ -556,14 +556,14 @@ class Phase2TimeUiTest {
             val fixture = SessionBackedScheduleFixture(this)
             try {
                 fixture.port.blockNextCommit()
-                val controller = Phase2TimeController(
+                val controller = TimeAdvanceController(
                     fixture.session,
                     newCommandId = { CommandId("session-reserve") }
                 )
                 compose.setContent {
-                    Phase2TimeRoute(
-                        Phase2TimeEntry(
-                            Phase2TimeViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
+                    TimeAdvanceRoute(
+                        TimeAdvanceEntry(
+                            TimeAdvanceViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
                             controller
                         )
                     )
@@ -590,14 +590,14 @@ class Phase2TimeUiTest {
     fun sessionBackedDecisionGatePublishesChoicesAndSubmitsContinuation() = runBlocking {
         val fixture = DecisionGateSessionFixture(this)
         try {
-            val controller = Phase2TimeController(
+            val controller = TimeAdvanceController(
                 fixture.session,
                 newCommandId = { if (fixture.port.commitCount == 0) CommandId("decision-parent") else CommandId("decision-child") }
             )
             compose.setContent {
-                Phase2TimeRoute(
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
+                TimeAdvanceRoute(
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
                         controller
                     )
                 )
@@ -642,19 +642,19 @@ class Phase2TimeUiTest {
                 reservation,
                 "session-stale"
             )
-            val controller = Phase2TimeController(
+            val controller = TimeAdvanceController(
                 fixture.session,
                 newCommandId = { CommandId("session-stale") }
             )
-            val state = Phase2TimeViewState(TimeAdvanceStatus.IDLE, conflict = conflict)
+            val state = TimeAdvanceViewState(TimeAdvanceStatus.IDLE, conflict = conflict)
             val action = confirmConflictAction(conflict)
 
             assertEquals(
-                Phase2DispatchResult.RefreshRequested("session-stale"),
+                TimeAdvanceDispatchResult.RefreshRequested("session-stale"),
                 controller.dispatch(action.copy(previewHash = "f".repeat(64)), state)
             )
             assertEquals(
-                Phase2DispatchResult.RefreshRequested("session-stale"),
+                TimeAdvanceDispatchResult.RefreshRequested("session-stale"),
                 controller.dispatch(
                     action.copy(expectedRowVersions = action.expectedRowVersions.map { it.copy(rowVersion = it.rowVersion + 1) }),
                     state
@@ -672,14 +672,14 @@ class Phase2TimeUiTest {
         val fixture = SessionBackedScheduleFixture(this)
         try {
             fixture.port.failNextCommit = true
-            val controller = Phase2TimeController(
+            val controller = TimeAdvanceController(
                 fixture.session,
                 newCommandId = { CommandId("session-retry-${fixture.port.commitCount}") }
             )
             compose.setContent {
-                Phase2TimeRoute(
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
+                TimeAdvanceRoute(
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
                         controller
                     )
                 )
@@ -715,9 +715,9 @@ class Phase2TimeUiTest {
                 val session = acquireSession(fixture.session)
                 SessionBackedTestHandle(
                     session,
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(TimeAdvanceStatus.ADVANCING, startRequest = advanceRequest()),
-                        Phase2TimeController(session, newCommandId = { CommandId("activity-session") })
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(TimeAdvanceStatus.ADVANCING, startRequest = advanceRequest()),
+                        TimeAdvanceController(session, newCommandId = { CommandId("activity-session") })
                     )
                 )
             }
@@ -775,9 +775,9 @@ class Phase2TimeUiTest {
                     val session = acquireSession(fixture.session)
                     SessionBackedTestHandle(
                         session,
-                        Phase2TimeEntry(
-                            Phase2TimeViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
-                            Phase2TimeController(session, newCommandId = { CommandId("stale-old") })
+                        TimeAdvanceEntry(
+                            TimeAdvanceViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
+                            TimeAdvanceController(session, newCommandId = { CommandId("stale-old") })
                         )
                     )
                 }
@@ -792,9 +792,9 @@ class Phase2TimeUiTest {
                     val session = acquireSession(fixture.session)
                     SessionBackedTestHandle(
                         session,
-                        Phase2TimeEntry(
-                            Phase2TimeViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
-                            Phase2TimeController(session, newCommandId = { CommandId("stale-new") })
+                        TimeAdvanceEntry(
+                            TimeAdvanceViewState(TimeAdvanceStatus.IDLE, scheduleReservation = reservation()),
+                            TimeAdvanceController(session, newCommandId = { CommandId("stale-new") })
                         )
                     )
                 }
@@ -853,7 +853,7 @@ class Phase2TimeUiTest {
     @Test
     fun staleHashOrRowVersionRequestsRefreshWithoutExecute() = runBlocking {
         var executeCount = 0
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = { executeCount += 1; CommandResult.Accepted(1) },
             requestControl = { ControlRequestResult.Accepted(CommandId("active")) },
             runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
@@ -871,7 +871,7 @@ class Phase2TimeUiTest {
             allowedResolutions = listOf(ScheduleResolution.PREEMPT),
             preview = emptyPreview()
         )
-        val action = Phase2TimeUiAction.ConfirmConflict(
+        val action = TimeAdvanceUiAction.ConfirmConflict(
             conflictId = conflict.conflictId,
             resolution = ScheduleResolution.PREEMPT,
             expectedRowVersions = conflict.expectedRowVersions,
@@ -882,12 +882,12 @@ class Phase2TimeUiTest {
         )
 
         assertEquals(
-            Phase2DispatchResult.RefreshRequested("stale"),
-            controller.dispatch(action.copy(previewHash = "1".repeat(64)), Phase2TimeViewState(TimeAdvanceStatus.IDLE, conflict = conflict))
+            TimeAdvanceDispatchResult.RefreshRequested("stale"),
+            controller.dispatch(action.copy(previewHash = "1".repeat(64)), TimeAdvanceViewState(TimeAdvanceStatus.IDLE, conflict = conflict))
         )
         assertEquals(
-            Phase2DispatchResult.RefreshRequested("stale"),
-            controller.dispatch(action.copy(expectedRowVersions = listOf(ExpectedScheduleRowVersion("action-1", 4))), Phase2TimeViewState(TimeAdvanceStatus.IDLE, conflict = conflict))
+            TimeAdvanceDispatchResult.RefreshRequested("stale"),
+            controller.dispatch(action.copy(expectedRowVersions = listOf(ExpectedScheduleRowVersion("action-1", 4))), TimeAdvanceViewState(TimeAdvanceStatus.IDLE, conflict = conflict))
         )
         assertEquals(0, executeCount)
     }
@@ -895,13 +895,13 @@ class Phase2TimeUiTest {
 
     @Test
     fun decisionChoiceCarriesCanonicalSelectionAndNeverShowsPause() {
-        val actions = mutableListOf<Phase2TimeUiAction>()
+        val actions = mutableListOf<TimeAdvanceUiAction>()
         val canonicalPayload = "{\"id\":\"npc-1\"}"
         val payloadHash = DecisionSelection("gate-1", "choice-1", "DECISION_CHOICE.v1", canonicalPayload).payloadHash.value
         val choice = PublicDecisionChoice("choice-1", "Choose successor", "DECISION_CHOICE.v1", canonicalPayload, payloadHash)
         compose.setContent {
-            Phase2TimeScreen(
-                Phase2TimeViewState(
+            TimeAdvanceScreen(
+                TimeAdvanceViewState(
                     status = TimeAdvanceStatus.DECISION_REQUIRED,
                     decisionRequired = DecisionRequiredViewState(
                         "cmd-1",
@@ -920,7 +920,7 @@ class Phase2TimeUiTest {
         compose.onNodeWithTag("phase2-time-choice-choice-1").performClick()
         assertEquals(
             listOf(
-                Phase2TimeUiAction.Continue(
+                TimeAdvanceUiAction.Continue(
                     "cmd-1",
                     "gate-1",
                     "choice-1",
@@ -947,14 +947,14 @@ class Phase2TimeUiTest {
             "{\"id\":\"npc-1\"}",
             DecisionSelection("gate-1", "choice-1", "DECISION_CHOICE.v1", "{\"id\":\"npc-1\"}").payloadHash.value
         )
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = { executeCount++; CommandResult.Accepted(1) },
             requestControl = { ControlRequestResult.Accepted(CommandId("active")) },
             runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
             currentVersion = { StateVersion(1) },
             newCommandId = { CommandId("stale-child") },
             currentPublication = {
-                Phase2CommittedSnapshot(
+                TimeAdvanceCommittedSnapshot(
                     stateVersion = 1,
                     clockMinute = 1,
                     eventCount = 0,
@@ -969,7 +969,7 @@ class Phase2TimeUiTest {
             }
         )
         val result = controller.dispatch(
-            Phase2TimeUiAction.Continue(
+            TimeAdvanceUiAction.Continue(
                 "parent",
                 "wrong-gate",
                 choice.choiceId,
@@ -982,7 +982,7 @@ class Phase2TimeUiTest {
                 null
             )
         )
-        assertEquals(Phase2DispatchResult.DecisionStale("parent"), result)
+        assertEquals(TimeAdvanceDispatchResult.DecisionStale("parent"), result)
         assertEquals(0, executeCount)
     }
 
@@ -990,7 +990,7 @@ class Phase2TimeUiTest {
     fun rejectsDecisionRequiredCombinedWithAdvanceInProgress() {
         val selection = DecisionSelection("gate-1", "choice-1", "DECISION_CHOICE.v1", "{}")
         try {
-            Phase2TimeViewState(
+            TimeAdvanceViewState(
                 status = TimeAdvanceStatus.DECISION_REQUIRED,
                 decisionRequired = DecisionRequiredViewState(
                     "cmd-1",
@@ -1009,11 +1009,11 @@ class Phase2TimeUiTest {
 
     @Test
     fun stalePreviewOffersRefreshAndDoesNotSubmitResolution() {
-        val actions = mutableListOf<Phase2TimeUiAction>()
+        val actions = mutableListOf<TimeAdvanceUiAction>()
         val preview = emptyPreview()
         compose.setContent {
-            Phase2TimeScreen(
-                Phase2TimeViewState(
+            TimeAdvanceScreen(
+                TimeAdvanceViewState(
                     status = TimeAdvanceStatus.IDLE,
                     conflict = ScheduleConflictViewState(
                         conflictId = "conflict-stale",
@@ -1034,7 +1034,7 @@ class Phase2TimeUiTest {
 
         compose.onNodeWithTag("phase2-time-refresh-preview").performClick()
         compose.onNodeWithTag("phase2-time-resolution-preempt").assertIsNotEnabled().performClick()
-        assertEquals(listOf(Phase2TimeUiAction.RefreshPreview("conflict-stale")), actions)
+        assertEquals(listOf(TimeAdvanceUiAction.RefreshPreview("conflict-stale")), actions)
     }
 
     @Test
@@ -1042,7 +1042,7 @@ class Phase2TimeUiTest {
         val envelopes = mutableListOf<CommandEnvelope<out WorldCommandPayload>>()
         val controls = mutableListOf<ControlRequest>()
         val commandIds = ArrayDeque(listOf(CommandId("cmd-start"), CommandId("cmd-child"), CommandId("cmd-resume"), CommandId("cmd-conflict")))
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = {
                 envelopes += it
                 CommandResult.Accepted(1)
@@ -1060,9 +1060,9 @@ class Phase2TimeUiTest {
         val request = advanceRequest()
         val selection = DecisionSelection("gate-1", "choice-1", "DECISION_CHOICE.v1", "{\"id\":\"npc-1\"}")
 
-        controller.dispatch(Phase2TimeUiAction.StartAdvance(request))
+        controller.dispatch(TimeAdvanceUiAction.StartAdvance(request))
         controller.dispatch(
-            Phase2TimeUiAction.Continue(
+            TimeAdvanceUiAction.Continue(
                 continuationOfCommandId = "cmd-parent",
                 gateId = selection.gateId,
                 choiceId = selection.choiceId,
@@ -1075,8 +1075,8 @@ class Phase2TimeUiTest {
                 sealedOutcomeHash = null
             )
         )
-        controller.dispatch(Phase2TimeUiAction.Pause)
-        controller.dispatch(Phase2TimeUiAction.ResumeInterrupted("cmd-interrupted", request))
+        controller.dispatch(TimeAdvanceUiAction.Pause)
+        controller.dispatch(TimeAdvanceUiAction.ResumeInterrupted("cmd-interrupted", request))
         val conflict = ScheduleConflictViewState(
             conflictId = "conflict-route",
             previewToken = "token-route",
@@ -1088,7 +1088,7 @@ class Phase2TimeUiTest {
             allowedResolutions = listOf(ScheduleResolution.PREEMPT),
             preview = emptyPreview()
         )
-        val confirm = Phase2TimeUiAction.ConfirmConflict(
+        val confirm = TimeAdvanceUiAction.ConfirmConflict(
             conflictId = conflict.conflictId,
             resolution = ScheduleResolution.PREEMPT,
             expectedRowVersions = conflict.expectedRowVersions,
@@ -1097,7 +1097,7 @@ class Phase2TimeUiTest {
             previewHash = conflict.previewHash,
             previewToken = conflict.previewToken
         )
-        controller.dispatch(confirm, Phase2TimeViewState(TimeAdvanceStatus.IDLE, conflict = conflict))
+        controller.dispatch(confirm, TimeAdvanceViewState(TimeAdvanceStatus.IDLE, conflict = conflict))
 
         assertEquals(listOf("cmd-start", "cmd-child", "cmd-resume", "cmd-conflict"), envelopes.map { it.commandId.value })
         assertEquals(listOf(StateVersion(9), StateVersion(9), StateVersion(9), StateVersion(9)), envelopes.map { it.expectedVersion })
@@ -1116,9 +1116,9 @@ class Phase2TimeUiTest {
         )
         val stale = controller.dispatch(
             confirm,
-            Phase2TimeViewState(TimeAdvanceStatus.IDLE, conflict = conflict.copy(previewToken = "new-token"))
+            TimeAdvanceViewState(TimeAdvanceStatus.IDLE, conflict = conflict.copy(previewToken = "new-token"))
         )
-        assertEquals(Phase2DispatchResult.RefreshRequested("conflict-route"), stale)
+        assertEquals(TimeAdvanceDispatchResult.RefreshRequested("conflict-route"), stale)
         assertEquals(4, envelopes.size)
     }
 
@@ -1126,7 +1126,7 @@ class Phase2TimeUiTest {
     fun routeExecutesAdvanceOnceWhenStartIsTappedTwice() {
         var executeCount = 0
         val release = CompletableDeferred<CommandResult>()
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = {
                 executeCount += 1
                 release.await()
@@ -1137,9 +1137,9 @@ class Phase2TimeUiTest {
             newCommandId = { CommandId("cmd-start") }
         )
         compose.setContent {
-            Phase2TimeRoute(
-                Phase2TimeEntry(
-                    state = Phase2TimeViewState(
+            TimeAdvanceRoute(
+                TimeAdvanceEntry(
+                    state = TimeAdvanceViewState(
                         status = TimeAdvanceStatus.IDLE,
                         startRequest = advanceRequest()
                     ),
@@ -1165,20 +1165,20 @@ class Phase2TimeUiTest {
 
     @Test
     fun acceptedAdvanceWithStaleTerminalPublicationDoesNotShowSuccessSummary() {
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = { CommandResult.Accepted(1) },
             requestControl = { ControlRequestResult.Accepted(CommandId("cmd-start")) },
             runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
             currentVersion = { StateVersion(1) },
             newCommandId = { CommandId("cmd-start") },
             currentPublication = {
-                Phase2CommittedSnapshot(2, 20, 0, "other-command", TimeAdvanceResult.COMPLETED)
+                TimeAdvanceCommittedSnapshot(2, 20, 0, "other-command", TimeAdvanceResult.COMPLETED)
             }
         )
         compose.setContent {
-            Phase2TimeRoute(
-                Phase2TimeEntry(
-                    Phase2TimeViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
+            TimeAdvanceRoute(
+                TimeAdvanceEntry(
+                    TimeAdvanceViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
                     controller
                 )
             )
@@ -1196,12 +1196,12 @@ class Phase2TimeUiTest {
         var controlCount = 0
         val release = CompletableDeferred<CommandResult>()
         val state = mutableStateOf(
-            Phase2TimeViewState(
+            TimeAdvanceViewState(
                 status = TimeAdvanceStatus.IDLE,
                 startRequest = advanceRequest()
             )
         )
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = {
                 executeCount += 1
                 release.await()
@@ -1217,12 +1217,12 @@ class Phase2TimeUiTest {
             newCommandId = { CommandId("cmd-start") }
         )
         compose.setContent {
-            Phase2TimeRoute(Phase2TimeEntry(state.value, controller))
+            TimeAdvanceRoute(TimeAdvanceEntry(state.value, controller))
         }
 
         compose.onNodeWithTag("phase2-time-start").performClick()
         compose.runOnIdle {
-            state.value = Phase2TimeViewState(
+            state.value = TimeAdvanceViewState(
                 status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
                 advanceInProgress = AdvanceInProgressViewState(
                     goalLabel = "Until treatment completes",
@@ -1249,8 +1249,8 @@ class Phase2TimeUiTest {
         val activeCommand = CommandId("pause-command")
         var active = true
         var requestCount = 0
-        var publication: Phase2CommittedSnapshot? = null
-        val controller = Phase2TimeController(
+        var publication: TimeAdvanceCommittedSnapshot? = null
+        val controller = TimeAdvanceController(
             execute = { CommandResult.Accepted(1) },
             requestControl = {
                 requestCount += 1
@@ -1264,9 +1264,9 @@ class Phase2TimeUiTest {
             currentPublication = { publication }
         )
         compose.setContent {
-            Phase2TimeRoute(
-                Phase2TimeEntry(
-                    Phase2TimeViewState(
+            TimeAdvanceRoute(
+                TimeAdvanceEntry(
+                    TimeAdvanceViewState(
                         status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
                         startRequest = advanceRequest(),
                         advanceInProgress = AdvanceInProgressViewState(
@@ -1290,7 +1290,7 @@ class Phase2TimeUiTest {
         assertEquals(1, requestCount)
 
         active = false
-        publication = Phase2CommittedSnapshot(2, 20, 1, activeCommand.value, TimeAdvanceResult.INTERRUPTED)
+        publication = TimeAdvanceCommittedSnapshot(2, 20, 1, activeCommand.value, TimeAdvanceResult.INTERRUPTED)
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("phase2-time-status-interrupted").fetchSemanticsNodes().isNotEmpty()
         }
@@ -1304,8 +1304,8 @@ class Phase2TimeUiTest {
         val activeCommand = CommandId("cancel-command")
         var active = true
         var requestCount = 0
-        var publication: Phase2CommittedSnapshot? = null
-        val controller = Phase2TimeController(
+        var publication: TimeAdvanceCommittedSnapshot? = null
+        val controller = TimeAdvanceController(
             execute = { CommandResult.Accepted(1) },
             requestControl = {
                 requestCount += 1
@@ -1319,9 +1319,9 @@ class Phase2TimeUiTest {
             currentPublication = { publication }
         )
         compose.setContent {
-            Phase2TimeRoute(
-                Phase2TimeEntry(
-                    Phase2TimeViewState(
+            TimeAdvanceRoute(
+                TimeAdvanceEntry(
+                    TimeAdvanceViewState(
                         status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
                         startRequest = advanceRequest(),
                         advanceInProgress = AdvanceInProgressViewState(
@@ -1345,7 +1345,7 @@ class Phase2TimeUiTest {
         assertEquals(1, requestCount)
 
         active = false
-        publication = Phase2CommittedSnapshot(2, 20, 1, activeCommand.value, TimeAdvanceResult.CANCELLED)
+        publication = TimeAdvanceCommittedSnapshot(2, 20, 1, activeCommand.value, TimeAdvanceResult.CANCELLED)
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("phase2-time-status-cancelled").fetchSemanticsNodes().isNotEmpty()
         }
@@ -1359,16 +1359,16 @@ class Phase2TimeUiTest {
         val fixture = ActualAdvanceFixture(this)
         try {
             compose.setContent {
-                Phase2TimeRoute(
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(
+                TimeAdvanceRoute(
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(
                             status = TimeAdvanceStatus.IDLE,
                             startRequest = advanceRequest().copy(
                                 goal = TimeAdvanceGoal.UntilMinute(actualMinute(200)),
                                 limits = TimeTraversalLimits(actualMinute(200), 200)
                             )
                         ),
-                        Phase2TimeController(
+                        TimeAdvanceController(
                             fixture.session,
                             newCommandId = { fixture.commandId }
                         )
@@ -1404,13 +1404,13 @@ class Phase2TimeUiTest {
     @Test
     fun rendersTerminalTimeAdvanceStatusesWithPublicContinuationState() {
         val state = mutableStateOf(
-            Phase2TimeViewState(
+            TimeAdvanceViewState(
                 status = TimeAdvanceStatus.INTERRUPTED,
                 continuationOfCommandId = "interrupted-command",
                 resumeRequest = advanceRequest()
             )
         )
-        compose.setContent { Phase2TimeScreen(state.value, onAction = {}) }
+        compose.setContent { TimeAdvanceScreen(state.value, onAction = {}) }
 
         compose.onNodeWithTag("phase2-time-status-interrupted").assertIsDisplayed()
         compose.onNodeWithTag("phase2-time-continue").assertIsDisplayed()
@@ -1420,7 +1420,7 @@ class Phase2TimeUiTest {
             TimeAdvanceStatus.LIMIT_REACHED,
             TimeAdvanceStatus.CANCELLED
         ).forEach { status ->
-            compose.runOnIdle { state.value = Phase2TimeViewState(status = status) }
+            compose.runOnIdle { state.value = TimeAdvanceViewState(status = status) }
             compose.waitForIdle()
             compose.onNodeWithTag("phase2-time-status-${status.name.lowercase()}").assertIsDisplayed()
         }
@@ -1440,7 +1440,7 @@ class Phase2TimeUiTest {
             TimeAdvanceResult.FAILED to TimeAdvanceStatus.FAILED
         )
         expected.forEach { (terminal, status) ->
-            val publication = Phase2CommittedSnapshot(1, 1, 0, command.value, terminal)
+            val publication = TimeAdvanceCommittedSnapshot(1, 1, 0, command.value, terminal)
             assertEquals(terminal, publication.timeAdvanceTerminalFor(command))
             assertEquals(status, terminal.uiStatus())
             assertEquals(null, publication.timeAdvanceTerminalFor(other))
@@ -1450,8 +1450,8 @@ class Phase2TimeUiTest {
     @Test
     fun realWorldSessionControlLanePausesAndCancelsActiveAdvance() = runBlocking {
         listOf(
-            Phase2TimeUiAction.Pause to TimeAdvanceResult.INTERRUPTED,
-            Phase2TimeUiAction.Cancel to TimeAdvanceResult.CANCELLED
+            TimeAdvanceUiAction.Pause to TimeAdvanceResult.INTERRUPTED,
+            TimeAdvanceUiAction.Cancel to TimeAdvanceResult.CANCELLED
         ).forEach { (action, terminalStatus) ->
             val fixture = ActualAdvanceFixture(this)
             val execution = async(start = CoroutineStart.UNDISPATCHED) {
@@ -1459,9 +1459,9 @@ class Phase2TimeUiTest {
             }
             withTimeout(5_000) { fixture.port.firstSegmentEntered.await() }
 
-            val dispatch = Phase2TimeController(fixture.session).dispatch(action)
+            val dispatch = TimeAdvanceController(fixture.session).dispatch(action)
             assertEquals(
-                Phase2DispatchResult.Control(ControlRequestResult.Accepted(fixture.commandId)),
+                TimeAdvanceDispatchResult.Control(ControlRequestResult.Accepted(fixture.commandId)),
                 dispatch
             )
 
@@ -1485,14 +1485,14 @@ class Phase2TimeUiTest {
         var retryId = 0
         try {
             fixture.port.failNextSegmentCommit = true
-            val controller = Phase2TimeController(
+            val controller = TimeAdvanceController(
                 fixture.session,
                 newCommandId = { CommandId("control-retry-${++retryId}") }
             )
             compose.setContent {
-                Phase2TimeRoute(
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
+                TimeAdvanceRoute(
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
                         controller
                     )
                 )
@@ -1531,14 +1531,14 @@ class Phase2TimeUiTest {
         val fixture = ActualAdvanceFixture(this)
         var released = false
         try {
-            val controller = Phase2TimeController(
+            val controller = TimeAdvanceController(
                 fixture.session,
                 newCommandId = { CommandId("slow-control") }
             )
             compose.setContent {
-                Phase2TimeRoute(
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
+                TimeAdvanceRoute(
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()),
                         controller
                     )
                 )
@@ -1576,7 +1576,7 @@ class Phase2TimeUiTest {
 
     @Test
     fun mainActivityContentEntersPhase2RouteWhenEntryIsProvided() {
-        val controller = Phase2TimeController(
+        val controller = TimeAdvanceController(
             execute = { CommandResult.Accepted(1) },
             requestControl = { ControlRequestResult.Accepted(CommandId("cmd-active")) },
             runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
@@ -1585,8 +1585,8 @@ class Phase2TimeUiTest {
         )
         compose.setContent {
             MainActivityContent(
-                phase2TimeEntry = Phase2TimeEntry(
-                    state = Phase2TimeViewState(TimeAdvanceStatus.IDLE),
+                timeAdvanceEntry = TimeAdvanceEntry(
+                    state = TimeAdvanceViewState(TimeAdvanceStatus.IDLE),
                     controller = controller
                 ),
                 onBack = {}
@@ -1622,14 +1622,14 @@ class Phase2TimeUiTest {
         val fixture = SessionBackedScheduleFixture(scope, calendar)
         try {
             val conflict = ScheduleConflictViewState.from(details, reservation, "session-$resolution")
-            val controller = Phase2TimeController(
+            val controller = TimeAdvanceController(
                 fixture.session,
                 newCommandId = { CommandId("session-$resolution") }
             )
             compose.setContent {
-                Phase2TimeRoute(
-                    Phase2TimeEntry(
-                        Phase2TimeViewState(TimeAdvanceStatus.IDLE, conflict = conflict),
+                TimeAdvanceRoute(
+                    TimeAdvanceEntry(
+                        TimeAdvanceViewState(TimeAdvanceStatus.IDLE, conflict = conflict),
                         controller
                     )
                 )
@@ -1690,8 +1690,8 @@ class Phase2TimeUiTest {
         rowVersion = StateVersion(3)
     )
 
-    private fun confirmConflictAction(conflict: ScheduleConflictViewState): Phase2TimeUiAction.ConfirmConflict =
-        Phase2TimeUiAction.ConfirmConflict(
+    private fun confirmConflictAction(conflict: ScheduleConflictViewState): TimeAdvanceUiAction.ConfirmConflict =
+        TimeAdvanceUiAction.ConfirmConflict(
             conflictId = conflict.conflictId,
             resolution = conflict.allowedResolutions.first(),
             expectedRowVersions = conflict.expectedRowVersions,
@@ -1991,7 +1991,7 @@ class Phase2TimeUiTest {
         }
     }
 
-    private fun advanceRequest() = Phase2AdvanceRequest(
+    private fun advanceRequest() = TimeAdvanceRequest(
         goal = TimeAdvanceGoal.UntilMinute((GameMinute.of(60) as Checked.Value).value),
         mode = ProgressionMode.FAST_FORWARD,
         limits = TimeTraversalLimits((GameMinute.of(120) as Checked.Value).value, 100),
