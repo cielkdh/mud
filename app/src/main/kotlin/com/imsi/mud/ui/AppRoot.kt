@@ -60,7 +60,8 @@ fun AppRoot(
     state: AppShellState,
     onRetry: () -> Unit,
     phase2TimeEntry: Phase2TimeEntry? = null,
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    loadingBody: String = "Preparing the world session."
 ) {
     Column(
         modifier = Modifier
@@ -84,9 +85,9 @@ fun AppRoot(
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Text(
-                    text = "Preparing the world session.",
+                    text = loadingBody,
                     modifier = Modifier.testTag("app-shell-loading-body").semantics {
-                        contentDescription = "Preparing the world session."
+                        contentDescription = loadingBody
                         traversalIndex = 1f
                     }
                 )

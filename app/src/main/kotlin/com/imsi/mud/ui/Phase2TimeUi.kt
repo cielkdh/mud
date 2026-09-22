@@ -32,10 +32,17 @@ import com.imsi.mud.simulation.CommandResult
 import com.imsi.mud.simulation.ControlRequest
 import com.imsi.mud.simulation.ControlRequestResult
 import com.imsi.mud.simulation.DecisionSelection
+import com.imsi.mud.simulation.DomainError
 import com.imsi.mud.simulation.EntityId
 import com.imsi.mud.simulation.PayloadHash
+import com.imsi.mud.simulation.ProcessWorldSessionCoordinator
+import com.imsi.mud.simulation.PublicConsequencePreview as CorePublicConsequencePreview
+import com.imsi.mud.simulation.PublicField as CorePublicField
+import com.imsi.mud.simulation.PublicValueState as CorePublicValueState
+import com.imsi.mud.simulation.ScheduleConflictResult as CoreScheduleConflictResult
 import com.imsi.mud.simulation.ProgressionMode
 import com.imsi.mud.simulation.SessionRuntimeState
+import com.imsi.mud.simulation.SessionLifecycle
 import com.imsi.mud.simulation.ScheduleReservePayload
 import com.imsi.mud.simulation.ScheduleResolution as CoreScheduleResolution
 import com.imsi.mud.simulation.ScheduleResolveConflictPayload
@@ -43,11 +50,16 @@ import com.imsi.mud.simulation.StateVersion
 import com.imsi.mud.simulation.TimeAdvanceContinuation
 import com.imsi.mud.simulation.TimeAdvanceGoal
 import com.imsi.mud.simulation.TimeAdvanceInterruptPolicy
+import com.imsi.mud.simulation.TimeAdvanceResult
 import com.imsi.mud.simulation.TimeTraversalLimits
 import com.imsi.mud.simulation.WorldCommandPayload
 import com.imsi.mud.simulation.WorldSession
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class TimeAdvanceStatus {
     IDLE,
@@ -140,7 +152,98 @@ data class ScheduleConflictViewState(
         PayloadHash(previewHash)
         require(expectedRowVersions.map { it.actionId }.distinct().size == expectedRowVersions.size)
     }
+
+    companion object {
+        fun from(
+            result: CoreScheduleConflictResult,
+            reservation: ScheduleReservePayload,
+            conflictId: String,
+            previewToken: String = result.consequencePreview.hash.value
+        ): ScheduleConflictViewState = ScheduleConflictViewState(
+            conflictId = conflictId,
+            previewToken = previewToken,
+            previewCodec = CorePublicConsequencePreview.CODEC_ID,
+            previewHash = result.consequencePreview.hash.value,
+            expectedRowVersions = result.conflictingRowVersions.entries
+                .sortedBy { it.key.value }
+                .map { ExpectedScheduleRowVersion(it.key.value, it.value.value) },
+            reservation = reservation,
+            conflictingSchedules = result.consequencePreview.currentSchedules
+                .map { it.actionKind }
+                .ifEmpty { result.conflictingActionIds.map { "Scheduled action" } },
+            allowedResolutions = result.allowedResolutions
+                .map { ScheduleResolution.valueOf(it.name) }
+                .sortedBy { it.ordinal },
+            preview = result.consequencePreview.toUiPreview()
+        )
+    }
 }
+
+private fun CorePublicConsequencePreview.toUiPreview(): PublicConsequencePreview {
+    val resourceValue = resourceEffects.joinToString("; ") { effect ->
+        val settlement = effect.settlement?.name?.replace('_', ' ')?.lowercase()
+        "${effect.resource.kind}:${effect.resource.id} x${effect.quantity}: ${effect.state.uiLabel()}" +
+            (settlement?.let { " ($it)" } ?: "")
+    }.ifBlank { "No impact" }
+    val financialFields = listOf(refundAmount, lossAmount)
+    val financialStatus = financialFields.map { it.state }.toUiStatus()
+    val riskReasons = buildList {
+        if (lossAmount.state in setOf(CorePublicValueState.KNOWN, CorePublicValueState.UNKNOWN)) {
+            add(PublicRiskReason.FINANCIAL_LOSS)
+        }
+        if (resourceEffects.any { it.state !in setOf(CorePublicValueState.NONE, CorePublicValueState.NOT_APPLICABLE) }) {
+            add(PublicRiskReason.RESOURCE_LOSS)
+        }
+        if (progressLoss.state in setOf(CorePublicValueState.KNOWN, CorePublicValueState.UNKNOWN)) {
+            add(PublicRiskReason.PROGRESS_LOSS)
+        }
+        if (relationshipImpact.state !in setOf(CorePublicValueState.NONE, CorePublicValueState.NOT_APPLICABLE)) {
+            add(PublicRiskReason.PUBLIC_RELATIONSHIP_IMPACT)
+        }
+        if (reputationImpact.state !in setOf(CorePublicValueState.NONE, CorePublicValueState.NOT_APPLICABLE)) {
+            add(PublicRiskReason.PUBLIC_REPUTATION_IMPACT)
+        }
+    }
+    return PublicConsequencePreview(
+        currentSchedule = schedulesField("Current schedule", currentSchedules),
+        proposedSchedule = schedulesField("New schedule", listOf(proposedSchedule)),
+        cancelledSchedule = schedulesField("Cancelled schedule", cancelledSchedules),
+        refundOrLoss = PublicConsequenceField("Refund or loss", financialFields.joinToString("; ") { it.uiLabel() }, financialStatus),
+        resourceSettlement = PublicConsequenceField("Resources", resourceValue, resourceEffects.map { it.state }.toUiStatus()),
+        progressLoss = field("Progress loss", progressLoss),
+        relationshipImpact = field("Relationship", relationshipImpact),
+        reputationImpact = field("Reputation", reputationImpact),
+        rescheduleAvailability = field("Reschedule", rescheduleAvailability),
+        riskReasons = riskReasons,
+        hasLoss = PublicRiskReason.FINANCIAL_LOSS in riskReasons || PublicRiskReason.RESOURCE_LOSS in riskReasons || PublicRiskReason.PROGRESS_LOSS in riskReasons
+    )
+}
+
+private fun CorePublicConsequencePreview.schedulesField(
+    label: String,
+    schedules: List<com.imsi.mud.simulation.PublicScheduleEffect>
+): PublicConsequenceField = PublicConsequenceField(
+    label,
+    schedules.joinToString("; ") { "${it.actionKind}: ${it.state.uiLabel()}" }.ifBlank { "No impact" },
+    schedules.map { it.state }.toUiStatus()
+)
+
+private fun field(label: String, value: CorePublicField): PublicConsequenceField =
+    PublicConsequenceField(label, value.uiLabel(), value.state.toUiStatus())
+
+private fun CorePublicField.uiLabel(): String = value ?: state.uiLabel()
+
+private fun CorePublicValueState.uiLabel(): String = name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+
+private fun List<CorePublicValueState>.toUiStatus(): PublicValueStatus = when {
+    any { it == CorePublicValueState.UNKNOWN } -> PublicValueStatus.UNKNOWN
+    any { it == CorePublicValueState.UNDETERMINED } -> PublicValueStatus.UNDETERMINED
+    any { it == CorePublicValueState.KNOWN } -> PublicValueStatus.KNOWN
+    any { it == CorePublicValueState.NONE } -> PublicValueStatus.NONE
+    else -> PublicValueStatus.NOT_APPLICABLE
+}
+
+private fun CorePublicValueState.toUiStatus(): PublicValueStatus = listOf(this).toUiStatus()
 
 data class PublicDecisionChoice(
     val choiceId: String,
@@ -215,11 +318,17 @@ data class Phase2TimeViewState(
     val resumeRequest: Phase2AdvanceRequest? = null,
     val decisionRequired: DecisionRequiredViewState? = null,
     val startRequest: Phase2AdvanceRequest? = null,
+    val scheduleReservation: ScheduleReservePayload? = null,
     val advanceInProgress: AdvanceInProgressViewState? = null,
     val summary: TimeAdvanceSummary? = null,
-    val conflict: ScheduleConflictViewState? = null
+    val conflict: ScheduleConflictViewState? = null,
+    val publication: Phase2CommittedSnapshot? = null,
+    val errorMessage: String? = null,
+    val controlRequest: AdvanceControl? = null,
+    val feedbackMessage: String? = null
 ) {
     init {
+        require(decisionRequired == null || status == TimeAdvanceStatus.DECISION_REQUIRED)
         require((status == TimeAdvanceStatus.DECISION_REQUIRED) == (decisionRequired != null))
         require(status != TimeAdvanceStatus.INTERRUPTED || continuationOfCommandId != null && resumeRequest != null)
         require(
@@ -229,6 +338,19 @@ data class Phase2TimeViewState(
     }
 }
 
+data class Phase2CommittedSnapshot(
+    val stateVersion: Long,
+    val clockMinute: Long,
+    val eventCount: Int,
+    val sourceCommandId: String,
+    val timeAdvanceTerminal: TimeAdvanceResult?,
+    val decisionGateId: String? = null,
+    val decisionChoices: List<PublicDecisionChoice> = emptyList(),
+    val predecessorEpoch: Long? = null,
+    val pendingSuffixHash: String? = null,
+    val sealedOutcomeHash: String? = null
+)
+
 sealed interface Phase2TimeUiAction {
     data object Pause : Phase2TimeUiAction
     data object Cancel : Phase2TimeUiAction
@@ -237,6 +359,7 @@ sealed interface Phase2TimeUiAction {
         val request: Phase2AdvanceRequest
     ) : Phase2TimeUiAction
     data class StartAdvance(val request: Phase2AdvanceRequest) : Phase2TimeUiAction
+    data class ReserveSchedule(val reservation: ScheduleReservePayload) : Phase2TimeUiAction
     data class Continue(
         val continuationOfCommandId: String,
         val gateId: String,
@@ -262,18 +385,44 @@ sealed interface Phase2TimeUiAction {
 }
 
 sealed interface Phase2DispatchResult {
-    data class Command(val result: CommandResult) : Phase2DispatchResult
+    data class Command(val result: CommandResult, val kind: Phase2CommandKind, val commandId: CommandId) : Phase2DispatchResult
     data class Control(val result: ControlRequestResult) : Phase2DispatchResult
     data class RefreshRequested(val conflictId: String) : Phase2DispatchResult
+    data class DecisionStale(val continuationOfCommandId: String) : Phase2DispatchResult
     data object NoActiveAdvance : Phase2DispatchResult
 }
+
+enum class Phase2CommandKind { TIME_ADVANCE, SCHEDULE_RESERVATION, SCHEDULE_CONFLICT_RESOLUTION }
+
+private fun com.imsi.mud.simulation.CommittedPublication.toPhase2CommittedSnapshot() =
+    Phase2CommittedSnapshot(
+        stateVersion = snapshot.stateVersion.value,
+        clockMinute = snapshot.clock.minute.value,
+        eventCount = events.size,
+        sourceCommandId = sourceCommandId.value,
+        timeAdvanceTerminal = timeAdvanceTerminal?.result,
+        decisionGateId = timeAdvanceTerminal?.gateId,
+        decisionChoices = timeAdvanceTerminal?.choices.orEmpty().map { choice ->
+            PublicDecisionChoice(
+                choice.choiceId,
+                choice.label,
+                choice.codec,
+                choice.canonicalPayload,
+                choice.payloadHash.value
+            )
+        },
+        predecessorEpoch = snapshot.sessionEpoch.value,
+        pendingSuffixHash = timeAdvanceTerminal?.pendingSuffixHash?.value,
+        sealedOutcomeHash = timeAdvanceTerminal?.sealedOutcomeHash?.value
+    )
 
 class Phase2TimeController internal constructor(
     private val execute: suspend (CommandEnvelope<out WorldCommandPayload>) -> CommandResult,
     private val requestControl: suspend (ControlRequest) -> ControlRequestResult,
     private val runtimeState: () -> SessionRuntimeState,
     private val currentVersion: () -> StateVersion?,
-    private val newCommandId: () -> CommandId
+    private val newCommandId: () -> CommandId,
+    private val currentPublication: () -> Phase2CommittedSnapshot? = { null }
 ) {
     constructor(
         session: WorldSession,
@@ -283,8 +432,25 @@ class Phase2TimeController internal constructor(
         requestControl = session::requestControl,
         runtimeState = { session.runtimeState.value },
         currentVersion = { session.publications.value?.snapshot?.stateVersion },
-        newCommandId = newCommandId
+        newCommandId = newCommandId,
+        currentPublication = { session.publications.value?.toPhase2CommittedSnapshot() }
     )
+
+    constructor(
+        session: ProcessWorldSessionCoordinator.WorldSessionHandle,
+        newCommandId: () -> CommandId = { CommandId(UUID.randomUUID().toString()) }
+    ) : this(
+        execute = session::execute,
+        requestControl = session::requestControl,
+        runtimeState = { session.runtimeState.value },
+        currentVersion = { session.publications.value?.snapshot?.stateVersion },
+        newCommandId = newCommandId,
+        currentPublication = { session.publications.value?.toPhase2CommittedSnapshot() }
+    )
+
+    fun currentCommittedSnapshot(): Phase2CommittedSnapshot? = currentPublication()
+
+    fun currentRuntimeState(): SessionRuntimeState = runtimeState()
 
     suspend fun dispatch(
         action: Phase2TimeUiAction,
@@ -293,7 +459,17 @@ class Phase2TimeController internal constructor(
         Phase2TimeUiAction.Pause -> control(CoreAdvanceControl.PAUSE)
         Phase2TimeUiAction.Cancel -> control(CoreAdvanceControl.CANCEL_ADVANCE)
         is Phase2TimeUiAction.StartAdvance -> executeAdvance(action.request)
-        is Phase2TimeUiAction.Continue -> continueDecision(action)
+        is Phase2TimeUiAction.ReserveSchedule -> executePayload(
+            newCommandId(),
+            null,
+            action.reservation,
+            Phase2CommandKind.SCHEDULE_RESERVATION
+        )
+        is Phase2TimeUiAction.Continue -> if (decisionIsCurrent(action, currentState)) {
+            continueDecision(action)
+        } else {
+            Phase2DispatchResult.DecisionStale(action.continuationOfCommandId)
+        }
         is Phase2TimeUiAction.ResumeInterrupted -> executeAdvance(
             request = action.request,
             resumeOfCommandId = CommandId(action.continuationOfCommandId)
@@ -344,6 +520,40 @@ class Phase2TimeController internal constructor(
         )
     }
 
+    private fun decisionIsCurrent(
+        action: Phase2TimeUiAction.Continue,
+        currentState: Phase2TimeViewState?
+    ): Boolean {
+        val required = currentState?.decisionRequired
+        if (required != null) {
+            return required.continuationOfCommandId == action.continuationOfCommandId &&
+                required.gateId == action.gateId &&
+                required.predecessorEpoch == action.predecessorEpoch &&
+                required.pendingSuffixHash == action.pendingSuffixHash &&
+                required.sealedOutcomeHash == action.sealedOutcomeHash &&
+                required.choices.any { choice ->
+                    choice.choiceId == action.choiceId &&
+                        choice.codec == action.codec &&
+                        choice.canonicalPayload == action.canonicalPayload &&
+                        choice.payloadHash == action.payloadHash
+                }
+        }
+        val publication = currentPublication()
+        val gateId = publication?.decisionGateId ?: return currentState?.status != TimeAdvanceStatus.DECISION_REQUIRED
+        return publication.timeAdvanceTerminal == TimeAdvanceResult.DECISION_REQUIRED &&
+            publication.sourceCommandId == action.continuationOfCommandId &&
+            gateId == action.gateId &&
+            publication.predecessorEpoch == action.predecessorEpoch &&
+            publication.pendingSuffixHash == action.pendingSuffixHash &&
+            publication.sealedOutcomeHash == action.sealedOutcomeHash &&
+            publication.decisionChoices.any { choice ->
+                choice.choiceId == action.choiceId &&
+                    choice.codec == action.codec &&
+                    choice.canonicalPayload == action.canonicalPayload &&
+                    choice.payloadHash == action.payloadHash
+            }
+    }
+
     private suspend fun control(kind: CoreAdvanceControl): Phase2DispatchResult {
         val runtime = runtimeState()
         val active = runtime.activeAdvanceCommandId ?: return Phase2DispatchResult.NoActiveAdvance
@@ -375,17 +585,18 @@ class Phase2TimeController internal constructor(
             previewCodec = action.previewCodec,
             previewHash = PayloadHash(action.previewHash)
         )
-        return executePayload(newCommandId(), null, payload)
+        return executePayload(newCommandId(), null, payload, Phase2CommandKind.SCHEDULE_CONFLICT_RESOLUTION)
     }
 
     private suspend fun executePayload(
         commandId: CommandId,
         actorId: EntityId?,
-        payload: WorldCommandPayload
+        payload: WorldCommandPayload,
+        kind: Phase2CommandKind = Phase2CommandKind.TIME_ADVANCE
     ): Phase2DispatchResult.Command {
         val runtime = runtimeState()
         val envelope = CommandEnvelope.create(commandId, runtime.epoch, currentVersion(), actorId, payload)
-        return Phase2DispatchResult.Command(execute(envelope))
+        return Phase2DispatchResult.Command(execute(envelope), kind, commandId)
     }
 }
 
@@ -398,12 +609,26 @@ data class Phase2TimeEntry(
 @Composable
 fun Phase2TimeRoute(entry: Phase2TimeEntry) {
     val scope = rememberCoroutineScope()
+    var renderedState by remember(entry) { mutableStateOf(entry.state) }
     var mutationDispatching by remember { mutableStateOf(false) }
     var controlDispatching by remember { mutableStateOf(false) }
+    var controlOutcomeOwned by remember { mutableStateOf(false) }
     Phase2TimeScreen(
-        state = entry.state,
+        state = renderedState,
         onAction = { action ->
             val isControl = action is Phase2TimeUiAction.Pause || action is Phase2TimeUiAction.Cancel
+            val control = when (action) {
+                Phase2TimeUiAction.Pause -> AdvanceControl.PAUSE
+                Phase2TimeUiAction.Cancel -> AdvanceControl.CANCEL
+                else -> null
+            }
+            val activeCommandId = if (isControl) entry.controller.currentRuntimeState().activeAdvanceCommandId else null
+            if (action is Phase2TimeUiAction.StartAdvance ||
+                action is Phase2TimeUiAction.Continue ||
+                action is Phase2TimeUiAction.ResumeInterrupted
+            ) {
+                controlOutcomeOwned = false
+            }
             if (isControl) {
                 if (controlDispatching) return@Phase2TimeScreen
                 controlDispatching = true
@@ -411,17 +636,331 @@ fun Phase2TimeRoute(entry: Phase2TimeEntry) {
                 if (mutationDispatching) return@Phase2TimeScreen
                 mutationDispatching = true
             }
+            val stateAtDispatch = renderedState
+            renderedState = optimisticState(stateAtDispatch, action)
             scope.launch {
                 try {
-                    entry.onResult(entry.controller.dispatch(action, entry.state))
+                    val result = entry.controller.dispatch(action, stateAtDispatch)
+                    entry.onResult(result)
+                    val acceptedControl = control != null &&
+                        result is Phase2DispatchResult.Control &&
+                        result.result is ControlRequestResult.Accepted &&
+                        activeCommandId != null
+                    if (acceptedControl) controlOutcomeOwned = true
+                    if (!(result is Phase2DispatchResult.Command &&
+                            result.kind == Phase2CommandKind.TIME_ADVANCE &&
+                            (controlDispatching || controlOutcomeOwned))) {
+                        renderedState = reduceState(renderedState, result, entry.controller.currentCommittedSnapshot())
+                    }
+                    if (acceptedControl) {
+                        val acceptedCommandId = checkNotNull(activeCommandId)
+                        val acceptedControlKind = checkNotNull(control)
+                        awaitControlCommit(entry.controller, acceptedCommandId, acceptedControlKind, renderedState) { next ->
+                            withContext(Dispatchers.Main.immediate) {
+                                renderedState = next
+                            }
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    renderedState = renderedState.copy(
+                        status = TimeAdvanceStatus.FAILED,
+                        advanceInProgress = null,
+                        controlRequest = null,
+                        feedbackMessage = null,
+                        errorMessage = if (isControl) {
+                            "The control request could not be completed."
+                        } else {
+                            "The request could not be completed."
+                        }
+                    )
                 } finally {
-                    if (isControl) controlDispatching = false else mutationDispatching = false
+                    if (isControl) {
+                        controlDispatching = false
+                    } else {
+                        mutationDispatching = false
+                    }
                 }
             }
         },
         mutationEnabled = !mutationDispatching,
         controlEnabled = !controlDispatching
     )
+}
+
+private suspend fun awaitControlCommit(
+    controller: Phase2TimeController,
+    commandId: CommandId,
+    control: AdvanceControl,
+    state: Phase2TimeViewState,
+    onCommitted: suspend (Phase2TimeViewState) -> Unit
+) {
+    var processingShown = false
+    var inactiveSinceNanos: Long? = null
+    val processingDeadlineNanos = System.nanoTime() + CONTROL_COMMIT_TIMEOUT_NANOS
+    while (true) {
+        val publication = controller.currentCommittedSnapshot()
+        val runtime = controller.currentRuntimeState()
+        val terminal = publication?.timeAdvanceTerminal
+        if (publication?.sourceCommandId == commandId.value && terminal != null) {
+            onCommitted(
+                state.copy(
+                    status = terminal.uiStatus(),
+                    advanceInProgress = null,
+                    controlRequest = null,
+                    decisionRequired = null,
+                    summary = TimeAdvanceSummary(
+                        elapsed = "${publication.clockMinute} minutes",
+                        stopReason = when (control) {
+                            AdvanceControl.PAUSE -> "Pause applied at the next committed safe time boundary"
+                            AdvanceControl.CANCEL -> "Cancellation applied at the next committed safe time boundary"
+                        },
+                        majorEvents = emptyList(),
+                        completedWork = emptyList(),
+                        resourceWarnings = emptyList(),
+                        importantChanges = emptyList(),
+                        bundleCount = publication.eventCount,
+                        unknownImportantCount = 0,
+                        nextActionLabel = null
+                    ),
+                    publication = publication,
+                    continuationOfCommandId = if (terminal == TimeAdvanceResult.INTERRUPTED) commandId.value else null,
+                    resumeRequest = if (terminal == TimeAdvanceResult.INTERRUPTED) state.startRequest else null,
+                    feedbackMessage = when (control) {
+                        AdvanceControl.PAUSE -> "Pause applied at the next committed safe time boundary."
+                        AdvanceControl.CANCEL -> "Cancellation applied at the next committed safe time boundary."
+                    }
+                )
+            )
+            return
+        }
+        val stillRunning = runtime.activeAdvanceCommandId != null &&
+            runtime.lifecycle != SessionLifecycle.CLOSING && runtime.lifecycle != SessionLifecycle.CLOSED
+        if (!stillRunning) {
+            val now = System.nanoTime()
+            val firstInactive = inactiveSinceNanos ?: now.also { inactiveSinceNanos = it }
+            if (now - firstInactive >= CONTROL_PUBLICATION_GRACE_NANOS) {
+                onCommitted(controlCommitFailureState(state))
+                return
+            }
+        } else {
+            inactiveSinceNanos = null
+            if (!processingShown && System.nanoTime() >= processingDeadlineNanos) {
+                onCommitted(controlCommitProcessingState(state))
+                processingShown = true
+            }
+        }
+        withContext(Dispatchers.Default) { delay(10) }
+    }
+}
+
+private fun controlCommitProcessingState(state: Phase2TimeViewState): Phase2TimeViewState = state.copy(
+    feedbackMessage = "Processing. Waiting for the next committed safe time boundary.",
+    errorMessage = null
+)
+
+private fun controlCommitFailureState(state: Phase2TimeViewState): Phase2TimeViewState = state.copy(
+    status = TimeAdvanceStatus.FAILED,
+    advanceInProgress = null,
+    controlRequest = null,
+    summary = null,
+    feedbackMessage = null,
+    errorMessage = "The control request was accepted, but its commit could not be confirmed. Retry the time advance."
+)
+
+private const val CONTROL_COMMIT_TIMEOUT_NANOS = 5_000_000_000L
+private const val CONTROL_PUBLICATION_GRACE_NANOS = 1_000_000_000L
+
+private fun optimisticState(state: Phase2TimeViewState, action: Phase2TimeUiAction): Phase2TimeViewState = when (action) {
+    is Phase2TimeUiAction.StartAdvance,
+    is Phase2TimeUiAction.Continue,
+    is Phase2TimeUiAction.ResumeInterrupted -> state.copy(
+        status = TimeAdvanceStatus.ADVANCE_IN_PROGRESS,
+        goalLabel = "Time advance",
+        advanceInProgress = AdvanceInProgressViewState(
+            goalLabel = "Time advance",
+            lastCommittedCursor = "Awaiting commit",
+            allowedControls = setOf(AdvanceControl.PAUSE, AdvanceControl.CANCEL)
+        ),
+        decisionRequired = null,
+        summary = null,
+        errorMessage = null,
+        controlRequest = null,
+        feedbackMessage = null
+    )
+    is Phase2TimeUiAction.ReserveSchedule -> state.copy(errorMessage = null)
+    Phase2TimeUiAction.Pause -> state.copy(
+        status = TimeAdvanceStatus.PAUSE_REQUESTED,
+        controlRequest = AdvanceControl.PAUSE,
+        feedbackMessage = "Pause request accepted. It will take effect at the next committed safe time boundary."
+    )
+    Phase2TimeUiAction.Cancel -> state.copy(
+        status = TimeAdvanceStatus.CANCEL_REQUESTED,
+        controlRequest = AdvanceControl.CANCEL,
+        feedbackMessage = "Cancellation request accepted. It will take effect at the next committed safe time boundary."
+    )
+    is Phase2TimeUiAction.ConfirmConflict,
+    is Phase2TimeUiAction.RefreshPreview -> state
+}
+
+private fun reduceState(
+    state: Phase2TimeViewState,
+    result: Phase2DispatchResult,
+    publication: Phase2CommittedSnapshot?
+): Phase2TimeViewState = when (result) {
+    is Phase2DispatchResult.Command -> when (result.result) {
+        is CommandResult.Accepted -> if (result.kind == Phase2CommandKind.TIME_ADVANCE) {
+            val terminalSnapshot = publication.timeAdvanceTerminalSnapshotFor(result.commandId)
+            val terminal = terminalSnapshot?.timeAdvanceTerminal
+            if (terminal == null) {
+                state.copy(
+                    status = TimeAdvanceStatus.FAILED,
+                    advanceInProgress = null,
+                    summary = null,
+                    errorMessage = "A committed time advance result was not available."
+                )
+            } else {
+                val decisionRequired = if (terminal == TimeAdvanceResult.DECISION_REQUIRED) {
+                    state.startRequest?.let { request -> terminalSnapshot.toDecisionRequired(request) }
+                } else {
+                    null
+                }
+                if (terminal == TimeAdvanceResult.DECISION_REQUIRED && decisionRequired == null) {
+                    return@reduceState state.copy(
+                        status = TimeAdvanceStatus.FAILED,
+                        advanceInProgress = null,
+                        decisionRequired = null,
+                        summary = null,
+                        errorMessage = "A committed decision gate was missing its public choices."
+                    )
+                }
+                state.copy(
+                    status = terminal.uiStatus(),
+                    advanceInProgress = null,
+                    summary = if (decisionRequired == null) {
+                        TimeAdvanceSummary(
+                            elapsed = publication?.let { "${it.clockMinute} minutes" } ?: "Committed",
+                            stopReason = terminal.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
+                            majorEvents = emptyList(),
+                            completedWork = if (terminal == TimeAdvanceResult.COMPLETED) listOf("Time advance committed") else emptyList(),
+                            resourceWarnings = emptyList(),
+                            importantChanges = emptyList(),
+                            bundleCount = publication?.eventCount ?: 0,
+                            unknownImportantCount = 0,
+                            nextActionLabel = null
+                        )
+                    } else {
+                        null
+                    },
+                    publication = publication,
+                    continuationOfCommandId = if (terminal == TimeAdvanceResult.INTERRUPTED) result.commandId.value else null,
+                    resumeRequest = if (terminal == TimeAdvanceResult.INTERRUPTED) state.startRequest else null,
+                    decisionRequired = decisionRequired,
+                    errorMessage = null
+                )
+            }
+        } else {
+            state.copy(
+                status = TimeAdvanceStatus.IDLE,
+                scheduleReservation = null,
+                conflict = null,
+                publication = publication,
+                errorMessage = null
+            )
+        }
+        is CommandResult.Rejected -> when (result.result.error) {
+            is DomainError.ScheduleConflict -> state.copy(
+                status = TimeAdvanceStatus.IDLE,
+                advanceInProgress = null,
+                errorMessage = "Schedule conflict. Review the public impact before confirming."
+            )
+            is DomainError.StaleConsequencePreview -> state.copy(
+                status = TimeAdvanceStatus.IDLE,
+                advanceInProgress = null,
+                conflict = state.conflict?.copy(previewStale = true),
+                errorMessage = "Schedule preview is stale. Refresh before confirming."
+            )
+            else -> if (result.kind == Phase2CommandKind.TIME_ADVANCE &&
+                state.status == TimeAdvanceStatus.FAILED &&
+                state.errorMessage != null
+            ) {
+                state
+            } else {
+                state.copy(
+                    status = if (result.kind == Phase2CommandKind.TIME_ADVANCE) TimeAdvanceStatus.FAILED else TimeAdvanceStatus.IDLE,
+                    advanceInProgress = null,
+                    summary = null,
+                    errorMessage = if (result.kind == Phase2CommandKind.TIME_ADVANCE) {
+                        "Time advance could not be completed."
+                    } else {
+                        "Schedule change could not be completed."
+                    }
+                )
+            }
+        }
+    }
+    is Phase2DispatchResult.Control -> when (result.result) {
+        is ControlRequestResult.Accepted -> state
+        is ControlRequestResult.Rejected -> state.copy(
+            status = TimeAdvanceStatus.FAILED,
+            advanceInProgress = null,
+            controlRequest = null,
+            feedbackMessage = null,
+            errorMessage = "The control request could not be completed."
+        )
+    }
+        is Phase2DispatchResult.RefreshRequested -> state.copy(
+        conflict = state.conflict?.let { conflict ->
+            if (conflict.conflictId == result.conflictId) conflict.copy(previewStale = true) else conflict
+        },
+        errorMessage = "Schedule preview is stale. Refresh before confirming."
+    )
+    is Phase2DispatchResult.DecisionStale -> state.copy(
+        status = TimeAdvanceStatus.FAILED,
+        decisionRequired = null,
+        advanceInProgress = null,
+        summary = null,
+        errorMessage = "Decision is stale. Refresh before choosing."
+    )
+    Phase2DispatchResult.NoActiveAdvance -> state.copy(
+        status = TimeAdvanceStatus.FAILED,
+        advanceInProgress = null,
+        controlRequest = null,
+        errorMessage = "No active time advance is available."
+    )
+}
+
+internal fun Phase2CommittedSnapshot?.timeAdvanceTerminalSnapshotFor(commandId: CommandId): Phase2CommittedSnapshot? =
+    takeIf { it?.sourceCommandId == commandId.value && it.timeAdvanceTerminal != null }
+
+internal fun Phase2CommittedSnapshot?.timeAdvanceTerminalFor(commandId: CommandId): TimeAdvanceResult? =
+    timeAdvanceTerminalSnapshotFor(commandId)?.timeAdvanceTerminal
+
+private fun Phase2CommittedSnapshot.toDecisionRequired(request: Phase2AdvanceRequest): DecisionRequiredViewState? {
+    val gateId = decisionGateId ?: return null
+    val predecessorEpoch = predecessorEpoch ?: return null
+    val pendingSuffixHash = pendingSuffixHash ?: return null
+    if (timeAdvanceTerminal != TimeAdvanceResult.DECISION_REQUIRED || decisionChoices.isEmpty()) return null
+    return DecisionRequiredViewState(
+        continuationOfCommandId = sourceCommandId,
+        gateId = gateId,
+        choices = decisionChoices,
+        request = request,
+        predecessorEpoch = predecessorEpoch,
+        pendingSuffixHash = pendingSuffixHash,
+        sealedOutcomeHash = sealedOutcomeHash
+    )
+}
+
+internal fun TimeAdvanceResult.uiStatus(): TimeAdvanceStatus = when (this) {
+    TimeAdvanceResult.COMPLETED -> TimeAdvanceStatus.COMPLETED
+    TimeAdvanceResult.INTERRUPTED -> TimeAdvanceStatus.INTERRUPTED
+    TimeAdvanceResult.DECISION_REQUIRED -> TimeAdvanceStatus.DECISION_REQUIRED
+    TimeAdvanceResult.CANCELLED -> TimeAdvanceStatus.CANCELLED
+    TimeAdvanceResult.UNREACHABLE -> TimeAdvanceStatus.UNREACHABLE
+    TimeAdvanceResult.LIMIT_REACHED -> TimeAdvanceStatus.LIMIT_REACHED
+    TimeAdvanceResult.FAILED -> TimeAdvanceStatus.FAILED
 }
 
 @Composable
@@ -458,22 +997,50 @@ fun Phase2TimeScreen(
         if (state.goalLabel.isNotBlank()) {
             Text(state.goalLabel, modifier = textModifier("phase2-time-goal", state.goalLabel, 2f))
         }
+        state.feedbackMessage?.let { message ->
+            Text(message, modifier = textModifier("phase2-time-control-feedback", message, 2.5f))
+        }
 
-        if (state.status == TimeAdvanceStatus.IDLE) {
-            state.startRequest?.let { request ->
+        if (state.startRequest != null &&
+            (state.status == TimeAdvanceStatus.IDLE || state.advanceInProgress != null)
+        ) {
+            val request = state.startRequest
+            Phase2Button(
+                tag = "phase2-time-start",
+                label = "Start time advance",
+                description = "Start time advance",
+                index = 3f,
+                enabled = mutationEnabled && state.status == TimeAdvanceStatus.IDLE,
+                onClick = { onAction(Phase2TimeUiAction.StartAdvance(request)) }
+            )
+        }
+
+        if (state.status == TimeAdvanceStatus.FAILED && state.startRequest != null) {
+            Phase2Button(
+                tag = "phase2-time-retry",
+                label = "Retry",
+                description = "Retry time advance",
+                index = 4f,
+                enabled = mutationEnabled,
+                onClick = { onAction(Phase2TimeUiAction.StartAdvance(state.startRequest)) }
+            )
+        }
+
+        state.scheduleReservation?.let { reservation ->
+            if (state.status == TimeAdvanceStatus.IDLE) {
                 Phase2Button(
-                    tag = "phase2-time-start",
-                    label = "Start time advance",
-                    description = "Start time advance",
-                    index = 3f,
+                    tag = "phase2-time-reserve",
+                    label = "Reserve schedule",
+                    description = "Reserve the proposed schedule",
+                    index = 4f,
                     enabled = mutationEnabled,
-                    onClick = { onAction(Phase2TimeUiAction.StartAdvance(request)) }
+                    onClick = { onAction(Phase2TimeUiAction.ReserveSchedule(reservation)) }
                 )
             }
         }
 
         state.advanceInProgress?.let { progress ->
-            AdvanceInProgressPanel(progress, onAction, controlEnabled)
+            AdvanceInProgressPanel(progress, state.controlRequest, onAction, controlEnabled)
         }
 
         if (state.status == TimeAdvanceStatus.INTERRUPTED) {
@@ -497,6 +1064,25 @@ fun Phase2TimeScreen(
 
         state.summary?.let { summary ->
             SummaryPanel(summary)
+        }
+
+        state.publication?.let { publication ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("phase2-time-publication")
+                    .semantics { contentDescription = "Committed snapshot" },
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text("Committed snapshot", style = MaterialTheme.typography.titleMedium)
+                Text("State version: ${publication.stateVersion}")
+                Text("Clock minute: ${publication.clockMinute}")
+                Text("Events committed: ${publication.eventCount}")
+            }
+        }
+
+        state.errorMessage?.let { message ->
+            Text(message, modifier = textModifier("phase2-time-error", message, 80f))
         }
 
         state.conflict?.let { conflict ->
@@ -563,6 +1149,7 @@ private fun DecisionPanel(
 @Composable
 private fun AdvanceInProgressPanel(
     progress: AdvanceInProgressViewState,
+    controlRequest: AdvanceControl?,
     onAction: (Phase2TimeUiAction) -> Unit,
     interactionEnabled: Boolean
 ) {
@@ -580,8 +1167,12 @@ private fun AdvanceInProgressPanel(
             if (AdvanceControl.PAUSE in progress.allowedControls) {
                 Phase2Button(
                     tag = "phase2-time-control-pause",
-                    label = "Pause",
-                    description = "Request pause at the next safe boundary",
+                    label = if (controlRequest == AdvanceControl.PAUSE) "Pause requested" else "Pause",
+                    description = if (controlRequest == AdvanceControl.PAUSE) {
+                        "Pause request accepted; it will apply at the next committed safe boundary"
+                    } else {
+                        "Request pause at the next safe boundary"
+                    },
                     index = 20f,
                     enabled = interactionEnabled,
                     onClick = { onAction(Phase2TimeUiAction.Pause) }
@@ -590,8 +1181,12 @@ private fun AdvanceInProgressPanel(
             if (AdvanceControl.CANCEL in progress.allowedControls) {
                 Phase2Button(
                     tag = "phase2-time-control-cancel",
-                    label = "Cancel",
-                    description = "Request cancellation at the next safe boundary",
+                    label = if (controlRequest == AdvanceControl.CANCEL) "Cancel requested" else "Cancel",
+                    description = if (controlRequest == AdvanceControl.CANCEL) {
+                        "Cancellation request accepted; it will apply at the next committed safe boundary"
+                    } else {
+                        "Request cancellation at the next safe boundary"
+                    },
                     index = 21f,
                     enabled = interactionEnabled,
                     onClick = { onAction(Phase2TimeUiAction.Cancel) }

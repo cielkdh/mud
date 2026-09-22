@@ -1,0 +1,12 @@
+capturedAt=2026-09-17T14:42:09+09:00
+workingTree=uncommitted launcher P1 correction; no commit created
+command.jvm=./gradlew.bat --no-daemon --console=plain :core:simulation:test --rerun-tasks --tests WorldSessionTest --tests Phase2ConformanceTest
+command.android=./gradlew.bat --no-daemon --console=plain :app:connectedDebugAndroidTest --rerun-tasks
+WorldSessionTest.xml.sha256=33dac4300caa497851f666443d8b8a59492a64b9bbdcbc6f242bda30ef907400
+Phase2ConformanceTest.xml.sha256=7d7c7d0e207aabb08fb87a2eb4fc1547fb05b43cf053b47b568de8e2240957bd
+AndroidTest.xml.sha256=02b6561168dfb5d8172fcf458976fc0e99801fe6bbceddd90f48607d6f08564a
+app/src/main/kotlin/com/imsi/mud/MainActivity.kt.sha256=d972fd687fa241b357e0f8519104c264d05079df9145ef05cc9d7e38f1e6930e
+app/src/androidTest/kotlin/com/imsi/mud/ui/MainActivityTest.kt.sha256=6f522af6eb71d2af8e26e271ae0238cb658e3a1643a3e70f3755e039ca428bda
+app/src/androidTest/kotlin/com/imsi/mud/ui/Phase2TimeUiTest.kt.sha256=cfe650521b04b8b7b77ca1b6e6062f8a87c870cdfd046af01bc1c0d793496402
+core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt.sha256=8cf49385c76d05f3a3c02fd37414d97cdb3e2619c37fb37d39a3eac2d6b20e8e
+core/simulation/src/test/kotlin/com/imsi/mud/simulation/Phase2ConformanceTest.kt.sha256=23c489d13dd8dc94e173855bf17d2c56ffeadb63ce6e4c4b5737b154becdc5fe

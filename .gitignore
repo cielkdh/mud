@@ -3,6 +3,7 @@
 .android-sdk/
 .android-avd/
 .android-user/
+.avd/
 **/build/
 .externalNativeBuild/
 .cxx/

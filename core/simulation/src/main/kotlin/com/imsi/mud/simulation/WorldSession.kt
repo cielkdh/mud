@@ -37,7 +37,7 @@ class WorldSession private constructor(
     ) -> DomainDelta,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit
 ) {
-    constructor(
+    internal constructor(
         epoch: SessionEpoch,
         savePort: SavePort,
         parentScope: CoroutineScope,
@@ -96,7 +96,7 @@ class WorldSession private constructor(
         ) -> DomainDelta
     ) : this(contentSnapshot, epoch, savePort, parentScope, dispatcher, initialSnapshot, null, deltaFactory, Unit)
 
-    constructor(
+    internal constructor(
         epoch: SessionEpoch,
         savePort: SavePort,
         parentScope: CoroutineScope,
@@ -883,7 +883,7 @@ class WorldSession private constructor(
                 rngState = delta.rngState
                 stateVersion = receipt.stateVersion
                 delta.worldChange?.let { authoritativeWorld = it.after }
-                publishCommitted(delta)
+                publishCommitted(envelope, delta)
             }
 
             is CommandResult.Rejected -> if (receipt.stateVersion != stateVersion) return "rejected receipt changed state version"
@@ -892,14 +892,30 @@ class WorldSession private constructor(
         return null
     }
 
-    private fun publishCommitted(delta: DomainDelta) {
+    private fun publishCommitted(envelope: CommandEnvelope<out WorldCommandPayload>, delta: DomainDelta) {
         val world = authoritativeWorld ?: return
+        val terminal = world.timeAdvance
+            ?.takeIf { it.commandEpoch == envelope.sessionEpoch && it.commandId == envelope.commandId && it.status != null }
+            ?.let { state ->
+                val result = checkNotNull(state.status)
+                val decision = result == TimeAdvanceResult.DECISION_REQUIRED
+                PublicTimeAdvanceTerminal(
+                    commandId = envelope.commandId,
+                    result = result,
+                    gateId = state.pendingDecisionGateId.takeIf { decision },
+                    choices = state.pendingDecisionChoiceIds.takeIf { decision }.orEmpty().map(PublicTimeAdvanceChoice::fromChoiceId),
+                    pendingSuffixHash = state.pendingSuffix?.hash.takeIf { decision },
+                    sealedOutcomeHash = state.sealedElapsedOutcome?.hash.takeIf { decision }
+                )
+            }
         latestPublication = CommittedPublication(
             PublicSnapshot(epoch, stateVersion, world.clock),
             delta.events.asSequence()
                 .filter { it.visibility == EventVisibility.PUBLIC }
                 .map { event -> PublicDomainEvent(event.eventId, event.gameMinute, event.payload.codecId) }
-                .toList()
+                .toList(),
+            envelope.commandId,
+            terminal
         )
         publicationFlow.value = latestPublication
     }
@@ -936,5 +952,88 @@ class WorldSession private constructor(
     internal companion object {
         const val RECEIPT_CACHE_MAX_ENTRIES = 256
         val ADVANCE_CONTROLS = setOf(AdvanceControl.PAUSE, AdvanceControl.CANCEL_ADVANCE, AdvanceControl.APP_BACKGROUND, AdvanceControl.CLOSE)
+    }
+}
+
+/**
+ * Process-local owner for the one authoritative [WorldSession] writer.
+ * A new lease is refused until the previous session's close drain has completed.
+ */
+object ProcessWorldSessionCoordinator {
+    internal data class Lease(
+        val generation: Long,
+        val session: WorldSession,
+        var closeCompletion: CompletableDeferred<CloseResult>? = null
+    )
+
+    // ponytail: one global world writer; use keyed coordination only when multiple worlds are supported.
+    private val mutex = Mutex()
+    private var nextGeneration = 0L
+    private var activeLease: Lease? = null
+
+    suspend fun acquire(
+        epoch: SessionEpoch,
+        savePort: SavePort,
+        parentScope: CoroutineScope,
+        contentSnapshot: ContentSnapshot,
+        initialSnapshot: WorldSnapshot,
+        engine: WorldEngine,
+        dispatcher: CoroutineDispatcher = Dispatchers.Default
+    ): WorldSessionHandle? = acquireForTest {
+        WorldSession(epoch, savePort, parentScope, contentSnapshot, initialSnapshot, engine, dispatcher)
+    }
+
+    internal suspend fun acquireForTest(create: () -> WorldSession): WorldSessionHandle? = mutex.withLock {
+        if (activeLease != null) return@withLock null
+        val lease = Lease(++nextGeneration, create())
+        activeLease = lease
+        WorldSessionHandle(this, lease)
+    }
+
+    private suspend fun close(lease: Lease, reason: CloseReason): CloseResult? {
+        val (completion, startsClose) = mutex.withLock {
+            lease.closeCompletion?.let { return@withLock it to false }
+            if (activeLease !== lease) return null
+            CompletableDeferred<CloseResult>().also { lease.closeCompletion = it } to true
+        }
+
+        if (startsClose) {
+            withContext(NonCancellable) {
+                try {
+                    val result = lease.session.close(reason)
+                    mutex.withLock {
+                        if (activeLease === lease) activeLease = null
+                    }
+                    completion.complete(result)
+                } catch (failure: Throwable) {
+                    // Keep the lease active: allowing another writer after an uncertain close is unsafe.
+                    completion.completeExceptionally(failure)
+                }
+            }
+        }
+        return completion.await()
+    }
+
+    class WorldSessionHandle internal constructor(
+        private val coordinator: ProcessWorldSessionCoordinator,
+        private val lease: Lease
+    ) {
+        val publications: StateFlow<CommittedPublication?>
+            get() = lease.session.publications
+        val runtimeState: StateFlow<SessionRuntimeState>
+            get() = lease.session.runtimeState
+
+        suspend fun execute(envelope: CommandEnvelope<out WorldCommandPayload>): CommandResult =
+            lease.session.execute(envelope)
+
+        suspend fun requestControl(request: ControlRequest): ControlRequestResult =
+            lease.session.requestControl(request)
+
+        suspend fun pause(): SessionRuntimeState = lease.session.pause()
+
+        suspend fun resume(): SessionRuntimeState = lease.session.resume()
+
+        suspend fun close(reason: CloseReason = CloseReason.APPLICATION_REQUEST): CloseResult? =
+            coordinator.close(lease, reason)
     }
 }

@@ -835,6 +835,7 @@ class WorldEngine(
             continuationOfCommandId = continuation.predecessorCommandId,
             pendingDecisionGateId = result.stopCandidate?.takeIf { result.result == TimeAdvanceResult.DECISION_REQUIRED }?.key?.stableEntityId,
             pendingDecisionChoiceIds = result.stopCandidate?.takeIf { result.result == TimeAdvanceResult.DECISION_REQUIRED }?.decisionChoiceIds.orEmpty(),
+            selectedDecisionChoiceId = continuation.selection.choiceId,
             pendingSuffix = result.pendingSuffix,
             sealedElapsedOutcome = prior.sealedElapsedOutcome,
             segmentNo = 0,

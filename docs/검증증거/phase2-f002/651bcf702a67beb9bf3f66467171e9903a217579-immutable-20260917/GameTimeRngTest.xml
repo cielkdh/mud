@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.imsi.mud.simulation.GameTimeRngTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-16T06:05:45.225Z" hostname="NB-24072601" time="0.099">
+  <properties/>
+  <testcase name="P2-UT-003 weighted choice and shuffle are canonical and input preserving" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.044"/>
+  <testcase name="P2-FT-003 bounded rejection consumes one counter per raw draw" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.001"/>
+  <testcase name="P2-CT-002 canonical leaf keys isolate hit draws from other streams" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.028"/>
+  <testcase name="P2-FT-004 invalid canonical keys fail at the boundary" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.002"/>
+  <testcase name="P2-BT-002 calendar rollover and raw world seed derivation use golden bytes" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.013"/>
+  <testcase name="P2-FT-002 unsupported algorithm and counter overflow fail closed" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.001"/>
+  <testcase name="P2-UT-002 clock accumulation and PCG golden vector are deterministic" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.001"/>
+  <testcase name="authoritative rng stream round trips through snapshot and domain delta without losing increment" classname="com.imsi.mud.simulation.GameTimeRngTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

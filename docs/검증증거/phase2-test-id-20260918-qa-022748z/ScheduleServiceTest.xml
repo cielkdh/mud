@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.imsi.mud.simulation.ScheduleServiceTest" tests="26" skipped="0" failures="0" errors="0" timestamp="2026-09-18T02:27:49.561Z" hostname="NB-24072601" time="0.165">
+  <properties/>
+  <testcase name="P2-UT-003 half open participant intervals meet without a conflict" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="reschedule selection is typed and leaves the calendar unchanged" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.021"/>
+  <testcase name="current action resource failure returns a pure rejection" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.003"/>
+  <testcase name="durable action profile selects interruption behavior and produces canonical public outcome" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.015"/>
+  <testcase name="scheduled action source emits stable start then complete boundary candidates" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.046"/>
+  <testcase name="duplicate action transitions are rejected before a second settlement" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.002"/>
+  <testcase name="scheduled payload round trips typed identities and never duplicates physical row fields" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.013"/>
+  <testcase name="P2-BT-003 conflict is returned and higher priority preemption is never automatic" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.003"/>
+  <testcase name="resource ledger preserves owned held consumed invariant through every policy transition" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="paused action resumes with a future completion boundary and preserves claims" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.011"/>
+  <testcase name="zero duration action is rejected before any reservation is created" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="restored payload keeps the exact interruption policy and outcome" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.003"/>
+  <testcase name="each resource policy has one deterministic settlement at reserve start complete and cancel" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.0"/>
+  <testcase name="only claimless planned action can start without reserve" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.002"/>
+  <testcase name="schedule write starts current action atomically and rejects only past boundary" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="all claim policies settle durably through their normal lifecycle" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="resource holds reject over reservation and cancellation settles by policy" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.01"/>
+  <testcase name="stale public preview rejects conflict resolution before changing an action" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.005"/>
+  <testcase name="public consequence preview is complete public status data with no hidden input" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.01"/>
+  <testcase name="P2-FT-003 cancel and fail settle each held claim once without leaking resources" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.002"/>
+  <testcase name="planned unreserved claims continue cancel or fail without creating resource state" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="cancellation policy selects the exact stage rule without leaking a claim" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <testcase name="boundary payload binds the canonical durable action and physical row authority" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.002"/>
+  <testcase name="preempt cancel and pause apply old settlement and new reservation atomically" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.004"/>
+  <testcase name="failed conflict insertion exposes none of the provisional preemption" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.002"/>
+  <testcase name="invalid action profile and impossible progress loss reject without mutation" classname="com.imsi.mud.simulation.ScheduleServiceTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

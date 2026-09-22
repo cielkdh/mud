@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.imsi.mud.simulation.WorldSessionTest" tests="25" skipped="0" failures="0" errors="0" timestamp="2026-09-17T04:24:11.005Z" hostname="NB-24072601" time="1.27">
+  <properties/>
+  <testcase name="delta result submission sequence must match the assigned sequence before persistence" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.286"/>
+  <testcase name="command and event codecs are deterministic and reject unknown codecs" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.019"/>
+  <testcase name="lifecycle pause resume close is idempotent and does not persist directly" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.008"/>
+  <testcase name="unresolved cancelled commit stops the session without changing in memory state" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.053"/>
+  <testcase name="full command queue rejects overflow without blocking pause or close" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.085"/>
+  <testcase name="parent scope cancellation completes replies that were queued but not started" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.015"/>
+  <testcase name="world session serializes rejected receipts stale requests and close draining" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.302"/>
+  <testcase name="authoritative state hash includes ledger binding and time advance state" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.077"/>
+  <testcase name="accepted command drains after its caller is cancelled" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.012"/>
+  <testcase name="close drains the consumer and rejects commands after termination" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.002"/>
+  <testcase name="invalid event metadata is rejected before persistence" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.004"/>
+  <testcase name="canonical payload normalizes NFC before hashing" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.001"/>
+  <testcase name="P2-BT-001 rejects stale commands and authoritative world precondition mismatches without mutation" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.076"/>
+  <testcase name="cancelled commit restores its durable receipt before propagating cancellation" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.008"/>
+  <testcase name="P2-CT-001 makes same payload idempotent and rejects payload reuse" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.007"/>
+  <testcase name="rejected command does not persist or advance state version" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.005"/>
+  <testcase name="A through F sequence produces one deterministic state hash across 100 runs" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.137"/>
+  <testcase name="save port cancellation completes the current reply and preserves the consumer" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.009"/>
+  <testcase name="P2-UT-001 spends 40 gold once and increments the committed version once" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.003"/>
+  <testcase name="accepted delta commits before publishing state and a failed commit rolls back" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.005"/>
+  <testcase name="P2-FT-001 preserves state hash RNG and receipt when commit fails" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.001"/>
+  <testcase name="durable receipt lookup restores an evicted accepted command before version validation" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.029"/>
+  <testcase name="value objects keep units and reject invalid ranges" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.008"/>
+  <testcase name="pre enqueue cancellation does not consume a submission sequence" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.003"/>
+  <testcase name="actual long advance accepts pause and cancel without duplicate receipt or events" classname="com.imsi.mud.simulation.WorldSessionTest" time="0.104"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

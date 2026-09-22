@@ -110,7 +110,7 @@ P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 
 5. 화면이 STOPPED된 뒤 늦게 도착한 이전 sessionEpoch 결과는 적용하지 않는다.
 6. Android 화면은 ViewModel의 `StateFlow<UiState>`를 `collectAsStateWithLifecycle()`로 수집한다. 화면 lifecycle마다 임의 `launch` collector를 중복 생성하지 않고, 슬롯/route key 변경 시 이전 수집과 검색 job을 취소한다.
 7. NPC 2,000개·인벤토리 1,000개·100년 연대기는 전체 행을 한 번에 메모리에 올리지 않는다. Room query는 `(sortKey,id)` keyset과 초기 page size 100을 사용하고 Compose `LazyColumn`은 안정 key를 지정한다. Paging 라이브러리는 이 계약으로 P95를 못 맞춘 실측이 있을 때만 추가한다.
-8. Phase 2 mutation 화면은 WorldSession의 commit 후 `CommittedPublication(PublicSnapshot, publicEvents)`만 소비한다. 현재 `sessionEpoch`가 아니거나 마지막 표시 `stateVersion`보다 과거인 publication은 버리고 raw DomainEvent·`AuthoritativeWorldState`·hidden payload를 직접 표시하지 않는다.
+8. Phase 2 mutation 화면은 WorldSession의 commit 후 `CommittedPublication(PublicSnapshot, publicEvents, sourceCommandId, PublicTimeAdvanceTerminal?)`만 소비한다. TimeAdvance의 terminal 화면 상태는 `execute`한 command ID와 일치하는 committed `PublicTimeAdvanceTerminal`로만 정하고, 해당 publication이 없거나 다른 command이면 성공 Summary를 만들지 않는다. 현재 `sessionEpoch`가 아니거나 마지막 표시 `stateVersion`보다 과거인 publication은 버리고 raw DomainEvent·`AuthoritativeWorldState`·hidden payload를 직접 표시하지 않는다.
 9. active AdvanceTime 중 새 gameplay CTA가 `AdvanceInProgress(activeCommandId, allowedControls)`를 반환하면 이를 일반 오류/무응답으로 표시하지 않는다. 진행 중 목표와 마지막 committed cursor, 허용된 중단 동작을 보여주며 `allowedControls=[]`인 protected completion에서는 취소 CTA를 숨기거나 비활성화한다. control 요청은 즉시 REQUESTED 상태를 표시하되 authoritative 완료는 다음 committed safe-boundary publication으로만 확정한다.
 
 ## 5. 위험 Action Matrix

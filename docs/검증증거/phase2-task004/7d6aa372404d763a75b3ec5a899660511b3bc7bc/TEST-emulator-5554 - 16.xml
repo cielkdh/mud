@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="21" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-09-17T01:12:51" hostname="localhost">
+  <testsuite name="com.imsi.mud.ui.AppRootTest" tests="4" failures="0" errors="0" skipped="0" time="14.792" timestamp="2026-09-17T01:12:51" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="emptyAndBlockedStatesOfferAnAccessibleBackAction" classname="com.imsi.mud.ui.AppRootTest" time="5.128" />
+    <testcase name="retryIsAccessibleAndDoesNotTurnAnErrorIntoSuccess" classname="com.imsi.mud.ui.AppRootTest" time="3.199" />
+    <testcase name="errorReasonIsRedactedForPublicUi" classname="com.imsi.mud.ui.AppRootTest" time="2.832" />
+    <testcase name="rendersEachShellStateAndKeepsTheRegistryClosed" classname="com.imsi.mud.ui.AppRootTest" time="3.633" />
+  </testsuite>
+  <testsuite name="com.imsi.mud.ui.MainActivityTest" tests="1" failures="0" errors="0" skipped="0" time="4.120" timestamp="2026-09-17T01:12:51" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="mainLauncherIntentOpensPhase2RouteWithStartAction" classname="com.imsi.mud.ui.MainActivityTest" time="4.120" />
+  </testsuite>
+  <testsuite name="com.imsi.mud.ui.Phase2TimeUiTest" tests="11" failures="0" errors="0" skipped="0" time="36.335" timestamp="2026-09-17T01:12:51" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="rendersStatusesSummaryAndAllowedAdvanceControls" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="4.583" />
+    <testcase name="androidPcg32MatchesReferenceVectorAndDrawCounter" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="3.557" />
+    <testcase name="rejectsDecisionRequiredCombinedWithAdvanceInProgress" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="3.004" />
+    <testcase name="routeAllowsPauseWhileAdvanceExecuteIsStillPending" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="4.446" />
+    <testcase name="controllerRoutesStartDecisionAndControlThroughCoreAuthorityApis" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="2.881" />
+    <testcase name="routeExecutesAdvanceOnceWhenStartIsTappedTwice" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="3.470" />
+    <testcase name="stalePreviewOffersRefreshAndDoesNotSubmitResolution" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="3.108" />
+    <testcase name="mainActivityContentEntersPhase2RouteWhenEntryIsProvided" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="2.403" />
+    <testcase name="hidesCancelWhenProtectedCompletionHasNoAllowedControls" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="2.409" />
+    <testcase name="decisionChoiceCarriesCanonicalSelectionAndNeverShowsPause" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="2.829" />
+    <testcase name="requiresExplicitConfirmationBeforeRiskResolutionCallback" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="3.645" />
+  </testsuite>
+  <testsuite name="com.imsi.mud.ui.debug.DebugAssetGalleryTest" tests="5" failures="0" errors="0" skipped="0" time="12.978" timestamp="2026-09-17T01:12:51" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="p1It003_terminalDiagnosticsStayOutsideTheGalleryState" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="2.193" />
+    <testcase name="p1Ct003_loadingIsAnnouncedOnce" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="2.465" />
+    <testcase name="p1It003_exactAndFallbackKeepTheSamePublicLabel" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="2.615" />
+    <testcase name="p1Pt001_processPssIsMeasuredAgainstTheMinProfileLimit" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="2.838" />
+    <testcase name="p1Et001_skippedAndTerminalStatesKeepTextAndActionsWithoutImageSemantics" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="2.867" />
+  </testsuite>
+</testsuites>

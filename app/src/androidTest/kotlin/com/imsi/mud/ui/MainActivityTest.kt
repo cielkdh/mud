@@ -8,7 +8,6 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.imsi.mud.MainActivity
 import org.junit.Rule
@@ -26,11 +25,19 @@ class MainActivityTest {
     val compose = createEmptyComposeRule()
 
     @Test
-    fun mainLauncherIntentOpensPhase2RouteWithStartAction() {
-        compose.onNodeWithTag("phase2-time-screen").assertIsDisplayed()
-        compose.onNodeWithText("Start time advance").assertIsDisplayed()
+    fun mainLauncherBlocksTimeAdvanceUntilLocalSaveIsAvailable() {
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithTag("app-shell-blocked-title").assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithTag("app-shell-blocked-title").assertIsDisplayed()
+        compose.onNodeWithText("SCR-START-001").assertIsDisplayed()
+        compose.onNodeWithText("Local save is not available yet. Time advance will be enabled after save setup.")
+            .assertIsDisplayed()
+        compose.onNodeWithTag("app-shell-blocked-back").assertIsDisplayed()
         compose.onAllNodesWithTag("app-shell-ready-title").assertCountEquals(0)
-        compose.onNodeWithTag("phase2-time-start").performClick()
-        compose.waitForIdle()
+        compose.onAllNodesWithTag("phase2-time-screen").assertCountEquals(0)
+        compose.onAllNodesWithTag("phase2-time-start").assertCountEquals(0)
+        compose.onAllNodesWithTag("phase2-time-publication").assertCountEquals(0)
+        compose.onAllNodesWithTag("phase2-time-status-summary").assertCountEquals(0)
     }
 }

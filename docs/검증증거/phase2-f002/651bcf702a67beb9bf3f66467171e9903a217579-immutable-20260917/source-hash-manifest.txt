@@ -1,0 +1,31 @@
+provenance_version=1
+bundle_scope=F002 evidence artifacts; preserved XML is the authoritative F002 execution evidence
+evidence_revision=651bcf702a67beb9bf3f66467171e9903a217579
+evidence_revision_commit_time=2026-09-16T15:03:36+09:00
+current_head=7d6aa372404d763a75b3ec5a899660511b3bc7bc
+current_head_commit_time=2026-09-17T10:09:27+09:00
+working_tree=dirty; no commit created for this bundle
+
+command_jvm=.\gradlew.bat --no-daemon --console=plain :core:simulation:test --tests com.imsi.mud.simulation.GameTimeRngTest --tests com.imsi.mud.simulation.WorldEngineTest --rerun-tasks
+command_android=.\gradlew.bat --no-daemon --console=plain :app:connectedDebugAndroidTest --rerun-tasks
+execution_jvm=2026-09-16T06:05:45Z; GameTimeRngTest timestamp is 2026-09-16T06:05:45.225Z and WorldEngineTest timestamp is 2026-09-16T06:05:45.742Z
+execution_android=2026-09-16T06:09:03Z
+device=emulator-5554
+android_suite=16 tests, failures=0, errors=0, skipped=0; official testcase P2_IT_002 present
+
+artifact=GameTimeRngTest.xml size=1589 sha256=0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c source=preserved F002 XML
+artifact=WorldEngineTest.xml size=5011 sha256=09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d source=preserved P2-IT-002 XML
+artifact=AndroidTest-emulator-5554-16.xml size=3462 sha256=b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242 source=preserved Android XML
+artifact=app-debug.apk size=12629801 sha256=9cdb98c8122b1643e8f5b89bcf53cc2bc2245e2817146fac8d388b59f6475176 source=existing app/build output, copied 2026-09-17T16:20:12+09:00; build timestamp differs from preserved F002 XML execution
+artifact=app-debug-androidTest.apk size=1226627 sha256=6c5c1d45492b46fa2c90c7d3d93dc3de0fd0eb641c2e3c9bef5d5c4b58adad06 source=existing app/build output, copied 2026-09-17T16:20:28+09:00; build timestamp differs from preserved F002 XML execution
+
+source=core/simulation/src/main/kotlin/com/imsi/mud/simulation/GameTimeRng.kt sha256=f115e51122933d3ea60c4003bededf48d2fdf85108343670b71e455060081b35
+source=core/simulation/src/main/kotlin/com/imsi/mud/simulation/WorldEngine.kt sha256=a9ad1a0a04b4d08783dc4798053e8267ae3c8ac8a8b584ba5bf641374da267eb
+source=core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt sha256=c3930c6d04572395dab1a9fcabbfdc88d8cc62589fe871df07906998d9b45c98
+source=core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt sha256=770f8895c5e6d9f989f46e236c6616a337aa8a7ae11a75b46e65c713f5187846
+source=app/src/androidTest/kotlin/com/imsi/mud/simulation/Phase2RngIntegrationTest.kt sha256=f009e7f546d8a1f796212676eb1d4ee579a575ae23cddf6b301704b16d2f5015
+
+owner=미지정
+reviewer=미지정
+pr=null
+not_verified=Room/WAL/reopen/process-kill; Phase3 scope

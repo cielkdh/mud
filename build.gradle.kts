@@ -216,6 +216,7 @@ plugins {
 private val phase0Projects = setOf(":app", ":core:simulation")
 private val phase1Projects = setOf(":app", ":core:content", ":core:image", ":core:simulation", ":tools:content-builder")
 private val phase0Mode = providers.gradleProperty("phase0.skipFixtures").isPresent
+private val phase0FixtureWithContent = providers.gradleProperty("phase0.fixtureWithContent").isPresent
 
 private val allowedSimulationPluginDeclarations = setOf("alias(libs.plugins.kotlin.jvm)")
 private val simulationDeclaredConfigurationNames = setOf(
@@ -276,12 +277,129 @@ private fun unapprovedSimulationPlugins(buildFile: File): Set<String> {
 
 private fun isForbiddenSimulationImport(line: String): Boolean = forbiddenSimulationImport.containsMatchIn(line)
 
+private fun kotlinCodeOnly(source: String): String = buildString(source.length) {
+    fun appendBlank(char: Char) = append(if (char == '\n') '\n' else ' ')
+
+    var index = 0
+    while (index < source.length) {
+        when {
+            source.startsWith("//", index) -> {
+                while (index < source.length && source[index] != '\n') appendBlank(source[index++])
+            }
+            source.startsWith("/*", index) -> {
+                var depth = 0
+                while (index < source.length && depth >= 0) {
+                    when {
+                        source.startsWith("/*", index) -> {
+                            depth++
+                            appendBlank(source[index++])
+                            appendBlank(source[index++])
+                        }
+                        source.startsWith("*/", index) -> {
+                            depth--
+                            appendBlank(source[index++])
+                            appendBlank(source[index++])
+                            if (depth == 0) break
+                        }
+                        else -> appendBlank(source[index++])
+                    }
+                }
+            }
+            source.startsWith("\"\"\"", index) -> {
+                repeat(3) { appendBlank(source[index++]) }
+                while (index < source.length && !source.startsWith("\"\"\"", index)) appendBlank(source[index++])
+                if (index < source.length) repeat(3) { appendBlank(source[index++]) }
+            }
+            source[index] == '"' || source[index] == '\'' -> {
+                val quote = source[index]
+                appendBlank(source[index++])
+                var escaped = false
+                while (index < source.length) {
+                    val char = source[index]
+                    appendBlank(char)
+                    index++
+                    if (!escaped && char == quote) break
+                    escaped = !escaped && char == '\\'
+                    if (char != '\\') escaped = false
+                }
+            }
+            else -> append(source[index++])
+        }
+    }
+}
+
+private fun isKotlinIdentifierChar(char: Char): Boolean = char == '_' || char.isLetterOrDigit()
+
+private fun isKotlinWordAt(source: String, index: Int, word: String): Boolean =
+    source.regionMatches(index, word, 0, word.length) &&
+        (index == 0 || !isKotlinIdentifierChar(source[index - 1])) &&
+        (index + word.length == source.length || !isKotlinIdentifierChar(source[index + word.length]))
+
+private fun kotlinSavePortImplementationOffsets(source: String): List<Int> {
+    val code = kotlinCodeOnly(source)
+    return Regex("""\b(class|object)\b""").findAll(code).mapNotNull { declaration ->
+        val start = declaration.range.first
+        if (start > 0 && code[start - 1] == ':') return@mapNotNull null
+
+        var index = declaration.range.last + 1
+        var parentheses = 0
+        var brackets = 0
+        var angles = 0
+        var supertypeStart: Int? = null
+        var supertypeEnd = code.length
+        while (index < code.length) {
+            when (code[index]) {
+                '(' -> parentheses++
+                ')' -> if (parentheses > 0) parentheses--
+                '[' -> brackets++
+                ']' -> if (brackets > 0) brackets--
+                '<' -> angles++
+                '>' -> if (angles > 0) angles--
+                ':' -> if (parentheses == 0 && brackets == 0 && angles == 0 && supertypeStart == null) {
+                    supertypeStart = index + 1
+                }
+                '{' -> if (parentheses == 0 && brackets == 0) {
+                    supertypeEnd = index
+                    break
+                }
+            }
+            if (parentheses == 0 && brackets == 0 && angles == 0 && isKotlinWordAt(code, index, "where")) {
+                supertypeEnd = index
+                break
+            }
+            index++
+        }
+        val supertypes = supertypeStart?.let { code.substring(it, supertypeEnd) } ?: return@mapNotNull null
+        start.takeIf { Regex("""\b(?:\w+\.)*SavePort\b""").containsMatchIn(supertypes) }
+    }.toList()
+}
+
+private fun sourceLine(source: String, offset: Int): Pair<Int, String> {
+    val lineStart = source.lastIndexOf('\n', startIndex = offset).let { if (it < 0) 0 else it + 1 }
+    val lineEnd = source.indexOf('\n', startIndex = offset).let { if (it < 0) source.length else it }
+    return source.substring(0, offset).count { it == '\n' } + 1 to source.substring(lineStart, lineEnd).trim()
+}
+
+private fun productionAppSavePortImplementations(app: Project): List<String> = fileTree(app.projectDir) {
+    include("src/main/**/*.kt")
+}.files.flatMap { file ->
+    val source = file.readText()
+    kotlinSavePortImplementationOffsets(source).map { offset ->
+        val (lineNumber, line) = sourceLine(source, offset)
+        "${file.relativeTo(rootDir)}:$lineNumber: $line"
+    }
+}
+
 private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture") {
     group = "verification"
     description = "Checks the Phase 0 baseline and the approved Phase 1 project graph."
 
     doLast {
-        val expectedProjects = if (phase0Mode) phase0Projects else phase1Projects
+        val expectedProjects = when {
+            !phase0Mode -> phase1Projects
+            phase0FixtureWithContent -> phase0Projects + ":core:content"
+            else -> phase0Projects
+        }
         val actualProjects = allprojects
             .filter { it != rootProject && it.subprojects.isEmpty() }
             .map { it.path }
@@ -304,13 +422,17 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
         check(unapprovedAppDependencies.isEmpty()) {
             ":app has unapproved dependency declarations: $unapprovedAppDependencies"
         }
+        val appSavePortImplementations = productionAppSavePortImplementations(app)
+        check(appSavePortImplementations.isEmpty()) {
+            ":app production source must not implement SavePort:\n${appSavePortImplementations.joinToString("\n")}"
+        }
 
         val simulation = project(":core:simulation")
         val simulationProjectDependencies = simulation.configurations
             .flatMap { configuration -> configuration.dependencies.withType(ProjectDependency::class.java) }
             .map { it.path }
             .toSet()
-        val expectedSimulationProjects = if (phase0Mode) emptySet() else setOf(":core:content")
+        val expectedSimulationProjects = if (phase0Mode && !phase0FixtureWithContent) emptySet() else setOf(":core:content")
         check(simulationProjectDependencies == expectedSimulationProjects) {
             if (phase0Mode) ":core:simulation must not depend on another project"
             else ":core:simulation project dependencies must be $expectedSimulationProjects, found $simulationProjectDependencies"
@@ -352,8 +474,9 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
 
         fun fixture(
             name: String,
-            expectedMessage: String,
+            expectedMessage: String? = null,
             task: String = "verifyPhase0Architecture",
+            withContent: Boolean = false,
             mutate: (File) -> Unit
         ) {
             val fixtureDir = layout.buildDirectory.dir("phase0-architecture-fixtures/$name").get().asFile
@@ -361,7 +484,8 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
                 from(rootDir) {
                     include(
                         "settings.gradle.kts", "build.gradle.kts", "gradle.properties", "gradle/libs.versions.toml",
-                        "app/build.gradle.kts", "core/simulation/build.gradle.kts", "core/simulation/src/**"
+                        "app/build.gradle.kts", "app/src/main/**", "core/simulation/build.gradle.kts", "core/simulation/src/**",
+                        "core/content/build.gradle.kts", "core/content/src/**"
                     )
                 }
                 into(fixtureDir)
@@ -369,22 +493,26 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
             fixtureDir.resolve("settings.gradle.kts").apply {
                 writeText(readText().replace(
                     "include(\":app\", \":core:content\", \":core:image\", \":core:simulation\", \":tools:content-builder\")",
-                    "include(\":app\", \":core:simulation\")"
+                    if (withContent) "include(\":app\", \":core:content\", \":core:simulation\")" else "include(\":app\", \":core:simulation\")"
                 ))
             }
             fixtureDir.resolve("app/build.gradle.kts").apply {
                 writeText(readText()
                     .replace(Regex("(?m)^\\s*implementation\\(project\\(\":core:(content|image)\"\\)\\)\\r?\\n"), ""))
             }
-            fixtureDir.resolve("core/simulation/build.gradle.kts").apply {
-                writeText(readText()
-                    .replace(Regex("(?m)^\\s*implementation\\(project\\(\":core:content\"\\)\\)\\r?\\n"), ""))
+            if (!withContent) {
+                fixtureDir.resolve("core/simulation/build.gradle.kts").apply {
+                    writeText(readText()
+                        .replace(Regex("(?m)^\\s*implementation\\(project\\(\":core:content\"\\)\\)\\r?\\n"), ""))
+                }
             }
             mutate(fixtureDir)
 
             val command = listOf(
                 "cmd", "/d", "/c", "call", rootDir.resolve("gradlew.bat").absolutePath,
-                "-p", fixtureDir.absolutePath, task, "-Pphase0.skipFixtures=true", "--offline", "--no-daemon", "--console=plain"
+                "-p", fixtureDir.absolutePath, task, "-Pphase0.skipFixtures=true",
+                *(if (withContent) arrayOf("-Pphase0.fixtureWithContent=true") else emptyArray()),
+                "--offline", "--no-daemon", "--console=plain"
             )
             val process = ProcessBuilder(command)
                 .directory(rootDir)
@@ -392,11 +520,16 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
                 .start()
             val output = process.inputStream.bufferedReader().use { it.readText() }
             val exitCode = process.waitFor()
-            check(exitCode != 0) { "Fixture '$name' unexpectedly passed" }
-            check(expectedMessage in output) {
-                "Fixture '$name' failed for the wrong reason:\n${output.takeLast(4_000)}"
+            if (expectedMessage == null) {
+                check(exitCode == 0) { "Fixture '$name' unexpectedly failed:\n${output.takeLast(4_000)}" }
+                logger.lifecycle("Phase 0 fixture '$name' accepted as expected")
+            } else {
+                check(exitCode != 0) { "Fixture '$name' unexpectedly passed" }
+                check(expectedMessage in output) {
+                    "Fixture '$name' failed for the wrong reason:\n${output.takeLast(4_000)}"
+                }
+                logger.lifecycle("Phase 0 fixture '$name' rejected as expected")
             }
-            logger.lifecycle("Phase 0 fixture '$name' rejected as expected")
         }
 
         fixture("extra-module", "Phase 0 permits only") { fixtureDir ->
@@ -430,13 +563,60 @@ private val verifyPhase0Architecture = tasks.register("verifyPhase0Architecture"
             fixtureDir.resolve("app/build.gradle.kts")
                 .appendText("\ndependencies { implementation(\"androidx.room:room-runtime:2.7.0\") }\n")
         }
+        fixture("forbidden-app-save-port", ":app production source must not implement SavePort") { fixtureDir ->
+            fixtureDir.resolve("app/src/main/kotlin/com/imsi/mud/ForbiddenSavePortFixture.kt").apply {
+                parentFile.mkdirs()
+                writeText("package com.imsi.mud\n\nclass ForbiddenSavePortFixture : com.imsi.mud.simulation.SavePort")
+            }
+        }
+        fixture("forbidden-app-save-port-multiline", "MultilineSavePortFixture") { fixtureDir ->
+            fixtureDir.resolve("app/src/main/kotlin/com/imsi/mud/MultilineSavePortFixture.kt").apply {
+                parentFile.mkdirs()
+                writeText("""
+                    package com.imsi.mud
+
+                    class MultilineSavePortFixture(
+                        private val unused: Int = 0
+                    ) : Runnable,
+                        com.imsi.mud.simulation.SavePort
+                    """.trimIndent())
+            }
+        }
+        fixture("forbidden-app-save-port-object", "NamedSavePortFixture") { fixtureDir ->
+            fixtureDir.resolve("app/src/main/kotlin/com/imsi/mud/NamedSavePortFixture.kt").apply {
+                parentFile.mkdirs()
+                writeText("package com.imsi.mud\n\nobject NamedSavePortFixture : Runnable, com.imsi.mud.simulation.SavePort")
+            }
+        }
+        fixture("forbidden-app-save-port-anonymous", "anonymousSavePort") { fixtureDir ->
+            fixtureDir.resolve("app/src/main/kotlin/com/imsi/mud/AnonymousSavePortFixture.kt").apply {
+                parentFile.mkdirs()
+                writeText("package com.imsi.mud\n\nval anonymousSavePort = object : Runnable, com.imsi.mud.simulation.SavePort {}")
+            }
+        }
+        fixture("allowed-app-save-port-text") { fixtureDir ->
+            fixtureDir.resolve("app/src/main/kotlin/com/imsi/mud/SavePortTextFixture.kt").apply {
+                parentFile.mkdirs()
+                writeText("""
+                    package com.imsi.mud
+
+                    import com.imsi.mud.simulation.SavePort
+
+                    // class CommentOnly : SavePort
+                    /* object CommentOnly : SavePort */
+                    val text = "object StringOnly : SavePort"
+                    val multiLineText = ${"\"\"\""}class TripleQuotedOnly : SavePort${"\"\"\""}
+                    fun accept(port: SavePort) = port
+                    """.trimIndent())
+            }
+        }
         fixture("forbidden-import", "Forbidden :core:simulation import(s)") { fixtureDir ->
             fixtureDir.resolve("core/simulation/src/main/kotlin/ForbiddenImportFixture.kt").apply {
                 parentFile.mkdirs()
                 writeText("package fixture\n\nimport okhttp3.OkHttpClient\n")
             }
         }
-        fixture("forbidden-unit-mix", "Unresolved reference", ":core:simulation:compileTestKotlin") { fixtureDir ->
+        fixture("forbidden-unit-mix", "Unresolved reference 'plus'", ":core:simulation:compileTestKotlin", withContent = true) { fixtureDir ->
             fixtureDir.resolve("core/simulation/src/test/kotlin/com/imsi/mud/simulation/MixedUnitsFixture.kt").apply {
                 parentFile.mkdirs()
                 writeText(

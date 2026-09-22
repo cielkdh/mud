@@ -1,0 +1,18 @@
+provenance_version=1
+head=7d6aa372404d763a75b3ec5a899660511b3bc7bc
+source_manifest_sha256=4BC9C692F98D170B27B7782AA2CC163CA40571A017AD74F6C343CAD1D9D1AD0E
+source=app/src/main/kotlin/com/imsi/mud/MainActivity.kt sha256=5639981E90AC9B8F8113A9FD0E13ABD084D64760EB38EAC65DEE2DD1F4D04723
+source=app/src/main/kotlin/com/imsi/mud/ui/Phase2TimeUi.kt sha256=705D3FBCEC45142ADAF4D120BDE15763B295D396E6FDFB9588E3CF3F8BB8E8BB
+source=app/src/androidTest/kotlin/com/imsi/mud/ui/MainActivityTest.kt sha256=43F7FA60343A6853409A0C48CA1289004CF61BC527FE051FF056396E91F810CF
+source=app/src/androidTest/kotlin/com/imsi/mud/ui/Phase2TimeUiTest.kt sha256=CFE650521B04B8B7B77CA1B6E6062F8A87C870CDFD046AF01BC1C0D793496402
+source=core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt sha256=8CF49385C76D05F3A3C02FD37414D97CDB3E2619C37FB37D39A3EAC2D6B20E8E
+android_xml=TEST-codex_phase2_api36(AVD) - 16.xml
+android_xml_sha256=607E3E26D347BB88ECD36AB4B731B1AB807267A6B11E1AE86C26D95EBF2A2F85
+android_xml_timestamp=2026-09-17T04:04:26
+android_command=.\gradlew.bat --no-daemon --console=plain :app:connectedDebugAndroidTest -x :phase1AndroidPerformanceEvidence --rerun-tasks --project-prop android.testInstrumentationRunnerArguments.package=com.imsi.mud.ui
+android_result=tests:23 failures:0 errors:0 skipped:0
+jvm_xml=TEST-com.imsi.mud.simulation.WorldSessionTest.xml
+jvm_xml_sha256=81F4CEDE2ABA694B1D9CBD2288E1CA2999C5C06A4C469444638C660691164C3B
+jvm_xml_timestamp=2026-09-17T04:01:46.246Z
+jvm_command=.\gradlew.bat --no-daemon --console=plain :core:simulation:test --tests com.imsi.mud.simulation.WorldSessionTest --rerun-tasks
+jvm_result=tests:25 failures:0 errors:0 skipped:0

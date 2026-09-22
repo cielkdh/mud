@@ -1,0 +1,29 @@
+scope=P2 official Test ID traceability batch
+task-state=REVIEW unchanged
+production-api=unchanged
+phase3-room-wal-reopen=not-implemented
+revision=7d6aa372404d763a75b3ec5a899660511b3bc7bc
+
+gradle-command=.\gradlew.bat --no-daemon --max-workers=1 :core:simulation:test
+gradle-exit-code=0
+gradle-result=raw XML aggregate: tests=110 failures=0 errors=0 skipped=0
+validator-command=C:\Users\NB-24072601\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe docs\검증도구\validate_docs.py
+validator-result=checks=55 PASS=55 game_tests=NOT_RUN
+
+source-sha256
+24D1E5B9B00A258A5AFCF3DF8E8381ED80C7CF2389CD491FB149AEB95BD09924  core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt
+7CA7E9134F1F3601FF2C7B184D7D2C9CAB7D9579270F202B83CD7C85A452C28C  core/simulation/src/test/kotlin/com/imsi/mud/simulation/ScheduleServiceTest.kt
+A72E5F834192A732729DBB8CCEE250B1F8099F6568314D92DF0E7498CF1B87FC  core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldTimeTraversalTest.kt
+2929668CA6B7B7DDD4B5364996FC4F2795C2A721F2B32AE748C482A9B1CE8554  core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt
+6B80587C1B052B524741EA21BA3D122C149E643355B214BCEC123E731F84CB1F  core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt
+78AAD34BCAF6CB8F5E8724F5EC661AC7F036A6C853BAFF5D084D4C3268FF7646  core/simulation/src/test/kotlin/com/imsi/mud/simulation/Phase2ConformanceTest.kt
+DB85DED90725D2509949DC3D2BFEF31968F59B0593A8B89587DDE4A84849D0DE  docs/검증도구/validate_docs.py
+260B488D36AA665B68E8887A72E331B754D53E823186AB49CF6E369798AA3A52  docs/관리데이터/tests.json
+
+xml-sha256
+7836E1573412CBA066B76FD8FEFA27D8ECCF5C4572557B1A9705EF9F0D1A4DB9  core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.GameTimeRngTest.xml
+44C8EF1A98369D297246190E36B143C1A6FAC5DAF2ED54CFA4D7FD33F2806500  core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.ScheduleServiceTest.xml
+298F691FC3668406C823021EFE6A2CEEB39A1A4CEE219BCDE9ACB10A96A80492  core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml
+EF55D17C83DD2DB20DEF4277E9032BB5E37CBD863BBAE76375B744807A73138F  core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml
+071B70D2E5C4C612BAF417CE0C06B0C57A83CCA7CEF08140A1850729A19CCE38  core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml
+3EE3394320C686AF7AC69BBD7D4BA853512578894F9D68B690E1D4037DF14EA3  core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.Phase2ConformanceTest.xml

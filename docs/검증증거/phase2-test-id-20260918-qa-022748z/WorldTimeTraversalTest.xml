@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.imsi.mud.simulation.WorldTimeTraversalTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-09-18T02:27:50.716Z" hostname="NB-24072601" time="1.421">
+  <properties/>
+  <testcase name="boundary conformance rejects unstable duplicate unknown codec and candidate count sources" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.011"/>
+  <testcase name="pending suffix hash distinguishes fields that contain separators" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="in memory segment port returns the existing receipt and fault leaves the previous segment intact" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.004"/>
+  <testcase name="until event completes when a boundary candidate is observed" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="interrupt policy precedence keeps gate critical cancel forced safety and ignore deterministic" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.003"/>
+  <testcase name="until all actions waits for every action selected by a canonical selector" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.004"/>
+  <testcase name="persisted suffix codec corruption is a system halt rather than a new limit" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="combat elapsed from 1029 to 1031 folds the 1030 schedule boundary" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.0"/>
+  <testcase name="P2-BT-004 continuous and bounded traversal preserve world rng and event order" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.012"/>
+  <testcase name="all durable time advance goal variants round trip through their canonical codec" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.005"/>
+  <testcase name="runtime traversal halts an unregistered candidate codec" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="P2-UT-004 processes four same timestamp candidates in canonical order" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="unreachable action goal and explicit boundary limit keep a deterministic cursor" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="same time candidates use BoundaryOrder instead of source order" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="thirty day clock jump and ten thousand boundary batches remain deterministic" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="1.369"/>
+  <testcase name="decision gate commits its prefix and leaves a terminal continuation state" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="invalid same time source and byte overflow fail before a batch is applied" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <testcase name="calendar source is stateless and emits day month year in boundary order" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.002"/>
+  <testcase name="empty durable suffix is a valid continuation point for the next source boundary" classname="com.imsi.mud.simulation.WorldTimeTraversalTest" time="0.001"/>
+  <system-out><![CDATA[P2-BT-004 continuousHash=d8f75c676e88533f17caed0f0c75457561731540f4e86a3127ee51b0b05200fb boundedHash=d8f75c676e88533f17caed0f0c75457561731540f4e86a3127ee51b0b05200fb repeatedHash=d8f75c676e88533f17caed0f0c75457561731540f4e86a3127ee51b0b05200fb minute=2 drawCounter=7 events=[fixture/first//calendar.day.start.v1, fixture/second//calendar.day.start.v1]
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

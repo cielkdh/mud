@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="22" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-09-17T02:41:36" hostname="localhost">
+  <testsuite name="com.imsi.mud.ui.AppRootTest" tests="4" failures="0" errors="0" skipped="0" time="7.254" timestamp="2026-09-17T02:41:36" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="emptyAndBlockedStatesOfferAnAccessibleBackAction" classname="com.imsi.mud.ui.AppRootTest" time="3.011" />
+    <testcase name="retryIsAccessibleAndDoesNotTurnAnErrorIntoSuccess" classname="com.imsi.mud.ui.AppRootTest" time="1.352" />
+    <testcase name="errorReasonIsRedactedForPublicUi" classname="com.imsi.mud.ui.AppRootTest" time="1.000" />
+    <testcase name="rendersEachShellStateAndKeepsTheRegistryClosed" classname="com.imsi.mud.ui.AppRootTest" time="1.891" />
+  </testsuite>
+  <testsuite name="com.imsi.mud.ui.MainActivityTest" tests="2" failures="0" errors="0" skipped="0" time="2.350" timestamp="2026-09-17T02:41:36" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="launcherRecreateWaitsForOldCloseBeforeCreatingTheNextWriter" classname="com.imsi.mud.ui.MainActivityTest" time="1.077" />
+    <testcase name="mainLauncherIntentOpensPhase2RouteWithStartAction" classname="com.imsi.mud.ui.MainActivityTest" time="1.273" />
+  </testsuite>
+  <testsuite name="com.imsi.mud.ui.Phase2TimeUiTest" tests="11" failures="0" errors="0" skipped="0" time="13.248" timestamp="2026-09-17T02:41:36" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="rendersStatusesSummaryAndAllowedAdvanceControls" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.311" />
+    <testcase name="androidPcg32MatchesReferenceVectorAndDrawCounter" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="0.936" />
+    <testcase name="rejectsDecisionRequiredCombinedWithAdvanceInProgress" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="0.988" />
+    <testcase name="routeAllowsPauseWhileAdvanceExecuteIsStillPending" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.355" />
+    <testcase name="controllerRoutesStartDecisionAndControlThroughCoreAuthorityApis" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="0.897" />
+    <testcase name="routeExecutesAdvanceOnceWhenStartIsTappedTwice" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.265" />
+    <testcase name="stalePreviewOffersRefreshAndDoesNotSubmitResolution" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.127" />
+    <testcase name="mainActivityContentEntersPhase2RouteWhenEntryIsProvided" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.024" />
+    <testcase name="hidesCancelWhenProtectedCompletionHasNoAllowedControls" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.020" />
+    <testcase name="decisionChoiceCarriesCanonicalSelectionAndNeverShowsPause" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.974" />
+    <testcase name="requiresExplicitConfirmationBeforeRiskResolutionCallback" classname="com.imsi.mud.ui.Phase2TimeUiTest" time="1.351" />
+  </testsuite>
+  <testsuite name="com.imsi.mud.ui.debug.DebugAssetGalleryTest" tests="5" failures="0" errors="0" skipped="0" time="5.720" timestamp="2026-09-17T02:41:36" hostname="localhost">
+    <properties>
+      <property name="device" value="emulator-5554" />
+    </properties>
+    <testcase name="p1It003_terminalDiagnosticsStayOutsideTheGalleryState" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="0.937" />
+    <testcase name="p1Ct003_loadingIsAnnouncedOnce" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="1.064" />
+    <testcase name="p1It003_exactAndFallbackKeepTheSamePublicLabel" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="1.212" />
+    <testcase name="p1Pt001_processPssIsMeasuredAgainstTheMinProfileLimit" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="1.347" />
+    <testcase name="p1Et001_skippedAndTerminalStatesKeepTextAndActionsWithoutImageSemantics" classname="com.imsi.mud.ui.debug.DebugAssetGalleryTest" time="1.160" />
+  </testsuite>
+</testsuites>

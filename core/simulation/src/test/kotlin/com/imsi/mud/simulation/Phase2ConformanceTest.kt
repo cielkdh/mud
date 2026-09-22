@@ -42,6 +42,11 @@ class Phase2ConformanceTest {
         session.close()
     }
 
+    @Test
+    fun `P2-REC-001 verifies four SavePort fault cutpoints and restart image equivalence`() = runBlocking {
+        SavePortConformanceSuite.verify(SavePortConformanceFactory { TestHarness() })
+    }
+
     private val gold = ResourceIdentity("CURRENCY", "gold")
 
     private fun entity(value: String): EntityId = when (val checked = EntityId.of(value)) {
@@ -82,8 +87,174 @@ class Phase2ConformanceTest {
     }
 
     @Test
-    fun `in memory and fault injecting ports satisfy the reusable contract`() = runBlocking {
-        SavePortConformanceSuite.verify(SavePortConformanceFactory { TestHarness() })
+    fun `P2-IT-003 in memory and fault injecting ports satisfy the reusable contract`() = runBlocking {
+        val service = ScheduleService()
+        ResourceClaimPolicy.entries.forEach { policy ->
+            suspend fun reserved(branch: String): Pair<TestHarness, EntityId> {
+                val harness = TestHarness(InMemorySavePort(initialGold = 10L))
+                val before = harness.image()
+                val actionId = entity("claim-${policy.name.lowercase()}-$branch")
+                val session = WorldSession(
+                    SessionEpoch(1), harness.port, this@runBlocking, ContentSnapshot.emptyForTest(),
+                    WorldSnapshot(before.stateVersion, before.world, before.rngState, before.aggregateStates),
+                    WorldEngine(emptyList()), kotlinx.coroutines.Dispatchers.Unconfined
+                )
+                assertEquals(
+                    CommandResult.Accepted(1),
+                    session.execute(CommandEnvelope.create(CommandId("reserve-$branch-${policy.name}"), SessionEpoch(1), before.stateVersion, actionId, claimPayload(actionId, policy)))
+                )
+                session.close()
+                assertClaim(harness.image(), actionId, ScheduledActionStatus.RESERVED, policy, ResourceClaimState.CONSUMED.takeIf {
+                    policy == ResourceClaimPolicy.CONSUME_ON_RESERVE
+                } ?: ResourceClaimState.HELD, owned = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE) 9 else 10, held = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE) 0 else 1, consumed = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE) 1 else 0)
+                return harness to actionId
+            }
+
+            run {
+                val (harness, actionId) = reserved("cancel")
+                val next = checked(service.cancel(actionId, harness.image().world.calendar, CancellationStage.BEFORE_START)).calendar
+                commitCalendar(harness, this@runBlocking, "cancel-${policy.name}", next)
+                assertClaim(harness.image(), actionId, ScheduledActionStatus.CANCELLED, policy,
+                    if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE) ResourceClaimState.CONSUMED else ResourceClaimState.CANCELLED,
+                    owned = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE) 9 else 10, held = 0, consumed = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE) 1 else 0)
+            }
+            run {
+                val (harness, actionId) = reserved("start")
+                val next = checked(service.start(actionId, harness.image().world.calendar, minute(1))).calendar
+                commitCalendar(harness, this@runBlocking, "start-${policy.name}", next)
+                val consumesOnStart = policy == ResourceClaimPolicy.HOLD_THEN_CONSUME_ON_START
+                assertClaim(harness.image(), actionId, ScheduledActionStatus.RUNNING, policy,
+                    if (policy == ResourceClaimPolicy.HOLD_THEN_CONSUME_ON_COMPLETE || policy == ResourceClaimPolicy.HOLD_AND_RELEASE) ResourceClaimState.HELD else ResourceClaimState.CONSUMED,
+                    owned = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE || consumesOnStart) 9 else 10,
+                    held = if (policy == ResourceClaimPolicy.HOLD_THEN_CONSUME_ON_COMPLETE || policy == ResourceClaimPolicy.HOLD_AND_RELEASE) 1 else 0,
+                    consumed = if (policy == ResourceClaimPolicy.CONSUME_ON_RESERVE || consumesOnStart) 1 else 0)
+            }
+            run {
+                val (harness, actionId) = reserved("complete")
+                val running = checked(service.start(actionId, harness.image().world.calendar, minute(1))).calendar
+                commitCalendar(harness, this@runBlocking, "complete-start-${policy.name}", running)
+                val completed = checked(service.complete(actionId, harness.image().world.calendar)).calendar
+                commitCalendar(harness, this@runBlocking, "complete-${policy.name}", completed)
+                val releasesOnComplete = policy == ResourceClaimPolicy.HOLD_AND_RELEASE
+                assertClaim(harness.image(), actionId, ScheduledActionStatus.COMPLETED, policy,
+                    if (releasesOnComplete) ResourceClaimState.RELEASED else ResourceClaimState.CONSUMED,
+                    owned = if (releasesOnComplete) 10 else 9, held = 0, consumed = if (releasesOnComplete) 0 else 1)
+                assertEquals(harness.image(), harness.restart().image())
+            }
+            run {
+                val (harness, actionId) = reserved("fail")
+                val running = checked(service.start(actionId, harness.image().world.calendar, minute(1))).calendar
+                commitCalendar(harness, this@runBlocking, "fail-start-${policy.name}", running)
+                val failed = checked(service.fail(actionId, harness.image().world.calendar, CancellationStage.IN_PROGRESS)).calendar
+                commitCalendar(harness, this@runBlocking, "fail-${policy.name}", failed)
+                val released = policy == ResourceClaimPolicy.HOLD_THEN_CONSUME_ON_COMPLETE || policy == ResourceClaimPolicy.HOLD_AND_RELEASE
+                assertClaim(harness.image(), actionId, ScheduledActionStatus.FAILED, policy,
+                    if (released) ResourceClaimState.CANCELLED else ResourceClaimState.CONSUMED,
+                    owned = if (released) 10 else 9, held = 0, consumed = if (released) 0 else 1)
+            }
+        }
+
+        val harness = TestHarness(InMemorySavePort(initialGold = 10L))
+        val actionId = entity("faulted-transition")
+        val beforeReserve = harness.image()
+        val reserveSession = WorldSession(
+            SessionEpoch(1), harness.port, this, ContentSnapshot.emptyForTest(),
+            WorldSnapshot(beforeReserve.stateVersion, beforeReserve.world, beforeReserve.rngState, beforeReserve.aggregateStates),
+            WorldEngine(emptyList()), kotlinx.coroutines.Dispatchers.Unconfined
+        )
+        assertEquals(CommandResult.Accepted(1), reserveSession.execute(
+            CommandEnvelope.create(CommandId("faulted-reserve"), SessionEpoch(1), beforeReserve.stateVersion, actionId, claimPayload(actionId, ResourceClaimPolicy.HOLD_THEN_CONSUME_ON_COMPLETE))
+        ))
+        reserveSession.close()
+        val reserved = harness.image()
+        val started = checked(service.start(actionId, reserved.world.calendar, minute(1))).calendar
+        harness.armFault(SavePortFaultPoint.DURING_COMMIT)
+        val faulted = commitCalendar(harness, this, "faulted-start", started)
+        assertTrue((faulted as CommandResult.Rejected).error is DomainError.PersistenceFailure)
+        assertEquals(reserved, harness.image())
+        assertEquals(reserved, harness.restart().image())
+        assertEquals(CommandResult.Accepted(1), commitCalendar(harness, this, "recovered-start", started))
+        assertEquals(harness.image(), harness.restart().image())
+    }
+
+    private fun claimPayload(actionId: EntityId, policy: ResourceClaimPolicy) = ScheduleReservePayload(
+        actionId,
+        "schedule.claim.${policy.name.lowercase()}",
+        ScheduledActionPayload(
+            "PLAYER",
+            entity("actor-1"),
+            listOf(ScheduledEntityRef("PLAYER", entity("actor-1"))),
+            SchedulePriority.PERSONAL_COMMITMENT,
+            listOf(ResourceClaim(gold, 1L, policy)),
+            ActionKindPolicyProfile(
+                resumable = true,
+                progressBasis = "MINUTE",
+                interruptionPolicy = ActionInterruptionPolicy(ActionInterruptionResult.CONTINUE),
+                cancellationPolicy = ActionCancellationPolicy(
+                    CancellationStage.entries.associateWith { ActionCancellationRule(0, 0, true) }
+                ),
+                consequenceEventCodec = "schedule.claim.cancelled.v1"
+            ),
+            "schedule.claim.completed",
+            "schedule.claim.completed.v1",
+            canBePreempted = false
+        ),
+        minute(1), minute(2), minute(0)
+    )
+
+    private suspend fun commitCalendar(
+        harness: TestHarness,
+        scope: kotlinx.coroutines.CoroutineScope,
+        commandSuffix: String,
+        calendar: ScheduleCalendar
+    ): CommandResult {
+        val before = harness.image()
+        val session = WorldSession(
+            SessionEpoch(1), harness.port, scope, ContentSnapshot.emptyForTest(),
+            WorldSnapshot(before.stateVersion, before.world, before.rngState, before.aggregateStates),
+            kotlinx.coroutines.Dispatchers.Unconfined
+        ) { _, _, rngState, submissionSequence ->
+            DomainDelta(
+                aggregateChanges = emptyList(),
+                rngState = rngState,
+                worldChange = WorldStateChange(before.world, before.world.copy(calendar = calendar)),
+                events = emptyList(),
+                result = CommandResult.Accepted(submissionSequence)
+            )
+        }
+        val result = session.execute(CommandEnvelope.create(
+            CommandId("transition-$commandSuffix"), SessionEpoch(1), before.stateVersion,
+            entity("actor-1"), UnsupportedFeaturePayload("schedule-transition-$commandSuffix")
+        ))
+        session.close()
+        return result
+    }
+
+    private fun assertClaim(
+        image: SavePortConformanceImage,
+        actionId: EntityId,
+        status: ScheduledActionStatus,
+        policy: ResourceClaimPolicy,
+        claimState: ResourceClaimState,
+        owned: Long,
+        held: Long,
+        consumed: Long
+    ) {
+        val calendar = image.world.calendar
+        val ledger = calendar.resources
+        assertEquals(status, calendar.actions.single { it.actionId == actionId }.status)
+        assertEquals(owned, ledger.owned[gold] ?: 0L)
+        assertEquals(held, ledger.held[gold] ?: 0L)
+        assertEquals(consumed, ledger.consumed[gold] ?: 0L)
+        assertEquals(owned - held, ledger.available(gold))
+        val claim = ledger.claimStates[ResourceClaimKey(actionId, gold)]
+        assertEquals(claimState, claim)
+        assertEquals(policy, calendar.actions.single { it.actionId == actionId }.claims.single().policy)
+    }
+
+    private fun <T> checked(value: Checked<T>): T = when (value) {
+        is Checked.Value -> value.value
+        is Checked.Rejected -> error(value.error.toString())
     }
 
     private class TestHarness(

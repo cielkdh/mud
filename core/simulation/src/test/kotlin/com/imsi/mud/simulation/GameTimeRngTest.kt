@@ -122,7 +122,7 @@ class GameTimeRngTest {
     }
 
     @Test
-    fun `P2-UT-003 weighted choice and shuffle are canonical and input preserving`() {
+    fun `P2-RNG-UT-001 weighted choice and shuffle are canonical and input preserving`() {
         val stream = DeterministicRng.initialize(42, 54, RngStreamKey("collection"))
         val candidates = listOf(
             WeightedRngCandidate("z", 1, "z-value"),
@@ -146,7 +146,7 @@ class GameTimeRngTest {
     }
 
     @Test
-    fun `P2-FT-003 bounded rejection consumes one counter per raw draw`() {
+    fun `P2-RNG-FT-001 bounded rejection consumes one counter per raw draw`() {
         val stream = RngStreamState(RngStreamKey("rejection"), PCG32_XSH_RR_V1, 0, -1, 0)
         val result = checked(DeterministicRng.draw(stream, RngOperation.Bounded(2_147_483_649u)))
         assertTrue(result.value < 2_147_483_649u)
@@ -154,7 +154,7 @@ class GameTimeRngTest {
     }
 
     @Test
-    fun `P2-FT-004 invalid canonical keys fail at the boundary`() {
+    fun `P2-RNG-FT-002 invalid canonical keys fail at the boundary`() {
         assertIllegalArgument { canonicalRngStreamKey(RngLeaf.COMBAT_HIT, "") }
         assertIllegalArgument { canonicalRngStreamKey(RngLeaf.COMBAT_HIT, "a/b") }
         assertIllegalArgument { canonicalRngStreamKey(RngLeaf.COMBAT_HIT, "e\u0301") }

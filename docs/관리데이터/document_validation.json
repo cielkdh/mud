@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-16T15:26:41+09:00",
+  "executed_at": "2026-09-21T13:43:51+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -233,13 +233,19 @@
     {
       "name": "로컬 Markdown 링크·명시적 anchor",
       "status": "PASS",
-      "detail": "8085개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
+      "detail": "8087개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
       "failures": []
     },
     {
       "name": "Test Case 필수 검증 필드",
       "status": "PASS",
       "detail": "751개 Case의 사전조건·입력·절차·기대·DB·로그·상태·성공조건 검사",
+      "failures": []
+    },
+    {
+      "name": "공식 P2 Test ID·JUnit suite/testcase 1:1 정합성",
+      "status": "PASS",
+      "detail": "지정된 simulation JUnit display name에서 공식 ID 중복·누락·RNG 보조 접두사·관리 suite/testcase 불일치를 검사",
       "failures": []
     },
     {
@@ -251,13 +257,13 @@
     {
       "name": "테스트 상태에 실행증거 요구",
       "status": "PASS",
-      "detail": "현재 Counter({'NOT_RUN': 706, 'PASS': 45}); 문서 검사 결과를 게임 Test에 전파하지 않음",
+      "detail": "현재 Counter({'NOT_RUN': 690, 'PASS': 61}); 문서 검사 결과를 게임 Test에 전파하지 않음",
       "failures": []
     },
     {
       "name": "SQL-content: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.53.1; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.50.4; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
@@ -269,7 +275,7 @@
     {
       "name": "SQL-save: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.53.1; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.50.4; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
@@ -328,8 +334,8 @@
     }
   ],
   "summary": {
-    "PASS": 54
+    "PASS": 55
   },
   "game_test_execution": "NOT_RUN",
-  "management_game_test_status": "NOT_RUN=706, PASS=45"
+  "management_game_test_status": "NOT_RUN=690, PASS=61"
 }

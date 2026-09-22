@@ -178,6 +178,82 @@ def test_detail_failures(case: dict, markers: tuple[str, ...]) -> list[str]:
     return failures
 
 
+PHASE2_FUNCTION_TEST_IDS = frozenset(
+    f'P2-{test_type}-{number:03d}'
+    for test_type in ('UT', 'BT', 'FT', 'CT', 'IT')
+    for number in range(1, 6)
+)
+OFFICIAL_TEST_ID_TOKEN = re.compile(r'\bP2-(?:UT|BT|FT|CT|IT)-\d{3}\b')
+RNG_AUXILIARY_ID_TOKEN = re.compile(r'\bP2-RNG-(?:UT|BT|FT)-\d{3}\b')
+JUNIT_SOURCES = {
+    'com.imsi.mud.simulation.GameTimeRngTest': 'GameTimeRngTest.kt',
+    'com.imsi.mud.simulation.ScheduleServiceTest': 'ScheduleServiceTest.kt',
+    'com.imsi.mud.simulation.WorldTimeTraversalTest': 'WorldTimeTraversalTest.kt',
+    'com.imsi.mud.simulation.WorldEngineTest': 'WorldEngineTest.kt',
+    'com.imsi.mud.simulation.WorldSessionTest': 'WorldSessionTest.kt',
+    'com.imsi.mud.simulation.Phase2ConformanceTest': 'Phase2ConformanceTest.kt',
+}
+
+
+def junit_id_mapping_failures(tests: list[dict]) -> list[str]:
+    """Check source display names and management-data JUnit mappings one-for-one."""
+    source_root = ROOT.parent / 'core' / 'simulation' / 'src' / 'test' / 'kotlin' / 'com' / 'imsi' / 'mud' / 'simulation'
+    source_names: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    failures: list[str] = []
+    for suite, filename in JUNIT_SOURCES.items():
+        path = source_root / filename
+        if not path.is_file():
+            failures.append(f'{suite}: source missing')
+            continue
+        names = re.findall(r'^\s*fun\s+`([^`]+)`\s*\([^)]*\)\s*(?:=|\{)', path.read_text(encoding='utf-8'), re.M)
+        for name in names:
+            ids = OFFICIAL_TEST_ID_TOKEN.findall(name)
+            rng_ids = RNG_AUXILIARY_ID_TOKEN.findall(name)
+            if len(ids) + len(rng_ids) > 1:
+                failures.append(f'{suite}: multiple IDs in {name}')
+            for test_id in ids + rng_ids:
+                source_names[test_id].append((suite, name))
+
+    rng_source_ids = {test_id for test_id in source_names if RNG_AUXILIARY_ID_TOKEN.fullmatch(test_id)}
+    failures += [
+        f'{test_id}: duplicate source testcase'
+        for test_id in sorted(PHASE2_FUNCTION_TEST_IDS | rng_source_ids)
+        if len(source_names.get(test_id, [])) > 1
+    ]
+
+    management = {
+        test['id']: test for test in tests
+        if test.get('id') in PHASE2_FUNCTION_TEST_IDS
+    }
+    failures += [f'{test_id}: duplicate management mapping' for test_id, count in Counter(
+        test.get('id') for test in tests if test.get('id') in PHASE2_FUNCTION_TEST_IDS
+    ).items() if count != 1]
+    for test_id in sorted(PHASE2_FUNCTION_TEST_IDS):
+        entries = source_names.get(test_id, [])
+        case = management.get(test_id)
+        if not entries:
+            failures.append(f'{test_id}: source testcase missing')
+            continue
+        if len(entries) != 1:
+            continue
+        if case is None:
+            failures.append(f'{test_id}: management mapping missing')
+            continue
+        suite, testcase = entries[0]
+        if case.get('junitSuite') != suite:
+            failures.append(f'{test_id}: suite {case.get("junitSuite")} != {suite}')
+        if case.get('junitTestcase') != testcase:
+            failures.append(f'{test_id}: testcase {case.get("junitTestcase")} != {testcase}')
+    for test_id, case in sorted(management.items()):
+        suite = case.get('junitSuite')
+        testcase = case.get('junitTestcase')
+        if not isinstance(suite, str) or not isinstance(testcase, str):
+            failures.append(f'{test_id}: suite/testcase mapping missing')
+        elif (suite, testcase) not in source_names.get(test_id, []):
+            failures.append(f'{test_id}: suite/testcase source mismatch')
+    return failures
+
+
 def event_contract_checks(contract: str, save_ddl: str) -> None:
     failures: list[str] = []
     block = re.search(r'data class DomainEvent<[^>]+>\s*\((.*?)\n\)', contract, re.S)
@@ -957,6 +1033,8 @@ def main() -> int:
     record('로컬 Markdown 링크·명시적 anchor',failures,f'{link_count}개 링크 확인; 코드 블록 및 원문 부록 링크는 제외')
     required_fields=['precondition','input','steps','expected','db','logs','state','success']
     record('Test Case 필수 검증 필드',[t['id']+': '+k for t in tests for k in required_fields if not t.get(k)], f'{len(tests)}개 Case의 사전조건·입력·절차·기대·DB·로그·상태·성공조건 검사')
+    record('공식 P2 Test ID·JUnit suite/testcase 1:1 정합성', junit_id_mapping_failures(tests),
+           '지정된 simulation JUnit display name에서 공식 ID 중복·누락·RNG 보조 접두사·관리 suite/testcase 불일치를 검사')
     compact=lambda value: re.sub(r'[\s`]','',str(value))
     sync_failures=[]
     phase_bodies={p['n']:(ROOT/p['file']).read_text(encoding='utf-8') for p in phases}

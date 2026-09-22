@@ -88,6 +88,20 @@ class AppRootTest {
     }
 
     @Test
+    fun loadingCanExplainPreviousSessionDrainSeparatelyFromPreparation() {
+        compose.setContent {
+            AppRoot(
+                state = AppShellState.Loading,
+                onRetry = {},
+                loadingBody = "Waiting for the previous world session to finish closing."
+            )
+        }
+
+        compose.onNodeWithTag("app-shell-loading-body")
+            .assertTextEquals("Waiting for the previous world session to finish closing.")
+    }
+
+    @Test
     fun emptyAndBlockedStatesOfferAnAccessibleBackAction() {
         var backCount = 0
         val shellState = mutableStateOf<AppShellState>(AppShellState.Empty)

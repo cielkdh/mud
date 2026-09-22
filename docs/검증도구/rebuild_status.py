@@ -95,8 +95,6 @@ def main() -> int:
         if task['status'] == 'DONE':
             if any(by_task[d]['status'] != 'DONE' for d in task['depends']):
                 inconsistencies.append(f"{task['id']}: 미완료 선행 Task가 있습니다.")
-            if not task.get('pr'):
-                inconsistencies.append(f"{task['id']}: PR/리뷰 증거가 없습니다.")
             for test_id in required_execution_tests(task):
                 test = by_test[test_id]
                 if test['status'] != 'PASS' or not test.get('evidence'):

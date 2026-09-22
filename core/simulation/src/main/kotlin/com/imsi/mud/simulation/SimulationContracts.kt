@@ -632,7 +632,59 @@ data class PublicSnapshot(val sessionEpoch: SessionEpoch, val stateVersion: Stat
 
 data class PublicDomainEvent(val eventId: EventId, val gameMinute: GameMinute, val type: String)
 
-data class CommittedPublication(val snapshot: PublicSnapshot, val events: List<PublicDomainEvent>)
+/** Public terminal reason for the command that produced a committed publication. */
+data class PublicTimeAdvanceChoice(
+    val choiceId: String,
+    val label: String,
+    val codec: String,
+    val canonicalPayload: String,
+    val payloadHash: PayloadHash = canonicalPayloadHash(canonicalPayload)
+) {
+    init {
+        require(choiceId.isNotBlank() && label.isNotBlank() && codec.isNotBlank() && canonicalPayload.isNotBlank())
+        require(payloadHash == canonicalPayloadHash(canonicalPayload)) { "public choice hash must match payload" }
+    }
+
+    companion object {
+        const val CODEC_ID = "DecisionChoice.v1"
+
+        fun fromChoiceId(choiceId: String): PublicTimeAdvanceChoice {
+            require(choiceId.isNotBlank())
+            val payload = "{\"choiceId\":${CanonicalJson.string(choiceId)}}"
+            return PublicTimeAdvanceChoice(choiceId, choiceId, CODEC_ID, payload)
+        }
+    }
+}
+
+/** Public terminal reason and only the redacted data required to continue a decision. */
+data class PublicTimeAdvanceTerminal(
+    val commandId: CommandId,
+    val result: TimeAdvanceResult,
+    val gateId: String? = null,
+    val choices: List<PublicTimeAdvanceChoice> = emptyList(),
+    val pendingSuffixHash: PayloadHash? = null,
+    val sealedOutcomeHash: PayloadHash? = null
+) {
+    init {
+        if (result == TimeAdvanceResult.DECISION_REQUIRED) {
+            require(!gateId.isNullOrBlank()) { "decision terminal must expose a gate id" }
+            require(choices.size in 1..8) { "decision terminal must expose one to eight choices" }
+            require(choices.map { it.choiceId }.distinct().size == choices.size)
+            require(pendingSuffixHash != null) { "decision terminal must expose its pending suffix hash" }
+        } else {
+            require(gateId == null && choices.isEmpty() && pendingSuffixHash == null && sealedOutcomeHash == null) {
+                "non-decision terminal must not expose decision details"
+            }
+        }
+    }
+}
+
+data class CommittedPublication(
+    val snapshot: PublicSnapshot,
+    val events: List<PublicDomainEvent>,
+    val sourceCommandId: CommandId,
+    val timeAdvanceTerminal: PublicTimeAdvanceTerminal? = null
+)
 
 interface SavePort {
     suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt?

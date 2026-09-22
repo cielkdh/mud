@@ -1,0 +1,16 @@
+provenance_version=1
+head=7d6aa372404d763a75b3ec5a899660511b3bc7bc
+source_manifest_sha256=2E1E6D09D12686DDB7C01E2038BDCD92AFB5D8C1169412F29A6E21C35FBEF48F
+source=app/src/main/kotlin/com/imsi/mud/MainActivity.kt sha256=F86B713A1AE526B10036CFAD866470AB9EF9C2819A26FA5D791B345DBD7B535D
+source=app/src/main/kotlin/com/imsi/mud/ui/Phase2TimeUi.kt sha256=705D3FBCEC45142ADAF4D120BDE15763B295D396E6FDFB9588E3CF3F8BB8E8BB
+source=app/src/androidTest/kotlin/com/imsi/mud/ui/MainActivityTest.kt sha256=79A06F681BE7AC2D9AADF15D29ED8E3D70976A97E339C8642CB831B5F544760D
+source=app/src/androidTest/kotlin/com/imsi/mud/ui/Phase2TimeUiTest.kt sha256=7853C6DC2C3C1F69A13D4E215401368CF43804EBF9B0FA24A9D5C9D0DE22474B
+source=core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt sha256=B0C1063C7558298AF0D3B946146A3663207EF14FDC289A3E2A1398EB0D3DC965
+android_xml=TEST-codex_phase2_api36(AVD) - 16.xml
+android_xml_sha256=3DE14A377F77715280AD40C4F4D98D2A7C66822007452556096C036D4935CCE3
+android_xml_timestamp=2026-09-17T02:41:36
+android_result=tests:22 failures:0 errors:0 skipped:0
+jvm_xml=core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml
+jvm_xml_sha256=86E806A0DC7310E5D5E1DB3700CB27EAAA339298F9ACDB3C7BC76E13DEDDE1D5
+jvm_xml_timestamp=2026-09-17T02:34:31.741Z
+jvm_result=tests:24 failures:0 errors:0 skipped:0

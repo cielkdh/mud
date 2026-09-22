@@ -1,0 +1,56 @@
+{
+  "bundle": "phase2-test-id-20260918-qa-022748z",
+  "provenanceVersion": 1,
+  "sealedAt": "2026-09-18T11:28:00+09:00",
+  "repository": {
+    "head": "7d6aa372404d763a75b3ec5a899660511b3bc7bc",
+    "workingTree": "dirty",
+    "sourceHashBasis": "current working-tree bytes"
+  },
+  "execution": {
+    "command": ".\\gradlew.bat --no-daemon --max-workers=1 :core:simulation:test --rerun-tasks",
+    "exitCode": 0,
+    "startedAt": "2026-09-18T02:27:48.942Z",
+    "finishedAt": "2026-09-18T02:27:52.137Z",
+    "freshXmlExecution": true,
+    "bundleSealingRerun": false,
+    "note": "현재 build/test-results의 fresh XML을 봉인했으며 bundle 생성 과정에서 게임 테스트를 재실행하지 않았다."
+  },
+  "environment": {
+    "hostname": "NB-24072601",
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "java": "17.0.12 LTS",
+    "gradle": "9.6.0",
+    "jdkJavaOptions": "-Djdk.net.unixdomain.tmpdir=C:\\Windows\\Temp"
+  },
+  "validator": {
+    "command": "python docs/검증도구/validate_docs.py",
+    "executedAt": "2026-09-18T11:21:48+09:00",
+    "result": "55/55 PASS",
+    "game_tests": "NOT_RUN",
+    "game_testsMeaning": "문서 validator는 게임 테스트를 실행하지 않으며, Gradle XML 실행 결과와 독립적으로 문서·관리데이터·제안 SQL만 검사한다."
+  },
+  "sourceFiles": [
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/GameTimeRng.kt", "size": 11615, "sha256": "F115E51122933D3EA60C4003BEDEDF48D2FDF85108343670B71E455060081B35"},
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/SavePortConformanceSuite.kt", "size": 26338, "sha256": "DED5B9CFF81B87D24E9AB1B725E931735785A0945CD1340FE33E7951E267F339"},
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/ScheduleService.kt", "size": 61887, "sha256": "FE4065CF284C3DBEA46241CC369675653DF4679DC52378C57E69EEE99D9397CA"},
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/SimulationContracts.kt", "size": 42539, "sha256": "F5D2438DD519676E5D1CB23AAC8B6C8676FDF580E2E526B5F665921095076502"},
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/WorldEngine.kt", "size": 63241, "sha256": "A9AD1A0A04B4D08783DC4798053E8267AE3C8AC8A8B584BA5BF641374DA267EB"},
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/WorldSession.kt", "size": 48524, "sha256": "F90E9A9D371B6D80551C2C55A37B24F56213C6A9C65FCADD453B276E288B02C5"},
+    {"path": "core/simulation/src/main/kotlin/com/imsi/mud/simulation/WorldTimeTraversal.kt", "size": 50968, "sha256": "7146787AF0598471EE625DEE9DF5B53504B7353A97A21F6282B554AC2D7A6CF4"},
+    {"path": "core/simulation/src/test/kotlin/com/imsi/mud/simulation/GameTimeRngTest.kt", "size": 9807, "sha256": "24D1E5B9B00A258A5AFCF3DF8E8381ED80C7CF2389CD491FB149AEB95BD09924"},
+    {"path": "core/simulation/src/test/kotlin/com/imsi/mud/simulation/Phase2ConformanceTest.kt", "size": 27291, "sha256": "78AAD34BCAF6CB8F5E8724F5EC661AC7F036A6C853BAFF5D084D4C3268FF7646"},
+    {"path": "core/simulation/src/test/kotlin/com/imsi/mud/simulation/ScheduleServiceTest.kt", "size": 45809, "sha256": "7CA7E9134F1F3601FF2C7B184D7D2C9CAB7D9579270F202B83CD7C85A452C28C"},
+    {"path": "core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldEngineTest.kt", "size": 66213, "sha256": "2929668CA6B7B7DDD4B5364996FC4F2795C2A721F2B32AE748C482A9B1CE8554"},
+    {"path": "core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldSessionTest.kt", "size": 60411, "sha256": "6B80587C1B052B524741EA21BA3D122C149E643355B214BCEC123E731F84CB1F"},
+    {"path": "core/simulation/src/test/kotlin/com/imsi/mud/simulation/WorldTimeTraversalTest.kt", "size": 31787, "sha256": "A72E5F834192A732729DBB8CCEE250B1F8099F6568314D92DF0E7498CF1B87FC"}
+  ],
+  "xmlFiles": [
+    {"bundlePath": "GameTimeRngTest.xml", "buildPath": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.GameTimeRngTest.xml", "timestamp": "2026-09-18T02:27:48.942Z", "tests": 8, "failures": 0, "errors": 0, "skipped": 0, "size": 1598, "sha256": "D996E833ACAE1E83E6BB796D13BB0B90473603D04ECC58225687216912986164"},
+    {"bundlePath": "Phase2ConformanceTest.xml", "buildPath": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.Phase2ConformanceTest.xml", "timestamp": "2026-09-18T02:27:49.077Z", "tests": 2, "failures": 0, "errors": 0, "skipped": 0, "size": 677, "sha256": "8D2E4570668904E5FA1253A9004A758C417FB92EFBF4F1C6DEBB3A152FBE616E"},
+    {"bundlePath": "ScheduleServiceTest.xml", "buildPath": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.ScheduleServiceTest.xml", "timestamp": "2026-09-18T02:27:49.561Z", "tests": 26, "failures": 0, "errors": 0, "skipped": 0, "size": 4644, "sha256": "EFACC86F4D2202203D05C565CCF9038CA12DE4A5F232F52B84E5B0F303E1F2CC"},
+    {"bundlePath": "WorldEngineTest.xml", "buildPath": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldEngineTest.xml", "timestamp": "2026-09-18T02:27:49.733Z", "tests": 28, "failures": 0, "errors": 0, "skipped": 0, "size": 5056, "sha256": "2684BBCD8D36CE56D4AE506C239FE8A0F6E38350BD6F2981A0AD323748874749"},
+    {"bundlePath": "WorldSessionTest.xml", "buildPath": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml", "timestamp": "2026-09-18T02:27:50.192Z", "tests": 27, "failures": 0, "errors": 0, "skipped": 0, "size": 4638, "sha256": "DDCD52D53D373B36AD19768FB54EAB757BBEB314259E8487F9267C00E5CD5CEB"},
+    {"bundlePath": "WorldTimeTraversalTest.xml", "buildPath": "core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml", "timestamp": "2026-09-18T02:27:50.716Z", "tests": 19, "failures": 0, "errors": 0, "skipped": 0, "size": 3903, "sha256": "EB83D7801945429FDECC7A78184371EF974E48B171A11CF2B266990ED4A116AD"}
+  ]
+}

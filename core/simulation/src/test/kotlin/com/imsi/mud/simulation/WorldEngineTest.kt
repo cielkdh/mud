@@ -166,7 +166,7 @@ class WorldEngineTest {
     }
 
     @Test
-    fun `system halt from a running traversal does not write a terminal segment`() = runBlocking {
+    fun `P2-FT-004 system halt from a running traversal does not write a terminal segment`() = runBlocking {
         val source = object : BoundarySource {
             override val sourceId = "world"
             override fun nextTimeAfter(snapshot: WorldTraversalSnapshot, cursor: BoundaryCursor?) = minute(1)
@@ -207,7 +207,7 @@ class WorldEngineTest {
     }
 
     @Test
-    fun `schedule gameplay payloads round trip and WorldSession commits each external mutation once`() = runBlocking {
+    fun `P2-CT-003 schedule gameplay payloads round trip and WorldSession commits each external mutation once`() = runBlocking {
         val reserve = reservePayload("treatment", 10, 20)
         val incumbent = ScheduledAction(entity("incumbent"), "schedule.action", actionPayload(SchedulePriority.TRAINING_ROUTINE, canBePreempted = true), minute(10), minute(20))
         val conflictRequest = reservePayload("rescue", 10, 20, SchedulePriority.EMERGENCY_RESCUE)
@@ -370,6 +370,25 @@ class WorldEngineTest {
     }
 
     @Test
+    fun `all short elapsed modes traverse and commit only their action rng once`() = runBlocking {
+        AtomicElapsedActionKind.entries.forEach { kind ->
+            val id = "${kind.name.lowercase()}-direct"
+            val port = AtomicPort()
+            val payload = atomicPayload(id, 31, kind = kind)
+            val session = atomicSession(port, atomicEngine(emptyList()), atomicSnapshot(29, emptyList(), id, kind))
+            val envelope = CommandEnvelope.create(CommandId("outer-${kind.name.lowercase()}"), SessionEpoch(1), StateVersion(0), entity("actor"), payload)
+
+            assertEquals(CommandResult.Accepted(1), session.execute(envelope))
+            assertEquals(1, port.atomicWrites)
+            assertEquals(0, port.segmentWrites)
+            assertEquals(31, port.lastDelta!!.worldChange!!.after.clock.minute.value)
+            assertEquals(1, port.lastDelta!!.rngState.streams.single().drawCounter)
+            assertEquals(1, port.lastDelta!!.events.count { it.payload is ElapsedActionAppliedEventPayload })
+            session.close()
+        }
+    }
+
+    @Test
     fun `combat gate persists prefix and sealed result then child applies suffix and outcome exactly once`() = runBlocking {
         val source = GateSource()
         val port = AtomicPort()
@@ -381,6 +400,15 @@ class WorldEngineTest {
         assertEquals(CommandResult.Accepted(1), session.execute(parent))
         val pending = port.receipts.getValue(parent.commandId).timeAdvanceState!!
         assertEquals(TimeAdvanceResult.DECISION_REQUIRED, pending.status)
+        val publicTerminal = checkNotNull(session.publications.value?.timeAdvanceTerminal)
+        assertEquals(parent.commandId, session.publications.value?.sourceCommandId)
+        assertEquals(TimeAdvanceResult.DECISION_REQUIRED, publicTerminal.result)
+        assertEquals("gate-30", publicTerminal.gateId)
+        assertEquals(listOf("A", "B"), publicTerminal.choices.map { it.choiceId })
+        assertTrue(publicTerminal.choices.all { it.codec == PublicTimeAdvanceChoice.CODEC_ID })
+        assertEquals(pending.pendingSuffix!!.hash, publicTerminal.pendingSuffixHash)
+        assertEquals("{\"choiceId\":\"A\"}", publicTerminal.choices.first().canonicalPayload)
+        assertEquals(canonicalPayloadHash(publicTerminal.choices.first().canonicalPayload), publicTerminal.choices.first().payloadHash)
         assertEquals(30, port.lastDelta!!.worldChange!!.after.clock.minute.value)
         assertTrue(port.lastDelta!!.worldChange!!.after.calendar.actions.any { it.actionId == entity("prefix-proof") })
         assertEquals(1, port.lastDelta!!.rngState.streams.single().drawCounter)
@@ -494,7 +522,7 @@ class WorldEngineTest {
     }
 
     @Test
-    fun `target timestamp lifecycle outcome action and economy drafts keep boundary order and commit provenance`() = runBlocking {
+    fun `P2-IT-004 target timestamp lifecycle outcome action and economy drafts keep boundary order and commit provenance`() = runBlocking {
         val source = TargetBatchSource()
         val port = AtomicPort()
         val session = atomicSession(port, atomicEngine(listOf(source)), atomicSnapshot(29, listOf(source), "target-order"))
@@ -753,7 +781,7 @@ class WorldEngineTest {
     }
 
     @Test
-    fun `atomic child response loss reconciles the exact continuation and does not double apply`() = runBlocking {
+    fun `P2-CT-004 atomic child response loss reconciles the exact continuation and does not double apply`() = runBlocking {
         val source = GateSource()
         val port = AtomicPort(cancelAfterChildCommit = true)
         val session = atomicSession(port, atomicEngine(listOf(source), branchingSelection = true), atomicSnapshot(29, listOf(source), "combat-reconcile"))
@@ -968,10 +996,15 @@ class WorldEngineTest {
     }
 
     private companion object {
-        fun atomicPayload(id: String, target: Long, maxBoundaries: Int = 8) = AtomicElapsedActionPayload(
-            AtomicElapsedActionKind.COMBAT,
+        fun atomicPayload(
+            id: String,
+            target: Long,
+            maxBoundaries: Int = 8,
+            kind: AtomicElapsedActionKind = AtomicElapsedActionKind.COMBAT
+        ) = AtomicElapsedActionPayload(
+            kind,
             entity(id),
-            ProgressionMode.COMBAT_ELAPSED,
+            kind.mode,
             minute(target),
             "combat.input.v1",
             "{\"attack\":1}",
@@ -1018,8 +1051,18 @@ class WorldEngineTest {
             })
         }
 
-        fun atomicSnapshot(at: Long, sources: List<BoundarySource>, actionId: String): WorldSnapshot {
-            val key = canonicalRngStreamKey(RngLeaf.COMBAT_HIT, actionId)
+        fun atomicSnapshot(
+            at: Long,
+            sources: List<BoundarySource>,
+            actionId: String,
+            kind: AtomicElapsedActionKind = AtomicElapsedActionKind.COMBAT
+        ): WorldSnapshot {
+            val leaf = when (kind) {
+                AtomicElapsedActionKind.COMBAT -> RngLeaf.COMBAT_HIT
+                AtomicElapsedActionKind.DUNGEON -> RngLeaf.DUNGEON
+                AtomicElapsedActionKind.NORMAL -> RngLeaf.WORLD_EVENT
+            }
+            val key = if (leaf == RngLeaf.WORLD_EVENT) canonicalRngStreamKey(leaf) else canonicalRngStreamKey(leaf, actionId)
             return WorldSnapshot(
                 StateVersion(0),
                 AuthoritativeWorldState(

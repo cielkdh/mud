@@ -37,7 +37,7 @@
 ## 5. 기능별 상세 설계
 
 ### 공통 계약의 적용 범위
-이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다.
+이 Phase의 전역 규범은 [공통 계약](설계부록/04_공통계약_및_콘텐츠_스키마.md)과 [84 Command/Event 계약](84_전체_Command_Event_계약서.md)을 단일 기준으로 따른다. 이 절은 적용 선언이지 계약 복사본이 아니며, 차이가 생기면 전역 계약이 우선하고 Phase 문서를 같은 revision에서 고친다. 모든 새 메소드/클래스명과 물리 DDL은 실제 저장소 확인 전 **설계 보완안**이다. 구현 클래스·인터페이스·메소드·DTO·Compose 화면명에 `Phase2`를 포함하지 않으며, `TimeAdvanceController`·`TimeAdvanceViewState`처럼 도메인 책임을 사용한다.
 
 `CommandEnvelope(commandId, sessionEpoch, expectedVersion, actorId, payload, payloadHash)`는 **GAMEPLAY COMMAND**의 UseCase 경계에서만 사용한다. `DomainDelta`는 typed `WorldStateChange?`·aggregate change·RNG state/counter·typed event·command result만 포함하고 table/DAO/SQL/`dirtyRows[]`를 포함하지 않는다. SaveCoordinator가 persistence plan과 dirty shard key로 변환한다. `stateHash` 범위·byte encoding·계산 시점과 payload canonical hash는 전역 계약을 따른다.
 
@@ -60,6 +60,10 @@
 Phase 2는 `:core:simulation` 소유 `SavePort` 계약, test-only `InMemorySavePort`/`FaultInjectingSavePort`, 그리고 `SavePortConformanceSuite`를 구현·검증한다. 이 suite는 complete-or-previous commit, receipt idempotency, segment cursor, RNG/event/action 원자성, commit 성공 후 publish만 검증하며 Room·파일·WAL을 요구하지 않는다. test double은 production runtime에 등록하지 않는다.
 
 Phase 3는 `:core:save`의 Room SavePort, SaveCoordinator, WAL/checkpoint, 실제 DB close/reopen, process-kill 및 손상 복구를 구현한다. Phase 3 Gate는 같은 `SavePortConformanceSuite`를 실제 Room adapter에 재실행하고 Phase 3 전용 recovery test를 추가한다. 이는 Phase 2를 다시 여는 dependency가 아니며 `P2 Gate → P3 implementation/Gate` 단방향이다.
+
+#### Phase 2 검토·승인 기준
+
+이 문서의 완료 판정은 XML·hash·manifest·evidence bundle 또는 provenance 파일의 존재를 기준으로 하지 않는다. 담당자는 설계서와 코드를 직접 대조하고 실제 실행으로 정상·경계·실패 흐름을 확인한다. QA는 개발자 결과를 참고하되 최종 코드와 제품 흐름을 직접 검토·실행하여 `PASS / NOT VERIFIED / REJECTED`를 판정한다. `DONE`은 구현 계약 충족, 직접 실행, QA PASS 및 사용자 승인으로 결정한다. 기존 실행 산출물은 참고용일 뿐이며 새 작업에서 별도 증거 기록·봉인·해시 manifest를 만들지 않는다.
 
 #### 권위 snapshot, 계산, commit, publish 소유권
 
@@ -899,7 +903,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 
 ## 9. 세부 구현 Task
 
-각 Task 는작은 PR 를의도하지만코드확인 후3 집중인일을넘을것으로예상되면하위 Task 로분해한다.별도후속작업을숨겨완료로표시하지않는다.초기 Task 는 NOT_STARTED 이며실제대상파일/PR/담당자는착수시입력한다. 현재 P2-TASK-001~005는 구현·공식 Test 실행 후 REVIEW이며 QA/독립 리뷰 전 DONE이 아니다.
+각 Task 는작은 PR 를의도하지만코드확인 후3 집중인일을넘을것으로예상되면하위 Task 로분해한다.별도후속작업을숨겨완료로표시하지않는다.초기 Task 는 NOT_STARTED 이며실제대상파일/PR/담당자는착수시입력한다. 현재 P2-TASK-001~010은 구현·공식 Test 실행·필수 리뷰와 사용자 승인이 완료된 Task만 DONE으로 기록한다.
 
 <a id="p2-task-001"></a>
 ### P2-TASK-001 — 단일 작성자 명령 처리 — 계약·Fixture
@@ -918,12 +922,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | F001 Batch 최종 승인 완료. 최신 guard·JVM·Android 증거와 manifest: `C:/ai/mud/build/qa-evidence/p2-f001-guard-20260917-1622/`. 사용자 최종 승인으로 DONE 처리했다. Room/WAL/reopen/process-kill은 Phase3 범위로 미검증이다. |
 
 <a id="p2-task-002"></a>
 ### P2-TASK-002 — 단일 작성자 명령 처리 — 핵심 규칙
@@ -942,12 +946,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | F001 Batch 최종 승인 완료. 최신 guard·JVM·Android 증거와 manifest: `C:/ai/mud/build/qa-evidence/p2-f001-guard-20260917-1622/`. 사용자 최종 승인으로 DONE 처리했다. Room/WAL/reopen/process-kill은 Phase3 범위로 미검증이다. |
 
 <a id="p2-task-003"></a>
 ### P2-TASK-003 — 단일 작성자 명령 처리 — 저장·연계
@@ -966,12 +970,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-001, P2-IT-001 |
 | 완료 조건 | P2 SavePort 계약과 InMemory/FaultInjecting conformance 통합·codec·원자성 검증; Room/migration은 P3 Gate |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | F001 Batch 최종 승인 완료. 최신 guard·JVM·Android 증거와 manifest: `C:/ai/mud/build/qa-evidence/p2-f001-guard-20260917-1622/`. 사용자 최종 승인으로 DONE 처리했다. Room/WAL/reopen/process-kill은 Phase3 범위로 미검증이다. |
 
 <a id="p2-task-004"></a>
 ### P2-TASK-004 — 단일 작성자 명령 처리 — UI·호출 경로
@@ -980,7 +984,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P2-TASK-004 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | ID 기반 호출과 공개 ViewState의 Loading·Empty·Error·Blocked·성공 상태를 제공한다. mutation CTA는 `WorldSession.execute`만 호출하고 UI가 authoritative 데이터를 직접 수정하지 않으며, 중복 탭과 active AdvanceTime의 `AdvanceInProgress`를 명확히 표시한다. |
+| 상세 구현 내용 | ID 기반 호출과 공개 ViewState의 Loading·Empty·Error·Blocked·성공 상태를 제공한다. mutation CTA는 `WorldSession.execute`만 호출하고 UI가 authoritative 데이터를 직접 수정하지 않으며, 중복 탭과 active AdvanceTime의 `AdvanceInProgress`를 명확히 표시한다. P3 `SavePort`가 조립되지 않은 기본 launcher는 `Blocked`만 표시하며 성공 receipt·publication·Summary를 만들지 않는다. session-backed entry는 test injection seam으로만 제공한다. |
 | 대상 모듈 | :app (UI 조립) → :core:simulation API. core에는 Compose/ViewState를 두지 않는다. |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, command_receipt, world_event, rng_state; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -990,12 +994,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-001, P2-IT-001 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | F001 Batch 최종 승인 완료. 기본 launcher SavePort 경계를 수정하고 최신 guard·JVM·Android 증거와 manifest를 `C:/ai/mud/build/qa-evidence/p2-f001-guard-20260917-1622/`에 보존했다. 사용자 최종 승인으로 DONE 처리했다. Room/WAL/reopen/process-kill은 Phase3 범위로 미검증이다. |
 
 <a id="p2-task-005"></a>
 ### P2-TASK-005 — 단일 작성자 명령 처리 — Test·리뷰
@@ -1014,12 +1018,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | F001 Batch 최종 승인 완료. 공식 F001 JVM/Android XML과 architecture guard 결과는 `C:/ai/mud/build/qa-evidence/p2-f001-guard-20260917-1622/`에 보존했다. 사용자 최종 승인으로 DONE 처리했다. Room/WAL/reopen/process-kill은 Phase3 범위로 미검증이다. |
 
 <a id="p2-task-006"></a>
 ### P2-TASK-006 — 게임 달력·잔여 밀리초·RNG 스트림 — 계약·Fixture
@@ -1038,12 +1042,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F002 XML과 APK·소스 해시 manifest를 immutable bundle `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/`에 보존; 고급개발자·QA·수석 기술 리뷰 승인 및 사용자 최종 승인 완료 |
 
 <a id="p2-task-007"></a>
 ### P2-TASK-007 — 게임 달력·잔여 밀리초·RNG 스트림 — 핵심 규칙
@@ -1062,12 +1066,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-002, P2-BT-002, P2-FT-002 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F002 XML과 APK·소스 해시 manifest를 immutable bundle `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/`에 보존; 고급개발자·QA·수석 기술 리뷰 승인 및 사용자 최종 승인 완료 |
 
 <a id="p2-task-008"></a>
 ### P2-TASK-008 — 게임 달력·잔여 밀리초·RNG 스트림 — 저장·연계
@@ -1086,12 +1090,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-002, P2-IT-002 |
 | 완료 조건 | outer command/WorldTimeTraversal 통합과 test-only SavePort에서 F002 직접 영속 0·RNG/clock 원자성 검증 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F002 XML과 APK·소스 해시 manifest를 immutable bundle `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/`에 보존; 고급개발자·QA·수석 기술 리뷰 승인 및 사용자 최종 승인 완료 |
 
 <a id="p2-task-009"></a>
 ### P2-TASK-009 — 게임 달력·잔여 밀리초·RNG 스트림 — outer 호출 경로
@@ -1110,12 +1114,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | REVIEW |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-002, P2-IT-002 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F001 XML은 `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/`에 보존; 고급개발자·QA·수석 기술 재리뷰 대기 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정; 공식 F002 XML과 APK·소스 해시 manifest를 immutable bundle `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/`에 보존; 고급개발자·QA·수석 기술 리뷰 승인 및 사용자 최종 승인 완료 |
 
 <a id="p2-task-010"></a>
 ### P2-TASK-010 — 게임 달력·잔여 밀리초·RNG 스트림 — Test·리뷰
@@ -1139,7 +1143,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정 → GameTimeRngTest 8/8 PASS(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c`)·WorldEngineTest 28/28 PASS(2026-09-16T06:05:45.742Z, SHA-256 `09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d`)·WorldSessionTest 23/23 PASS(2026-09-16T06:05:46.235Z, SHA-256 `d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc`)·Phase2ConformanceTest 2/2 PASS(2026-09-16T06:05:45.331Z, SHA-256 `de147a47016d875cba8bd76bbd9b41fab8e0cbddd6e829ea2d880756f94fff0c`) → Android full suite 16/16 PASS(2026-09-16T06:09:03Z, SHA-256 `b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242`) → 고급개발자·QA·수석 기술 재리뷰 대기; 사용자 최종 승인 전 |
+| 리뷰/PR/증거 | 구현 R0 `4e3e9fe9b8739088cc38eb70420b3001344f47f3` 및 공유 스케줄링 의존성 R2 `651bcf702a67beb9bf3f66467171e9903a217579`으로 provenance 고정 → GameTimeRngTest 8/8 PASS(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c`)·WorldEngineTest 28/28 PASS(2026-09-16T06:05:45.742Z, SHA-256 `09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d`)·WorldSessionTest 23/23 PASS(2026-09-16T06:05:46.235Z, SHA-256 `d40b4d311ac2582d90f83e7f3a4773dc2203357d44022dfe8a3713a7b4963acc`)·Phase2ConformanceTest 2/2 PASS(2026-09-16T06:05:45.331Z, SHA-256 `de147a47016d875cba8bd76bbd9b41fab8e0cbddd6e829ea2d880756f94fff0c`) → Android full suite 16/16 PASS(2026-09-16T06:09:03Z, SHA-256 `b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242`) → 고급개발자·QA·수석 기술 재리뷰 승인 및 사용자 최종 승인 완료 |
 
 <a id="p2-task-011"></a>
 ### P2-TASK-011 — 예약·점유·자원 선점 — 계약·Fixture
@@ -1158,12 +1162,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-003, P2-BT-003, P2-FT-003, P2-CT-003, P2-IT-003 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` 및 `manifest.sha256`(manifest SHA-256 `e3001ed62f772cf4badca8a85025d1f41bf840f76e2f971f4dae242ad756e4df`); 공식 P2-UT/BT/FT/CT/IT-003 증거 확인 및 사용자 승인 완료 |
 
 <a id="p2-task-012"></a>
 ### P2-TASK-012 — 예약·점유·자원 선점 — 핵심 규칙
@@ -1182,12 +1186,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-003, P2-BT-003, P2-FT-003 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-013"></a>
 ### P2-TASK-013 — 예약·점유·자원 선점 — 저장·연계
@@ -1206,12 +1210,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-003, P2-IT-003 |
 | 완료 조건 | test-only SavePort에서 schedule/claim/receipt 원자성과 codec·FK·취소 경계 검증; Room/migration은 P3 Gate |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/실행/상태 | Phase Product QA PASS; 사용자 최종 승인 완료; Room/migration은 P3 Gate |
 
 <a id="p2-task-014"></a>
 ### P2-TASK-014 — 예약·점유·자원 선점 — UI·호출 경로
@@ -1230,12 +1234,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-003, P2-IT-003 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/실행/상태 | Phase Product QA PASS; 사용자 최종 승인 완료 |
 
 <a id="p2-task-015"></a>
 ### P2-TASK-015 — 예약·점유·자원 선점 — Test·리뷰
@@ -1254,12 +1258,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-003, P2-BT-003, P2-FT-003, P2-CT-003, P2-IT-003 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/실행/상태 | Phase Product QA PASS; 사용자 최종 승인 완료 |
 
 <a id="p2-task-016"></a>
 ### P2-TASK-016 — 이벤트 경계 시간진행·자동중단 — 계약·Fixture
@@ -1278,12 +1282,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` 및 `manifest.sha256`(manifest SHA-256 `e3001ed62f772cf4badca8a85025d1f41bf840f76e2f971f4dae242ad756e4df`); 공식 P2-UT/BT/FT/CT/IT-004 증거 확인 및 사용자 승인 완료 |
 
 <a id="p2-task-017"></a>
 ### P2-TASK-017 — 이벤트 경계 시간진행·자동중단 — 핵심 규칙
@@ -1302,12 +1306,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-004, P2-BT-004, P2-FT-004 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Core WorldEngine/WorldTimeTraversal 검증 및 Android Phase2 UI 검증 PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-018"></a>
 ### P2-TASK-018 — 이벤트 경계 시간진행·자동중단 — 저장·연계
@@ -1326,12 +1330,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-004, P2-IT-004 |
 | 완료 조건 | test-only SavePort conformance·codec/cursor/원자성 검증 및 P3 Room 재실행 manifest 완료 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Core WorldEngine/WorldSession/SavePort test-only 연계 검증 PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-019"></a>
 ### P2-TASK-019 — 이벤트 경계 시간진행·자동중단 — UI·호출 경로
@@ -1350,12 +1354,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-004, P2-IT-004 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-020"></a>
 ### P2-TASK-020 — 이벤트 경계 시간진행·자동중단 — Test·리뷰
@@ -1374,12 +1378,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-021"></a>
 ### P2-TASK-021 — 세션·생명주기·작업 종료 — 계약·Fixture
@@ -1398,12 +1402,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
-| Test | P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004 |
+| Test | P2-UT-005, P2-BT-005, P2-FT-005, P2-CT-005, P2-IT-005 |
 | 완료 조건 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` 및 `manifest.sha256`(manifest SHA-256 `e3001ed62f772cf4badca8a85025d1f41bf840f76e2f971f4dae242ad756e4df`); 공식 P2-UT/BT/FT/CT/IT-005 증거 확인 및 사용자 승인 완료 |
 
 <a id="p2-task-022"></a>
 ### P2-TASK-022 — 세션·생명주기·작업 종료 — 핵심 규칙
@@ -1422,12 +1426,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 1.3/2.0/3.4 / 2.12; 초기 계획 가정 |
 | Test | P2-UT-005, P2-BT-005, P2-FT-005 |
 | 완료 조건 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-023"></a>
 ### P2-TASK-023 — 세션·생명주기·작업 종료 — 저장·연계
@@ -1446,12 +1450,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-CT-005, P2-IT-005 |
 | 완료 조건 | runtime lifecycle과 in-memory SavePort에서 direct lifecycle persistence 0·active command safe-boundary terminal 검증 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-024"></a>
 ### P2-TASK-024 — 세션·생명주기·작업 종료 — UI·호출 경로
@@ -1470,12 +1474,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-CT-005, P2-IT-005 |
 | 완료 조건 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-025"></a>
 ### P2-TASK-025 — 세션·생명주기·작업 종료 — Test·리뷰
@@ -1494,12 +1498,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
 | Test | P2-UT-005, P2-BT-005, P2-FT-005, P2-CT-005, P2-IT-005 |
 | 완료 조건 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 리뷰/PR/증거 | Phase Product QA PASS; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 <a id="p2-task-026"></a>
 ### P2-TASK-026 — Phase 2 통합 검증·인계 Gate
@@ -1508,7 +1512,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P2-TASK-026 |
 | 목적 | Gate 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | crossed boundary 누락·중복 0, sealed atomic/long ScheduledAction, RNG, canonical resource/singleton 의미 invariant, Risk preview, BoundarySource conformance, payload cap과 `SavePortConformanceSuite`를 검증한다. actual Room/reopen/WAL/process-kill/DB CHECK는 P3 Gate에 인계한다. |
+| 상세 구현 내용 | Phase 2 필수는 crossed boundary 누락·중복 0, sealed atomic/long ScheduledAction, RNG, canonical resource/singleton 의미 invariant, Risk preview, 관찰 가능한 BoundarySource conformance, payload cap, concurrency/FIFO/safe-boundary, deterministic/cap/overflow, test-only `SavePortConformanceSuite`와 단방향 인계 매핑이다. latency/P95·MIN/STD·DB bytes는 Release/NFR로, 24시간 offline·process-kill/onStop·Room/WAL/reopen·production SavePort/DB CHECK는 Phase 3 또는 Release QA로 이관하며 Phase 2 PASS로 해석하지 않는다. |
 | 대상 모듈 | :core:simulation / :core:common |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | 직접 DB 변경 없음; 파일/계약/검증 산출물; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1518,12 +1522,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 병렬 가능 | 선행 Task 완료 후 다른 feature 의 계약/알고리즘/adapter/UI PR 과 병렬 진행할 수 있다. 공통 DDL/version catalog 충돌은 직렬 리뷰로 조정한다. |
 | 구현 주의사항 | 원문의 원자성 규칙, 불변식, 비공개 정보를 보존한다. 기존 source SQL 이 제공되면 재사용을 우선한다. 미구현 후속 port 가 성공한 것처럼 응답하지 않는다. |
 | 설계 결정 의존 | C15, C27, C28 |
-| 현재 차단/상태 | NOT_STARTED |
+| 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
 | Test | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001, P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002, P2-UT-003, P2-BT-003, P2-FT-003, P2-CT-003, P2-IT-003, P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004, P2-UT-005, P2-BT-005, P2-FT-005, P2-CT-005, P2-IT-005, P2-RT-001, P2-CN-001, P2-REC-001, P2-PT-001, P2-OP-001, P2-ET-001, P2-IT-006 |
-| 완료 조건 | 필수 Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0 |
-| 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
+| 완료 조건 | Phase 2 필수 Test PASS·Gate 승인·P3/Release 이관 항목과 DTO/codec/fixture 매핑·미해결중대결함0. latency/NFR와 Room/WAL/reopen/process-kill/production SavePort는 본 완료조건에서 제외하고 NOT_VERIFIED/이관으로 유지 |
+| 리뷰/PR/증거 | Phase Product QA PASS; JVM 114/114 및 기존 Android 47/47 결과 확인; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 
 ## 10. Phase 내부 Task Dependency
@@ -1616,7 +1620,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | explicit maxMinute/maxBoundaryCount | P2-PT-001 | wall-clock 무관 LIMIT_REACHED와 재개 후 동일 결과 |
 | admission 직후/첫 boundary 전 fault | P2-FT-004, P2-REC-001 | durable segment 0 복구, same-id command 유실/중복 0 |
 | duplicate/wrong-time/over-cap provider 및 registry version 변경 | P2-BT-004, P2-CT-004 | partial mutation 0, exact binding 재개 또는 typed SYSTEM_HALT |
-| BoundarySource 공통 오용 | P2-CT-004, P2-IT-004 | reusable conformance suite가 past/current·recursive·duplicate·unstable·RNG·codec·byte cap 위반을 모두 검출 |
+| BoundarySource 공통 오용 | P2-CT-004, P2-IT-004 | Phase 2 reusable conformance suite는 past/current·recursive·duplicate·unstable·codec·byte cap 및 정렬/키 위반을 검출한다. hidden RNG 소비·side effect·semantic payload decode는 현재 관찰 범위 밖이며 Release/구현 품질 보강 항목이다. |
 | world_state/resource identity DB 방어 | P2-BT-001, P2-IT-003, P3-IT-001 | P2 의미 conformance, P3 SQLite/Room에서 singleton·canonical tuple·CHECK 위반 INSERT 실패 |
 | pending payload byte cap | P2-BT-004, P2-REC-001 | candidate 65,536 bytes/aggregate 1,048,576 bytes 상한, 초과 partial commit 0, corrupt reload SYSTEM_HALT |
 
@@ -1728,7 +1732,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-UT-002, algorithm/seed/vector/counter만 기록하며 sourceCommandId는 없다. |
 | 상태 확인 | same input + same clock/RNG state = same ClockDelta + RNG result + drawCounter |
 | 성공 기준 | 입력 불변·반환값/Golden/counter 동치·F002 전용 SavePort/receipt/event 0건 |
-| 실행 상태/실제 결과/증거 | PASS / 10초×6과 60초 ClockDelta 동치·PCG golden vector 6개·drawCounter 6 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
+| 실행 상태/실제 결과/증거 | PASS / 10초×6과 60초 ClockDelta 동치·PCG golden vector 6개·drawCounter 6 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-bt-002"></a>
 ### P2-BT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / 경계·거절
@@ -1746,7 +1750,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, worldSeed/streamKey/raw bytes/initState/initSeq를 evidence로 기록. |
 | 상태 확인 | unsigned wrap/rotate·calendar boundary·seed byte order가 고정됨 |
 | 성공 기준 | clock/seed codec/Golden이 일치하고 F002 전용 persistence 0건 |
-| 실행 상태/실제 결과/증거 | PASS / calendar rollover·raw big-endian world seed bytes·initState/initSeq·seeded output golden 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
+| 실행 상태/실제 결과/증거 | PASS / calendar rollover·raw big-endian world seed bytes·initState/initSeq·seeded output golden 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-ft-002"></a>
 ### P2-FT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / 실패·복구 방어
@@ -1764,7 +1768,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-FT-002, algorithm/key codec failure만 기록한다. |
 | 상태 확인 | 복구 중단; 다른 난수기로 자동 대체 금지 |
 | 성공 기준 | automatic fallback 0, input/persistence 불변, typed safe halt |
-| 실행 상태/실제 결과/증거 | PASS / unsupported algorithm·counter overflow typed rejection, 반복 호출 동일 rejection 및 input 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
+| 실행 상태/실제 결과/증거 | PASS / unsupported algorithm·counter overflow typed rejection, 반복 호출 동일 rejection 및 input 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-ct-002"></a>
 ### P2-CT-002 — 게임 달력·잔여 밀리초·RNG 스트림 / 컴포넌트 계약·재호출
@@ -1782,7 +1786,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-CT-002, streamKey별 draw counter와 result hash 기록. |
 | 상태 확인 | idempotency/commandId/payloadHash는 F002에 적용하지 않음 |
 | 성공 기준 | leaf stream isolation과 pure repeatability가 확인되고 F002 direct persistence 0건 |
-| 실행 상태/실제 결과/증거 | PASS / canonical leaf key·hit draw 5회 repeatability·crit/loot/NPC 결과와 counter 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
+| 실행 상태/실제 결과/증거 | PASS / canonical leaf key·hit draw 5회 repeatability·crit/loot/NPC 결과와 counter 불변 확인; suite 8건, failures/errors/skipped 0 / `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/GameTimeRngTest.xml`(2026-09-16T06:05:45.225Z, SHA-256 `0a1fac61d3f590b064a53d6e059c292f2cc6ae081b48354f016e77eabb5b553c) |
 
 <a id="p2-it-002"></a>
 ### P2-IT-002 — 게임 달력·RNG / 순수·outer traversal 통합
@@ -1800,7 +1804,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-002, testId=P2-IT-002, JVM/Android vector evidence와 outer sourceCommandId를 분리 기록. |
 | 상태 확인 | kernel은 parent DomainDelta 내부 계산이며 앱/헤드리스 모두 같은 golden을 얻음 |
 | 성공 기준 | platform byte-for-byte Golden·outer receipt 1·F002 direct receipt/event 0; Room round-trip은 P3 Gate |
-| 실행 상태/실제 결과/증거 | PASS / WorldSession.execute의 outer COMBAT command에서 `worldSeed=0123456789abcdef`, `startClock=1439`, `endClock=1441`을 사용해 crossed boundary 1440·1441 누락 0, outer receipt 1, F002 direct receipt/event 0, JVM·Android RNG/output golden 동치; JVM suite 28건·Android suite 16건 모두 failures/errors/skipped 0이며 공식 testcase는 각 1건 PASS; QA 독립 재검증 전; Room round-trip은 P3 미검증 / `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/WorldEngineTest.xml`(2026-09-16T06:05:45.742Z, SHA-256 `09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d`), `docs/검증증거/phase2-batch1/651bcf702a67beb9bf3f66467171e9903a217579/AndroidTest-emulator-5554-16.xml`(2026-09-16T06:09:03Z, SHA-256 `b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242`) |
+| 실행 상태/실제 결과/증거 | PASS / WorldSession.execute의 outer COMBAT command에서 `worldSeed=0123456789abcdef`, `startClock=1439`, `endClock=1441`을 사용해 crossed boundary 1440·1441 누락 0, outer receipt 1, F002 direct receipt/event 0, JVM·Android RNG/output golden 동치; JVM suite 28건·Android suite 16건 모두 failures/errors/skipped 0이며 공식 testcase는 각 1건 PASS; QA 독립 감사 PASS; Room round-trip은 P3 미검증 / `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/WorldEngineTest.xml`(2026-09-16T06:05:45.742Z, SHA-256 `09fcb9a4004d0bf3094b966bc95c8c4bf26b36062bd82e34fd0080c1e552785d`), `docs/검증증거/phase2-f002/651bcf702a67beb9bf3f66467171e9903a217579-immutable-20260917/AndroidTest-emulator-5554-16.xml`(2026-09-16T06:09:03Z, SHA-256 `b7b0bdf0ccacc6c1d30ab22e45cacfc23f1c641b075b7182604e4e4c8b3ab242`) |
 
 <a id="p2-ut-003"></a>
 ### P2-UT-003 — 예약·점유·자원 선점 / 정상 규칙
@@ -1818,7 +1822,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-UT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | `[10:00,11:00)`와 `[11:00,12:00)`는 non-conflict이며 payload codec은 v1로 고정 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-bt-003"></a>
 ### P2-BT-003 — 예약·점유·자원 선점 / 경계·거절
@@ -1836,7 +1840,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-BT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | `heldTotal + request > owned`이면 총량 기준으로 거절 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ft-003"></a>
 ### P2-FT-003 — 예약·점유·자원 선점 / 실패·복구 방어
@@ -1854,7 +1858,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-FT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | claim별 policy와 ActionCancellationPolicy 결과가 일치하고 `available=owned-held` 유지 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ct-003"></a>
 ### P2-CT-003 — 예약·점유·자원 선점 / 컴포넌트 계약·재호출
@@ -1872,7 +1876,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-CT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | idempotency는 ScheduleService outer command에만 적용되고 payload codec 자체에 적용하지 않음 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-it-003"></a>
 ### P2-IT-003 — 예약·점유·자원 선점 / in-memory conformance
@@ -1890,7 +1894,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-003, testId=P2-IT-003, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | Save/Load 이후 over-reservation·double consume·wrong refund 0 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ut-004"></a>
 ### P2-UT-004 — 이벤트 경계 시간진행·자동중단 / 정상 규칙
@@ -1908,7 +1912,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-UT-004, BoundaryKey.v1/order version/goal codec/stream counter 기록. |
 | 상태 확인 | eventSequence는 결과값이며 candidate sort input이 아님 |
 | 성공 기준 | canonical goal/order·provider 순열 독립성·동일 deterministic outcome 확인 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-bt-004"></a>
 ### P2-BT-004 — 이벤트 경계 시간진행·자동중단 / 경계·거절
@@ -1926,7 +1930,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-BT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | goal codec/condition은 boundary state change에서만 평가하며 매분 scan하지 않음 |
 | 성공 기준 | admission/result→receipt mapping 일치, trust boundary별 reject/halt 구분, partial action/event/RNG draw 0 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ft-004"></a>
 ### P2-FT-004 — 이벤트 경계 시간진행·자동중단 / 실패·복구 방어
@@ -1944,7 +1948,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-FT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | interrupted terminal과 crash-recoverable RUNNING을 혼동하지 않음 |
 | 성공 기준 | durable cursor/goal exact recovery, duplicate boundary/event/RNG draw 0 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ct-004"></a>
 ### P2-CT-004 — 이벤트 경계 시간진행·자동중단 / 컴포넌트 계약·재호출
@@ -1962,7 +1966,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-CT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | continuation은 new `(epoch,commandId)`, predecessor당 UNIQUE child, old receipt/pending suffix는 terminal 감사 근거, eventSequence는 outcome counter |
 | 성공 기준 | terminal receipt 재활성화 0, continuation exactly-once lineage/remaining goal/order 동치 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-it-004"></a>
 ### P2-IT-004 — WorldTimeTraversal / boundary batch conformance
@@ -1980,7 +1984,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-004, testId=P2-IT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 과거 event sourceVersion을 final receipt version으로 rewrite하지 않음 |
 | 성공 기준 | caller-supplied current snapshot/source 0, sourceVersion semantics·goal/cursor/binding reload·continuous/bounded equivalence 확인 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ut-005"></a>
 ### P2-UT-005 — 세션·생명주기·작업 종료 / 정상 규칙
@@ -1998,7 +2002,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-005, testId=P2-UT-005, lifecycle state/epoch/job count만 기록한다. |
 | 상태 확인 | 현실시간 catchup 0, lifecycle은 gameplay command가 아님 |
 | 성공 기준 | runtime transition/drain/join 정상, direct persistence 0, reopen state 동치 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-bt-005"></a>
 ### P2-BT-005 — 세션·생명주기·작업 종료 / 경계·거절
@@ -2016,7 +2020,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-005, testId=P2-BT-005, old/new epoch과 discard reason만 기록. |
 | 상태 확인 | epoch A 응답을 버려 B 에 쓰기0 |
 | 성공 기준 | stale epoch write/publish 0과 lifecycle direct persistence 0 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ft-005"></a>
 ### P2-FT-005 — 세션·생명주기·작업 종료 / 실패·복구 방어
@@ -2034,7 +2038,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-005, testId=P2-FT-005, control request와 active command correlation을 분리 기록. |
 | 상태 확인 | callback 미실행도 마지막 committed state만 복원 |
 | 성공 기준 | partial boundary/double apply/F005 direct receipt·event 0 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-ct-005"></a>
 ### P2-CT-005 — 세션·생명주기·작업 종료 / 컴포넌트 계약·재호출
@@ -2052,7 +2056,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-005, testId=P2-CT-005, lifecycle state 전이만 기록. |
 | 상태 확인 | gameplay command replay surface 0 |
 | 성공 기준 | control idempotence·direct persistence 0·stale publish 0 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-it-005"></a>
 ### P2-IT-005 — 세션·생명주기 / runtime-in-memory 경계
@@ -2070,7 +2074,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=FUNC-P2-005, testId=P2-IT-005, runtime close/reopen evidence와 outer command를 분리 기록. |
 | 상태 확인 | lifecycle은 persistence writer가 아님 |
 | 성공 기준 | in-memory snapshot 기반 새 session 복원과 direct lifecycle persistence 0 확인; 실제 DB reopen은 P3 Gate |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-rt-001"></a>
 ### P2-RT-001 — 기존 정상 흐름 보존
@@ -2088,7 +2092,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=PHASE-2, testId=P2-RT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 잔액60·receipt 1 개·stateVersion 1 회 증가; 선행의권위 hash/금액/아이템/시간/기존오류동작동일 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / Phase Product QA PASS; fresh 110-test XML, failures/errors/skipped=0 / `docs/검증증거/phase2-test-id-20260918-qa-022748z/manifest.json` |
 
 <a id="p2-cn-001"></a>
 ### P2-CN-001 — 동시 요청·세션 격리
@@ -2100,13 +2104,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
 | 입력값 | active AdvanceTime, UI gameplay command 10개, 이미 수락된 scheduler command, PAUSE/CANCEL_ADVANCE, 이전 epoch 지연 응답 |
-| 수행 절차 | ① UI command의 즉시 `AdvanceInProgress` 확인 ② `PAUSE_REQUESTED`/`CANCEL_REQUESTED` UI feedback 지연 측정 ③ accepted scheduler FIFO 확인 ④ coroutine delay/CPU speed 변형 ⑤ 다음 deterministic safe boundary의 terminal 반영 지연 측정 |
-| 예상 결과 | UI gameplay mutation 0, accepted scheduler는 terminal 뒤 FIFO, PAUSE는 INTERRUPTED·CANCEL_ADVANCE는 CANCELLED/COMMITTED, control만 safe boundary. UI feedback P95≤100ms, safe-boundary terminal 반영은 MIN≤500ms·STD≤250ms이며 초과는 성능 실패로만 기록하고 stateHash/time/RNG/actions/event order는 실행 환경과 무관 |
+| 수행 절차 | ① UI command의 즉시 `AdvanceInProgress` 확인 ② accepted scheduler FIFO와 gameplay interleave 0 확인 ③ `PAUSE_REQUESTED`/`CANCEL_REQUESTED`가 다음 deterministic safe boundary에서 terminal 처리되는지 확인 ④ 이전 epoch 응답의 write/publish 0 및 결과 결정론 확인. latency 수치는 Release/NFR에서 별도 측정 |
+| 예상 결과 | Phase 2에서는 UI gameplay mutation 0, accepted scheduler terminal 뒤 FIFO, PAUSE는 INTERRUPTED·CANCEL_ADVANCE는 CANCELLED/COMMITTED, control만 safe boundary, stale write/publish 0 및 stateHash/time/RNG/actions/event order 결정론을 확인한다. UI feedback P95와 safe-boundary MIN/STD latency는 Release/NFR 측정으로 이관하며 Phase 2 Gate 판정에 포함하지 않는다 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-CN-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | wall-clock/dispatcher completion은 command·boundary·event 정렬키가 아님 |
 | 성공 기준 | gameplay interleave 0, control safe-boundary 처리, stale write/publish 0, deterministic terminal result |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / fresh P2-CN-001 JUnit testcase 1회, WorldSession FIFO와 PAUSE/CANCEL safe-boundary·receipt/event 중복 0 확인; latency Release/NFR 이관 / `core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldSessionTest.xml` |
 
 <a id="p2-rec-001"></a>
 ### P2-REC-001 — 종료 후 복구
@@ -2124,7 +2128,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 로그 확인 | feature=PHASE-2, testId=P2-REC-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | RUNNING은 same-id crash recovery만, INTERRUPTED는 new continuation만 허용 |
 | 성공 기준 | 4 cutpoint 각각에 durable complete-or-previous state와 full persistent oracle evidence |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 실행 상태/실제 결과/증거 | PASS / fresh P2-REC-001 JUnit testcase 1회, SavePortConformanceSuite 4 cutpoint와 restart image/state/RNG/event/receipt oracle PASS; Room/WAL/process-kill P3 이관 / `core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.Phase2ConformanceTest.xml` |
 
 <a id="p2-pt-001"></a>
 ### P2-PT-001 — 규모·호출량·상한
@@ -2136,13 +2140,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
 | 입력값 | mailbox 64+1, 30일/10,000 boundary, continuous와 one-batch-per-segment, 65,536-byte candidate/1,048,576-byte pending cap 경계값, explicit small limits, PCG golden |
-| 수행 절차 | ① capacity/AdvanceInProgress 확인 ② in-memory compute/commit 비용을 분리 측정 ③ 두 실행 비교 ④ count/minute/byte limit 확인 ⑤ P3 Room conformance에서 transaction/파일 증가·MIN/STD latency 재측정 |
-| 예상 결과 | bounded queue, no interleave, committed key 재실행 0, 동일 stateHash/time/RNG/actions/events, deterministic LIMIT_REACHED. byte cap 및 NFR 충족 여부가 별도 수치 증거로 남음 |
+| 수행 절차 | ① capacity/AdvanceInProgress와 queue overflow 확인 ② continuous/segmented 두 실행의 stateHash/time/RNG/actions/events 비교 ③ count/minute/byte limit 및 overflow 전후 snapshot 확인 ④ LIMIT_REACHED 재개 결과 비교. 성능·파일 증가·latency는 Release/NFR·P3에서 별도 측정 |
+| 예상 결과 | Phase 2에서는 bounded queue, no interleave, committed key 재실행 0, 동일 stateHash/time/RNG/actions/events, deterministic LIMIT_REACHED와 candidate/pending byte cap overflow의 partial mutation 0을 확인한다. 성능·latency·DB bytes/NFR 수치는 Release/NFR 또는 Phase 3에서 측정하며 Phase 2 Gate 판정에 포함하지 않는다 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | segment_no 단조 증가, nextEventSequence는 output counter, sourceVersion은 각 생성 segment version, 8ms는 authority input 0 |
-| 성공 기준 | deterministic equivalence와 queue/latency/DB bytes evidence. sourceVersion은 각 event의 생성 commit과 separately 검증 |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 성공 기준 | deterministic equivalence와 queue/cap/overflow evidence. sourceVersion은 각 event의 생성 commit과 separately 검증하며 latency/DB bytes는 Phase 2 필수가 아니다 |
+| 실행 상태/실제 결과/증거 | PASS / fresh P2-PT-001 JUnit testcase 1회, 30일·10,000 boundary 결정론과 count/byte cap overflow partial mutation 0 PASS; 성능·DB bytes·NFR 이관 / `core/simulation/build/test-results/test/TEST-com.imsi.mud.simulation.WorldTimeTraversalTest.xml` |
 
 <a id="p2-op-001"></a>
 ### P2-OP-001 — 오프라인 운영 시나리오
@@ -2153,14 +2157,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | OP |
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 앱 종료 후 현실24 시간 경과 후 재실행; 네트워크차단·앱재실행/도구재실행 |
+| 입력값 | [이관] 앱 종료 후 현실24 시간 경과 후 재실행; 네트워크차단·앱재실행/도구재실행 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | worldTime·치료 잔여시간 동일; 필수 네트워크요청0·게임현실시간 catchup0 |
+| 예상 결과 | Phase 2 runtime Gate 대상이 아니다. 24시간 offline/reopen 및 네트워크·현실시간 catchup 검증은 Phase 3 Room/reopen 또는 Release QA에서 수행하며 현재는 NOT_RUN/NOT_VERIFIED로 유지한다 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-OP-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | worldTime·치료 잔여시간 동일; 필수 네트워크요청0·게임현실시간 catchup0 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 상태 확인 | Phase 2에서는 실행하지 않음; 24시간 offline/reopen 및 real-time catchup은 Phase 3/Release 상태로 이관 |
+| 성공 기준 | Phase 2 PASS 조건이 아니며 NOT_RUN/NOT_VERIFIED와 이관 대상이 일치한다. |
+| 실행 상태/실제 결과/증거 | NOT_RUN / Phase 3 또는 Release QA로 이관; Phase 2 runtime Gate에서 실행하지 않음 / 없음 |
 
 <a id="p2-et-001"></a>
 ### P2-ET-001 — 오류 분류·장애 전파
@@ -2171,14 +2175,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | ET |
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 프로세스 즉시 kill 로 onStop 미실행 |
+| 입력값 | [이관] 프로세스 즉시 kill 로 onStop 미실행 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | 마지막 committed 상태만 복원; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 |
+| 예상 결과 | Phase 2 runtime Gate 대상이 아니다. process-kill/onStop 복구와 장애 전파는 Phase 3 recovery 또는 Release QA에서 수행하며 현재는 NOT_RUN/NOT_VERIFIED로 유지한다 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-ET-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 마지막 committed 상태만 복원; 권위 상태오류는안전정지,이미지/파생리포트오류는격리·로그에오류범위명시 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 상태 확인 | Phase 2에서는 실행하지 않음; process-kill/onStop 복구와 오류 전파는 Phase 3/Release 상태로 이관 |
+| 성공 기준 | Phase 2 PASS 조건이 아니며 NOT_RUN/NOT_VERIFIED와 이관 대상이 일치한다. |
+| 실행 상태/실제 결과/증거 | NOT_RUN / Phase 3 또는 Release QA로 이관; Phase 2 runtime Gate에서 실행하지 않음 / 없음 |
 
 <a id="p2-it-006"></a>
 ### P2-IT-006 — Phase 통합 인계
@@ -2189,14 +2193,14 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | PHASE-2 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 동일 commandId 로 금화40 지출을 2 회 요청, 잔액100→앱 종료 후 현실24 시간 경과 후 재실행 |
+| 입력값 | P2 contract/test-double artifact와 P3 handoff 항목(Room/WAL/reopen/process-kill/production SavePort) |
 | 수행 절차 | Phase 2 Gate의 SavePortConformanceSuite, traversal/boundary/schedule/RNG 계약 artifact와 P3 재실행 manifest를 대조한다. Room adapter 실행을 Phase 2 완료조건으로 요구하지 않는다. |
-| 예상 결과 | P2 contract/test-double suite 완료 및 P3 actual Room/WAL/reopen/process-kill 재검증 항목이 단방향 인계됨 |
+| 예상 결과 | Phase 2 contract/test-double suite와 관리 매핑을 확인하고, Room/WAL/reopen/process-kill/production SavePort는 PASS로 해석하지 않고 Phase 3 단방향 handoff/NOT_VERIFIED로 남긴다 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-2, testId=P2-IT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 잔액60·receipt 1 개·stateVersion 1 회 증가 및 worldTime·치료 잔여시간 동일; 선행 port/DTO/version 인계완료 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
-| 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
+| 상태 확인 | Phase 2 contract/test-double 및 선행 port/DTO/version 매핑; Phase 3 persistence 실행 없음 |
+| 성공 기준 | P2 결과와 P3/Release 이관 목록이 일치하고 미실행 항목이 PASS로 승격되지 않는다. |
+| 실행 상태/실제 결과/증거 | NOT_RUN / 관리 인계 전용 항목; runtime Room/reopen/process-kill 미실행 / docs/관리데이터/tasks.json·tests.json |
 
 
 ## 12. Phase별 Regression Test

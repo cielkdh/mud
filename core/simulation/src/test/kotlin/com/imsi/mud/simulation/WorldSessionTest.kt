@@ -3,6 +3,7 @@ package com.imsi.mud.simulation
 import com.imsi.mud.content.ContentSnapshot
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
@@ -19,6 +20,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+private fun worldSessionTestMinute(value: Long): GameMinute = when (val checked = GameMinute.of(value)) {
+    is Checked.Value -> checked.value
+    is Checked.Rejected -> error(checked.error.toString())
+}
 
 class WorldSessionTest {
     @Test
@@ -119,24 +125,263 @@ class WorldSessionTest {
     }
 
     @Test
-    fun `lifecycle pause resume close is idempotent and does not persist directly`() = runBlocking {
+    fun `P2-UT-005 lifecycle pause resume close is idempotent and does not persist directly`() = runBlocking {
+        val savePort = RecordingSavePort()
+        val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined)
+
+        SavePortConformanceSuite.assertNoLifecyclePersistence(savePort) {
+            assertEquals(SessionLifecycle.PAUSED, session.pause().lifecycle)
+            assertTrue((session.execute(unsupportedEnvelope("paused", "phase")) as CommandResult.Rejected).error is DomainError.SessionClosed)
+            assertEquals(SessionLifecycle.OPEN, session.resume().lifecycle)
+            assertEquals(CloseResult(SessionEpoch(1), StateVersion(0), 0), session.close(CloseReason.APPLICATION_REQUEST))
+            assertEquals(SessionLifecycle.CLOSED, session.runtimeState.value.lifecycle)
+            assertEquals(SessionLifecycle.CLOSED, session.resume().lifecycle)
+        }
+    }
+
+    @Test
+    fun `P2-BT-005 stale epoch response is discarded without write or publication`() = runBlocking {
+        withTimeout(5_000) {
+            val owner = EpochOwnerFixture(SessionEpoch(1))
+            val delayedPort = DelayedEpochSavePort(owner, SessionEpoch(1))
+            val epochA = WorldSession(
+                SessionEpoch(1), delayedPort, this, ContentSnapshot.emptyForTest(), moneySnapshot(),
+                Dispatchers.Unconfined, testDeltaFactory()
+            )
+            val delayed = async(start = CoroutineStart.UNDISPATCHED) {
+                epochA.execute(mutationEnvelope("epoch-a-delayed", "aggregate-a", "a", rngState(7, 1)))
+            }
+            delayedPort.commitStarted.await()
+
+            owner.activate(SessionEpoch(2))
+            val epochBPort = RecordingSavePort()
+            val epochB = WorldSession(
+                SessionEpoch(2), epochBPort, this, ContentSnapshot.emptyForTest(), moneySnapshot(),
+                Dispatchers.Unconfined, testDeltaFactory()
+            )
+            assertAccepted(epochB.execute(mutationEnvelope(
+                "epoch-b-committed", "aggregate-b", "b", rngState(11, 1), sessionEpoch = SessionEpoch(2)
+            )), 1)
+            val publicationB = checkNotNull(epochB.publications.value)
+            val hashB = epochB.inMemoryStateHash()
+
+            delayedPort.releaseCommit.complete(Unit)
+            val stale = delayed.await() as CommandResult.Rejected
+            assertTrue(stale.error is DomainError.PersistenceFailure)
+            assertEquals(0, delayedPort.commitCount)
+            assertEquals(null, epochA.publications.value)
+            assertEquals(SessionEpoch(2), owner.activeEpoch)
+            assertEquals(StateVersion(1), epochBPort.stateVersion)
+            assertEquals(1, epochBPort.receiptCount)
+            assertEquals(publicationB, epochB.publications.value)
+            assertEquals(hashB, epochB.inMemoryStateHash())
+            epochA.close()
+            epochB.close()
+        }
+    }
+
+    @Test
+    fun `P2-IT-005 actual long advance accepts pause and cancel without duplicate receipt or events`() = runBlocking {
+        listOf(
+            AdvanceControl.PAUSE to TimeAdvanceResult.INTERRUPTED,
+            AdvanceControl.CANCEL_ADVANCE to TimeAdvanceResult.CANCELLED
+        ).forEach { (control, terminalStatus) ->
+            val source = SequentialAdvanceSource(200)
+            val initial = activeAdvanceSnapshot(source)
+            val port = ControlledAdvancePort(initial)
+            val session = WorldSession(
+                SessionEpoch(1),
+                port,
+                this,
+                ContentSnapshot.emptyForTest(),
+                initial,
+                WorldEngine(listOf(source), BoundaryEvaluator { snapshot, candidate ->
+                    BoundaryEvaluation(snapshot, listOf(candidate.eventDraft()))
+                }),
+                Dispatchers.Unconfined
+            )
+            val commandId = CommandId("actual-${control.name.lowercase()}")
+            val payload = AdvanceTimePayload(
+                TimeAdvanceGoal.UntilMinute(worldSessionTestMinute(200)),
+                ProgressionMode.FAST_FORWARD,
+                TimeTraversalLimits(worldSessionTestMinute(200), maxBoundaryCount = 200)
+            )
+            val execution = async(start = CoroutineStart.UNDISPATCHED) {
+                session.execute(CommandEnvelope.create(commandId, SessionEpoch(1), StateVersion(0), null, payload))
+            }
+
+            withTimeout(5_000) { port.firstSegmentEntered.await() }
+            assertEquals(commandId, session.runtimeState.value.activeAdvanceCommandId)
+            assertEquals(
+                ControlRequestResult.Accepted(commandId),
+                session.requestControl(ControlRequest(SessionEpoch(1), commandId, control, allowCommitDrain = true))
+            )
+
+            port.releaseFirstSegment.complete(Unit)
+            assertEquals(CommandResult.Accepted(1), execution.await())
+            val receipt = port.receipts.values.single()
+            assertEquals(terminalStatus, receipt.timeAdvanceState?.status)
+            val publication = checkNotNull(session.publications.value)
+            assertEquals(commandId, publication.sourceCommandId)
+            assertEquals(PublicTimeAdvanceTerminal(commandId, terminalStatus), publication.timeAdvanceTerminal)
+            assertEquals(1, port.receipts.size)
+            val events = port.committedEvents.flatten()
+            assertTrue(events.isNotEmpty())
+            assertEquals(events.size, events.map { it.eventId }.distinct().size)
+            assertTrue(events.all { it.sourceCommandId == commandId })
+            assertEquals(null, session.runtimeState.value.activeAdvanceCommandId)
+            session.close()
+        }
+
+        val source = SequentialAdvanceSource(200)
+        val initial = activeAdvanceSnapshot(source)
+        val port = ControlledAdvancePort(initial)
+        val session = WorldSession(
+            SessionEpoch(1), port, this, ContentSnapshot.emptyForTest(), initial,
+            WorldEngine(listOf(source), BoundaryEvaluator { snapshot, candidate ->
+                BoundaryEvaluation(snapshot, listOf(candidate.eventDraft()))
+            }), Dispatchers.Unconfined
+        )
+        val commandId = CommandId("actual-close")
+        val execution = async(start = CoroutineStart.UNDISPATCHED) {
+            session.execute(
+                CommandEnvelope.create(
+                    commandId, SessionEpoch(1), StateVersion(0), null,
+                    AdvanceTimePayload(
+                        TimeAdvanceGoal.UntilMinute(worldSessionTestMinute(200)),
+                        ProgressionMode.FAST_FORWARD,
+                        TimeTraversalLimits(worldSessionTestMinute(200), maxBoundaryCount = 200)
+                    )
+                )
+            )
+        }
+        withTimeout(5_000) { port.firstSegmentEntered.await() }
+        val close = async(start = CoroutineStart.UNDISPATCHED) { session.close(CloseReason.APPLICATION_REQUEST) }
+        assertFalse(close.isCompleted)
+        port.releaseFirstSegment.complete(Unit)
+        assertEquals(CommandResult.Accepted(1), execution.await())
+        assertEquals(TimeAdvanceResult.INTERRUPTED, port.receipts.values.single().timeAdvanceState?.status)
+        assertEquals(1, port.receipts.size)
+        assertEquals(0, close.await().outstandingJobs)
+        val committedHash = session.inMemoryStateHash()
+
+        val restored = WorldSession(
+            SessionEpoch(2), port, this, ContentSnapshot.emptyForTest(), port.restoredSnapshot(),
+            WorldEngine(listOf(source), BoundaryEvaluator { snapshot, candidate ->
+                BoundaryEvaluation(snapshot, listOf(candidate.eventDraft()))
+            }), Dispatchers.Unconfined
+        )
+        assertEquals(null, restored.runtimeState.value.activeAdvanceCommandId)
+        assertEquals(committedHash, restored.inMemoryStateHash())
+        restored.close()
+    }
+
+    @Test
+    fun `P2-CN-001 serializes gameplay FIFO and applies pause cancel only at a safe boundary`() = runBlocking {
+        withTimeout(5_000) {
+            val savePort = RecordingSavePort()
+            val dispatcher = PausedDispatcher()
+            val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), dispatcher)
+            val queued = (0 until 3).map { index ->
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    session.execute(unsupportedEnvelope("cn-$index", "cn-$index", expectedVersion = null))
+                }
+            }
+            dispatcher.runUntilIdle()
+            queued.forEachIndexed { index, result -> assertUnsupported(result.await(), index + 1L) }
+            assertEquals(listOf("cn-0", "cn-1", "cn-2"), savePort.commandIds)
+            val close = async(start = CoroutineStart.UNDISPATCHED) { session.close() }
+            dispatcher.runUntilIdle()
+            close.await()
+
+            listOf(
+                AdvanceControl.PAUSE to TimeAdvanceResult.INTERRUPTED,
+                AdvanceControl.CANCEL_ADVANCE to TimeAdvanceResult.CANCELLED
+            ).forEach { (control, terminalStatus) ->
+                val source = SequentialAdvanceSource(2)
+                val initial = activeAdvanceSnapshot(source)
+                val port = ControlledAdvancePort(initial)
+                val active = activeAdvanceSession(this, source, initial, port)
+                val commandId = CommandId("cn-${control.name.lowercase()}")
+                val execution = async(start = CoroutineStart.UNDISPATCHED) {
+                    active.execute(advanceEnvelope(commandId, SessionEpoch(1)))
+                }
+                port.firstSegmentEntered.await()
+                assertEquals(
+                    ControlRequestResult.Accepted(commandId),
+                    active.requestControl(ControlRequest(SessionEpoch(1), commandId, control, allowCommitDrain = true))
+                )
+                port.releaseFirstSegment.complete(Unit)
+                assertAccepted(execution.await(), 1)
+                assertEquals(terminalStatus, port.receipts.values.single().timeAdvanceState?.status)
+                assertEquals(commandId, checkNotNull(active.publications.value).sourceCommandId)
+                val events = port.committedEvents.flatten()
+                assertEquals(events.size, events.map { it.eventId }.distinct().size)
+                assertTrue(events.all { it.sourceCommandId == commandId })
+                assertEquals(1, port.receipts.size)
+                active.close()
+            }
+        }
+    }
+
+    @Test
+    fun `P2-CT-005 duplicate pause close and resume do not persist directly`() = runBlocking {
         val savePort = RecordingSavePort()
         val session = WorldSession(SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined)
 
         SavePortConformanceSuite.assertNoLifecyclePersistence(savePort) {
             assertEquals(SessionLifecycle.PAUSED, session.pause().lifecycle)
             assertEquals(SessionLifecycle.PAUSED, session.pause().lifecycle)
-            assertTrue((session.execute(unsupportedEnvelope("paused", "phase")) as CommandResult.Rejected).error is DomainError.SessionClosed)
             assertEquals(SessionLifecycle.OPEN, session.resume().lifecycle)
             assertEquals(SessionLifecycle.OPEN, session.resume().lifecycle)
-
-            val first = session.close(CloseReason.APPLICATION_REQUEST)
-            val second = session.close(CloseReason.PARENT_SCOPE)
-            assertEquals(CloseResult(SessionEpoch(1), StateVersion(0), 0), first)
-            assertEquals(first, second)
-            assertEquals(SessionLifecycle.CLOSED, session.runtimeState.value.lifecycle)
+            val firstClose = session.close(CloseReason.APPLICATION_REQUEST)
+            assertEquals(firstClose, session.close(CloseReason.PARENT_SCOPE))
             assertEquals(SessionLifecycle.CLOSED, session.resume().lifecycle)
         }
+    }
+
+    @Test
+    fun `writer lease contract waits for close drain and ignores stale or duplicate release`() = runBlocking {
+        val port = CloseBarrierSavePort()
+        lateinit var oldSession: WorldSession
+        val oldHandle = checkNotNull(ProcessWorldSessionCoordinator.acquireForTest {
+            WorldSession(
+                SessionEpoch(1), port, this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined, testDeltaFactory()
+            ).also { oldSession = it }
+        })
+        val before = oldSession.inMemoryStateHash()
+        val execution = async(start = CoroutineStart.UNDISPATCHED) {
+            oldHandle.execute(mutationEnvelope("p2-ct-005", "close-barrier", "before", rngState(42, 1)))
+        }
+
+        withTimeout(5_000) { port.commitStarted.await() }
+        val firstClose = async(start = CoroutineStart.UNDISPATCHED) { oldHandle.close(CloseReason.APPLICATION_REQUEST) }
+        val duplicateClose = async(start = CoroutineStart.UNDISPATCHED) { oldHandle.close(CloseReason.PARENT_SCOPE) }
+        assertFalse(firstClose.isCompleted)
+        assertFalse(duplicateClose.isCompleted)
+        assertEquals(null, ProcessWorldSessionCoordinator.acquireForTest { error("must not construct while close drains") })
+        assertEquals(1, port.commitCount)
+        assertEquals(before, oldSession.inMemoryStateHash())
+        assertEquals(null, oldSession.publications.value)
+
+        port.allowCommit.complete(Unit)
+        assertAccepted(execution.await(), 1)
+        val oldCloseResult = firstClose.await()
+        assertEquals(oldCloseResult, duplicateClose.await())
+
+        val currentHandle = checkNotNull(ProcessWorldSessionCoordinator.acquireForTest {
+            WorldSession(SessionEpoch(2), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined)
+        })
+        assertEquals(oldCloseResult, oldHandle.close(CloseReason.APPLICATION_REQUEST))
+        assertEquals(null, ProcessWorldSessionCoordinator.acquireForTest { error("stale close must not release current writer") })
+        val currentClose = currentHandle.close()
+        assertEquals(currentClose, currentHandle.close(CloseReason.PARENT_SCOPE))
+
+        val nextHandle = checkNotNull(ProcessWorldSessionCoordinator.acquireForTest {
+            WorldSession(SessionEpoch(3), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), Dispatchers.Unconfined)
+        })
+        nextHandle.close()
+        assertEquals(1, port.commitCount)
     }
 
     @Test
@@ -326,32 +571,57 @@ class WorldSessionTest {
     }
 
     @Test
-    fun `unresolved cancelled commit stops the session without changing in memory state`() = runBlocking {
+    fun `P2-FT-005 control and commit failure preserve the prior state`() = runBlocking {
         withTimeout(5_000) {
-            val session = WorldSession(
-                SessionEpoch(1),
-                CommitThenFailingReceiptLookupSavePort(),
-                this,
-                ContentSnapshot.emptyForTest(),
-                Dispatchers.Unconfined,
-                testDeltaFactory()
-            )
+            val source = SequentialAdvanceSource(2)
+            val initial = activeAdvanceSnapshot(source)
+            val faultPort = ControlledAdvancePort(initial, failFirstSegment = true)
+            val session = activeAdvanceSession(this, source, initial, faultPort)
             val before = session.inMemoryStateHash()
-
-            val cancellation = runCatching {
-                session.execute(mutationEnvelope("command-unresolved-commit", "aggregate-a", "a", rngState(42, 1)))
-            }.exceptionOrNull()
-
-            assertTrue(cancellation is CancellationException)
-            assertEquals(before, session.inMemoryStateHash())
-            assertTrue(
-                withTimeout(5_000) {
-                    runCatching {
-                        session.execute(unsupportedEnvelope("command-after-unresolved-commit", "phase-after"))
-                    }.exceptionOrNull() is CancellationException
-                }
+            val commandId = CommandId("advance-faulted-pause")
+            val execution = async(start = CoroutineStart.UNDISPATCHED) {
+                session.execute(advanceEnvelope(commandId, SessionEpoch(1)))
+            }
+            faultPort.firstSegmentEntered.await()
+            assertEquals(
+                ControlRequestResult.Accepted(commandId),
+                session.requestControl(ControlRequest(SessionEpoch(1), commandId, AdvanceControl.PAUSE, allowCommitDrain = true))
             )
-            session.close()
+            faultPort.releaseFirstSegment.complete(Unit)
+            assertTrue((execution.await() as CommandResult.Rejected).error is DomainError.PersistenceFailure)
+            assertEquals(before, session.inMemoryStateHash())
+            assertEquals(null, session.publications.value)
+            assertTrue(faultPort.receipts.isEmpty())
+            assertTrue(faultPort.committedEvents.isEmpty())
+            assertEquals(0, session.close(CloseReason.APPLICATION_REQUEST).outstandingJobs)
+
+            val restartPort = ControlledAdvancePort(faultPort.restoredSnapshot())
+            val restarted = activeAdvanceSession(this, source, restartPort.restoredSnapshot(), restartPort, SessionEpoch(2))
+            val retry = async(start = CoroutineStart.UNDISPATCHED) {
+                restarted.execute(advanceEnvelope(CommandId("advance-retry"), SessionEpoch(2)))
+            }
+            restartPort.firstSegmentEntered.await()
+            restartPort.releaseFirstSegment.complete(Unit)
+            assertAccepted(retry.await(), 1)
+            assertEquals(1, restartPort.receipts.size)
+            assertTrue(restarted.publications.value != null)
+            restarted.close()
+
+            val closePort = ControlledAdvancePort(initial)
+            val closing = activeAdvanceSession(this, source, initial, closePort)
+            val closeCommandId = CommandId("advance-close-drain")
+            val protected = async(start = CoroutineStart.UNDISPATCHED) {
+                closing.execute(advanceEnvelope(closeCommandId, SessionEpoch(1)))
+            }
+            closePort.firstSegmentEntered.await()
+            val close = async(start = CoroutineStart.UNDISPATCHED) { closing.close(CloseReason.APPLICATION_REQUEST) }
+            assertFalse(close.isCompleted)
+            closePort.releaseFirstSegment.complete(Unit)
+            assertAccepted(protected.await(), 1)
+            assertEquals(TimeAdvanceResult.INTERRUPTED, closePort.receipts.values.single().timeAdvanceState?.status)
+            assertEquals(1, closePort.receipts.size)
+            assertEquals(closePort.committedEvents.flatten().size, closePort.committedEvents.flatten().map { it.eventId }.distinct().size)
+            assertEquals(0, close.await().outstandingJobs)
         }
     }
 
@@ -883,6 +1153,179 @@ class WorldSessionTest {
             }
         }
     }
+
+    private fun activeAdvanceSession(
+        scope: CoroutineScope,
+        source: BoundarySource,
+        initial: WorldSnapshot,
+        port: ControlledAdvancePort,
+        epoch: SessionEpoch = SessionEpoch(1)
+    ): WorldSession = WorldSession(
+        epoch, port, scope, ContentSnapshot.emptyForTest(), initial,
+        WorldEngine(listOf(source), BoundaryEvaluator { snapshot, candidate ->
+            BoundaryEvaluation(snapshot, listOf(candidate.eventDraft()))
+        }), Dispatchers.Unconfined
+    )
+
+    private fun advanceEnvelope(commandId: CommandId, epoch: SessionEpoch): CommandEnvelope<AdvanceTimePayload> =
+        CommandEnvelope.create(
+            commandId, epoch, StateVersion(0), null,
+            AdvanceTimePayload(
+                TimeAdvanceGoal.UntilMinute(worldSessionTestMinute(2)),
+                ProgressionMode.FAST_FORWARD,
+                TimeTraversalLimits(worldSessionTestMinute(2), maxBoundaryCount = 2)
+            )
+        )
+
+    /** Test-only delayed epoch oracle; the production writer lease remains P2-TASK-023/024 scope. */
+    private class EpochOwnerFixture(initialEpoch: SessionEpoch) {
+        var activeEpoch: SessionEpoch? = initialEpoch
+            private set
+
+        fun activate(epoch: SessionEpoch) {
+            activeEpoch = epoch
+        }
+
+        fun release(epoch: SessionEpoch) {
+            if (activeEpoch == epoch) activeEpoch = null
+        }
+    }
+
+    private class DelayedEpochSavePort(
+        private val owner: EpochOwnerFixture,
+        private val epoch: SessionEpoch
+    ) : SavePort {
+        val commitStarted = CompletableDeferred<Unit>()
+        val releaseCommit = CompletableDeferred<Unit>()
+        var commitCount = 0
+            private set
+
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? = null
+
+        override suspend fun commit(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            delta: DomainDelta
+        ): CommitReceipt {
+            commitStarted.complete(Unit)
+            releaseCommit.await()
+            if (owner.activeEpoch != epoch) {
+                owner.release(epoch)
+                error("stale delayed epoch response")
+            }
+            commitCount++
+            return CommitReceipt(StateVersion(1), delta.result)
+        }
+    }
+
+    private class ControlledAdvancePort(
+        private var snapshot: WorldSnapshot,
+        private val failFirstSegment: Boolean = false
+    ) : SavePort {
+        val firstSegmentEntered = CompletableDeferred<Unit>()
+        val releaseFirstSegment = CompletableDeferred<Unit>()
+        val receipts = mutableMapOf<Pair<SessionEpoch, CommandId>, PersistedReceipt>()
+        val committedEvents = mutableListOf<List<DomainEvent<out DomainEventPayload>>>()
+        private var stateVersion = 0L
+
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? =
+            receipts[sessionEpoch to commandId]
+
+        override suspend fun commit(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            delta: DomainDelta
+        ): CommitReceipt = error("atomic commit was not expected")
+
+        override suspend fun commitSegment(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            expectedSegmentNo: Int,
+            delta: DomainDelta,
+            timeAdvanceState: TimeAdvanceState,
+            terminalResult: TimeAdvanceResult?,
+            continuation: TimeAdvanceContinuation?
+        ): SegmentCommitReceipt {
+            if (expectedSegmentNo == 0) {
+                firstSegmentEntered.complete(Unit)
+                releaseFirstSegment.await()
+                if (failFirstSegment) error("injected active advance commit failure")
+            }
+            committedEvents += delta.events
+            val lifecycle = when (terminalResult) {
+                null -> ReceiptLifecycle.RUNNING
+                TimeAdvanceResult.INTERRUPTED, TimeAdvanceResult.DECISION_REQUIRED, TimeAdvanceResult.FAILED -> ReceiptLifecycle.INTERRUPTED
+                else -> ReceiptLifecycle.COMMITTED
+            }
+            val receipt = CommitReceipt(
+                StateVersion(++stateVersion),
+                delta.result,
+                lifecycle,
+                expectedSegmentNo
+            )
+            receipts[envelope.sessionEpoch to envelope.commandId] = PersistedReceipt(
+                envelope.payloadHash,
+                receipt.stateVersion,
+                receipt.result,
+                lifecycle,
+                expectedSegmentNo,
+                timeAdvanceState,
+                continuation
+            )
+            val aggregates = snapshot.aggregates.toMutableMap()
+            delta.aggregateChanges.forEach { change ->
+                if (change.after == null) aggregates.remove(change.aggregateId) else aggregates[change.aggregateId] = change.after
+            }
+            snapshot = WorldSnapshot(receipt.stateVersion, delta.worldChange?.after ?: snapshot.world, delta.rngState, aggregates)
+            return SegmentCommitReceipt(receipt, expectedSegmentNo, timeAdvanceState)
+        }
+
+        fun restoredSnapshot(): WorldSnapshot = snapshot
+    }
+
+    private class CloseBarrierSavePort : SavePort {
+        val commitStarted = CompletableDeferred<Unit>()
+        val allowCommit = CompletableDeferred<Unit>()
+        var commitCount = 0
+            private set
+
+        override suspend fun findReceipt(sessionEpoch: SessionEpoch, commandId: CommandId): PersistedReceipt? = null
+
+        override suspend fun commit(
+            envelope: CommandEnvelope<out WorldCommandPayload>,
+            delta: DomainDelta
+        ): CommitReceipt {
+            commitCount++
+            commitStarted.complete(Unit)
+            allowCommit.await()
+            return CommitReceipt(StateVersion(1), delta.result)
+        }
+    }
+
+    private class SequentialAdvanceSource(private val lastMinute: Long) : BoundarySource {
+        override val sourceId: String = "qa-active-advance"
+
+        override fun nextTimeAfter(snapshot: WorldTraversalSnapshot, cursor: BoundaryCursor?): GameMinute? =
+            (snapshot.clock.minute.value + 1).takeIf { it <= lastMinute }?.let(::worldSessionTestMinute)
+
+        override fun candidatesAt(snapshot: WorldTraversalSnapshot, time: GameMinute): List<BoundaryCandidate> = listOf(
+            BoundaryCandidate(
+                BoundaryKey(time, BoundaryCategory.WORLD_EVENT, 0, 0, "event-${time.value}", "", sourceId),
+                "calendar.day.start.v1",
+                "CalendarBoundaryPayload.v1",
+                "{\"minute\":${time.value}}"
+            )
+        )
+    }
+
+    private fun activeAdvanceSnapshot(source: BoundarySource): WorldSnapshot = WorldSnapshot(
+        StateVersion(0),
+        AuthoritativeWorldState(
+            WorldClock(worldSessionTestMinute(0)),
+            ScheduleCalendar(emptyList(), emptyMap()),
+            null,
+            BoundaryRegistryBinding(1, listOf(source.sourceId), candidateCodecs = setOf("CalendarBoundaryPayload.v1"))
+        ),
+        RngState(emptyList()),
+        emptyMap()
+    )
 
     private object SavePortConformanceSuite {
         suspend fun assertNoLifecyclePersistence(port: RecordingSavePort, action: suspend () -> Unit) {
