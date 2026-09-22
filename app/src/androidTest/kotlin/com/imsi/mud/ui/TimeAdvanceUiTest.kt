@@ -65,7 +65,13 @@ import com.imsi.mud.simulation.ProcessWorldSessionCoordinator
 import com.imsi.mud.simulation.ProgressionMode
 import com.imsi.mud.simulation.PublicConsequencePreview as CorePublicConsequencePreview
 import com.imsi.mud.simulation.PublicField as CorePublicField
+import com.imsi.mud.simulation.PublicCompletedWork
+import com.imsi.mud.simulation.PublicLowImportanceBundle
+import com.imsi.mud.simulation.PublicResourceWarning
 import com.imsi.mud.simulation.PublicScheduleEffect
+import com.imsi.mud.simulation.PublicTimeAdvanceEvent
+import com.imsi.mud.simulation.PublicTimeAdvanceContinuation
+import com.imsi.mud.simulation.PublicTimeAdvanceNextAction
 import com.imsi.mud.simulation.PublicValueState
 import com.imsi.mud.simulation.ReceiptLifecycle
 import com.imsi.mud.simulation.RngOperation
@@ -94,6 +100,7 @@ import com.imsi.mud.simulation.TimeAdvanceGoal
 import com.imsi.mud.simulation.TimeAdvanceInterruptPolicy
 import com.imsi.mud.simulation.TimeAdvanceResult
 import com.imsi.mud.simulation.TimeAdvanceState
+import com.imsi.mud.simulation.TimeAdvanceSummaryView
 import com.imsi.mud.simulation.TimeAdvanceContinuation
 import com.imsi.mud.simulation.TimeTraversalLimits
 import com.imsi.mud.simulation.WorldCommandPayload
@@ -333,15 +340,25 @@ class TimeAdvanceUiTest {
     fun rendersStatusesSummaryAndAllowedAdvanceControls() {
         val actions = mutableListOf<TimeAdvanceUiAction>()
         val summary = TimeAdvanceSummary(
-            elapsed = "2h",
-            stopReason = "Decision required",
-            majorEvents = listOf("Arrival", "A", "B", "C", "D", "E", "F"),
-            completedWork = listOf("Treatment"),
-            resourceWarnings = listOf("Bed nearly full"),
-            importantChanges = listOf("Public relation changed"),
-            bundleCount = 2,
-            unknownImportantCount = 1,
-            nextActionLabel = "Review decision"
+            TimeAdvanceSummaryView(
+                elapsedMinutes = 120,
+                terminalReason = TimeAdvanceResult.DECISION_REQUIRED,
+                majorEvents = listOf("Arrival", "A", "B", "C", "D").mapIndexed { index, type ->
+                    PublicTimeAdvanceEvent(type, actualMinute(index.toLong()))
+                },
+                majorEventsOverflowCount = 2,
+                completedWork = listOf(PublicCompletedWork("Treatment", actualMinute(120))),
+                completedWorkOverflowCount = 0,
+                resourceWarnings = listOf(PublicResourceWarning("BED", 0)),
+                resourceWarningsOverflowCount = 0,
+                importantChanges = listOf(PublicTimeAdvanceEvent("Public relation changed", actualMinute(60))),
+                importantChangesOverflowCount = 0,
+                lowImportanceBundles = listOf(PublicLowImportanceBundle("ordinary.event.v1", 2)),
+                lowImportanceBundlesOverflowCount = 0,
+                unknownImportantEventCount = 1,
+                continuation = PublicTimeAdvanceContinuation.DECISION,
+                nextAction = PublicTimeAdvanceNextAction.CHOOSE_DECISION
+            )
         )
         compose.setContent {
             TimeAdvanceScreen(
@@ -365,6 +382,9 @@ class TimeAdvanceUiTest {
         compose.onNodeWithTag("phase2-time-summary").assertIsDisplayed()
         compose.onNodeWithTag("phase2-time-summary-major-events-overflow").assertTextEquals("Major events: 2 more")
         compose.onNodeWithText("Unknown important items: 1").assertIsDisplayed()
+        compose.onNodeWithText("Elapsed: 120 minutes").assertIsDisplayed()
+        compose.onNodeWithText("Continuation: Decision").assertIsDisplayed()
+        compose.onNodeWithText("Next: Choose decision").assertIsDisplayed()
         assertEquals(listOf(TimeAdvanceUiAction.Pause), actions)
     }
 
@@ -608,14 +628,18 @@ class TimeAdvanceUiTest {
             compose.onNodeWithTag("phase2-time-choice-A").assertIsDisplayed()
             val parentPublication = checkNotNull(fixture.session.publications.value)
             assertEquals(TimeAdvanceResult.DECISION_REQUIRED, parentPublication.timeAdvanceTerminal?.result)
+            assertEquals(TimeAdvanceResult.DECISION_REQUIRED, parentPublication.timeAdvanceSummary?.terminalReason)
             assertEquals("gate-1", parentPublication.timeAdvanceTerminal?.gateId)
             assertEquals(listOf("A", "B"), parentPublication.timeAdvanceTerminal?.choices?.map { it.choiceId })
+            compose.onNodeWithText("Continuation: Decision").assertIsDisplayed()
+            compose.onNodeWithText("Next: Choose decision").assertIsDisplayed()
 
             compose.onNodeWithTag("phase2-time-choice-A").performClick()
             compose.waitForIdle()
             assertEquals(3, fixture.port.commitCount)
             assertEquals("A", fixture.port.receipts.values.last().timeAdvanceState?.selectedDecisionChoiceId)
             assertEquals(TimeAdvanceResult.COMPLETED, fixture.session.publications.value?.timeAdvanceTerminal?.result)
+            assertEquals(PublicTimeAdvanceNextAction.ACKNOWLEDGE, fixture.session.publications.value?.timeAdvanceSummary?.nextAction)
         } finally {
             fixture.session.close()
         }
@@ -1188,6 +1212,61 @@ class TimeAdvanceUiTest {
         compose.waitForIdle()
         compose.onNodeWithTag("phase2-time-status-failed").assertIsDisplayed()
         compose.onAllNodesWithTag("phase2-time-summary").assertCountEquals(0)
+        compose.onAllNodesWithTag("phase2-time-retry").assertCountEquals(0)
+    }
+
+    @Test
+    fun committedAdvanceWithoutSummaryCannotDispatchGameplayRetry() {
+        var executeCount = 0
+        val controller = TimeAdvanceController(
+            execute = { executeCount++; CommandResult.Accepted(1) },
+            requestControl = { ControlRequestResult.Accepted(CommandId("cmd-start")) },
+            runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
+            currentVersion = { StateVersion(1) },
+            newCommandId = { CommandId("cmd-start") },
+            currentPublication = {
+                TimeAdvanceCommittedSnapshot(2, 20, 1, "cmd-start", TimeAdvanceResult.COMPLETED)
+            }
+        )
+        compose.setContent {
+            TimeAdvanceRoute(TimeAdvanceEntry(TimeAdvanceViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()), controller))
+        }
+
+        compose.onNodeWithTag("phase2-time-start").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("phase2-time-status-failed").assertIsDisplayed()
+        compose.onAllNodesWithTag("phase2-time-summary").assertCountEquals(0)
+        compose.onAllNodesWithTag("phase2-time-retry").assertCountEquals(0)
+        assertEquals(1, executeCount)
+    }
+
+    @Test
+    fun committedSummaryRefreshDoesNotExecuteGameplayAgain() {
+        var executeCount = 0
+        var refreshCount = 0
+        var publication = TimeAdvanceCommittedSnapshot(2, 20, 1, "cmd-start", TimeAdvanceResult.COMPLETED)
+        val controller = TimeAdvanceController(
+            execute = { executeCount++; CommandResult.Accepted(1) },
+            requestControl = { ControlRequestResult.Accepted(CommandId("cmd-start")) },
+            runtimeState = { SessionRuntimeState(SessionEpoch(1), SessionLifecycle.OPEN, null) },
+            currentVersion = { StateVersion(1) },
+            newCommandId = { CommandId("cmd-start") },
+            currentPublication = { publication },
+            refreshSummary = {
+                refreshCount++
+                publication = publication.copy(timeAdvanceSummary = summaryProjection(TimeAdvanceResult.COMPLETED))
+            }
+        )
+        compose.setContent {
+            TimeAdvanceRoute(TimeAdvanceEntry(TimeAdvanceViewState(TimeAdvanceStatus.IDLE, startRequest = advanceRequest()), controller))
+        }
+
+        compose.onNodeWithTag("phase2-time-start").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("phase2-time-summary").assertIsDisplayed()
+        compose.onAllNodesWithTag("phase2-time-retry").assertCountEquals(0)
+        assertEquals(1, executeCount)
+        assertEquals(1, refreshCount)
     }
 
     @Test
@@ -1290,7 +1369,14 @@ class TimeAdvanceUiTest {
         assertEquals(1, requestCount)
 
         active = false
-        publication = TimeAdvanceCommittedSnapshot(2, 20, 1, activeCommand.value, TimeAdvanceResult.INTERRUPTED)
+        publication = TimeAdvanceCommittedSnapshot(
+            2,
+            20,
+            1,
+            activeCommand.value,
+            TimeAdvanceResult.INTERRUPTED,
+            timeAdvanceSummary = summaryProjection(TimeAdvanceResult.INTERRUPTED)
+        )
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("phase2-time-status-interrupted").fetchSemanticsNodes().isNotEmpty()
         }
@@ -1345,7 +1431,14 @@ class TimeAdvanceUiTest {
         assertEquals(1, requestCount)
 
         active = false
-        publication = TimeAdvanceCommittedSnapshot(2, 20, 1, activeCommand.value, TimeAdvanceResult.CANCELLED)
+        publication = TimeAdvanceCommittedSnapshot(
+            2,
+            20,
+            1,
+            activeCommand.value,
+            TimeAdvanceResult.CANCELLED,
+            timeAdvanceSummary = summaryProjection(TimeAdvanceResult.CANCELLED)
+        )
         compose.waitUntil(5_000) {
             compose.onAllNodesWithTag("phase2-time-status-cancelled").fetchSemanticsNodes().isNotEmpty()
         }
@@ -1387,9 +1480,14 @@ class TimeAdvanceUiTest {
 
             compose.onNodeWithTag("phase2-time-publication").assertIsDisplayed()
             compose.onNodeWithTag("phase2-time-status-completed").assertIsDisplayed()
+            compose.onNodeWithText("Elapsed: 200 minutes").assertIsDisplayed()
+            compose.onNodeWithText("Next: Acknowledge").assertIsDisplayed()
             val receipt = fixture.port.receipts.values.single()
             assertEquals(TimeAdvanceResult.COMPLETED, receipt.timeAdvanceState?.status)
             assertEquals(TimeAdvanceResult.COMPLETED, fixture.session.publications.value?.timeAdvanceTerminal?.result)
+            assertEquals(200L, fixture.session.publications.value?.timeAdvanceSummary?.elapsedMinutes)
+            assertEquals(TimeAdvanceResult.COMPLETED, fixture.session.publications.value?.timeAdvanceSummary?.terminalReason)
+            assertEquals(PublicTimeAdvanceNextAction.ACKNOWLEDGE, fixture.session.publications.value?.timeAdvanceSummary?.nextAction)
             assertEquals(fixture.commandId, fixture.session.publications.value?.sourceCommandId)
             assertEquals(200, receipt.timeAdvanceState?.processedBoundaryCount)
             val events = fixture.port.committedEvents.flatten()
@@ -1996,6 +2094,33 @@ class TimeAdvanceUiTest {
         mode = ProgressionMode.FAST_FORWARD,
         limits = TimeTraversalLimits((GameMinute.of(120) as Checked.Value).value, 100),
         interruptPolicy = TimeAdvanceInterruptPolicy()
+    )
+
+    private fun summaryProjection(result: TimeAdvanceResult): TimeAdvanceSummaryView = TimeAdvanceSummaryView(
+        elapsedMinutes = 20,
+        terminalReason = result,
+        majorEvents = emptyList(),
+        majorEventsOverflowCount = 0,
+        completedWork = emptyList(),
+        completedWorkOverflowCount = 0,
+        resourceWarnings = emptyList(),
+        resourceWarningsOverflowCount = 0,
+        importantChanges = emptyList(),
+        importantChangesOverflowCount = 0,
+        lowImportanceBundles = emptyList(),
+        lowImportanceBundlesOverflowCount = 0,
+        unknownImportantEventCount = 0,
+        continuation = when (result) {
+            TimeAdvanceResult.INTERRUPTED -> PublicTimeAdvanceContinuation.RESUME
+            TimeAdvanceResult.DECISION_REQUIRED -> PublicTimeAdvanceContinuation.DECISION
+            else -> null
+        },
+        nextAction = when (result) {
+            TimeAdvanceResult.INTERRUPTED -> PublicTimeAdvanceNextAction.CONTINUE
+            TimeAdvanceResult.DECISION_REQUIRED -> PublicTimeAdvanceNextAction.CHOOSE_DECISION
+            TimeAdvanceResult.FAILED -> PublicTimeAdvanceNextAction.RETRY
+            else -> PublicTimeAdvanceNextAction.ACKNOWLEDGE
+        }
     )
 
     private fun reservation(): ScheduleReservePayload {

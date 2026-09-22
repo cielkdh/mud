@@ -35,6 +35,7 @@ class WorldSession private constructor(
         RngState,
         Long
     ) -> DomainDelta,
+    summaryVisibleEventVisibilities: Set<EventVisibility>,
     @Suppress("UNUSED_PARAMETER") constructorMarker: Unit
 ) {
     internal constructor(
@@ -64,6 +65,7 @@ class WorldSession private constructor(
                 )
             )
         },
+        setOf(EventVisibility.PUBLIC),
         Unit
     )
 
@@ -79,7 +81,44 @@ class WorldSession private constructor(
             RngState,
             Long
         ) -> DomainDelta
-    ) : this(contentSnapshot, epoch, savePort, parentScope, dispatcher, null, null, deltaFactory, Unit)
+    ) : this(
+        contentSnapshot,
+        epoch,
+        savePort,
+        parentScope,
+        dispatcher,
+        null,
+        null,
+        deltaFactory,
+        setOf(EventVisibility.PUBLIC),
+        Unit
+    )
+
+    internal constructor(
+        epoch: SessionEpoch,
+        savePort: SavePort,
+        parentScope: CoroutineScope,
+        contentSnapshot: ContentSnapshot,
+        dispatcher: CoroutineDispatcher,
+        summaryVisibleEventVisibilities: Set<EventVisibility>,
+        deltaFactory: (
+            CommandEnvelope<out WorldCommandPayload>,
+            StateVersion,
+            RngState,
+            Long
+        ) -> DomainDelta
+    ) : this(
+        contentSnapshot,
+        epoch,
+        savePort,
+        parentScope,
+        dispatcher,
+        null,
+        null,
+        deltaFactory,
+        summaryVisibleEventVisibilities,
+        Unit
+    )
 
     internal constructor(
         epoch: SessionEpoch,
@@ -94,7 +133,45 @@ class WorldSession private constructor(
             RngState,
             Long
         ) -> DomainDelta
-    ) : this(contentSnapshot, epoch, savePort, parentScope, dispatcher, initialSnapshot, null, deltaFactory, Unit)
+    ) : this(
+        contentSnapshot,
+        epoch,
+        savePort,
+        parentScope,
+        dispatcher,
+        initialSnapshot,
+        null,
+        deltaFactory,
+        setOf(EventVisibility.PUBLIC),
+        Unit
+    )
+
+    internal constructor(
+        epoch: SessionEpoch,
+        savePort: SavePort,
+        parentScope: CoroutineScope,
+        contentSnapshot: ContentSnapshot,
+        initialSnapshot: WorldSnapshot,
+        dispatcher: CoroutineDispatcher,
+        summaryVisibleEventVisibilities: Set<EventVisibility>,
+        deltaFactory: (
+            CommandEnvelope<out WorldCommandPayload>,
+            StateVersion,
+            RngState,
+            Long
+        ) -> DomainDelta
+    ) : this(
+        contentSnapshot,
+        epoch,
+        savePort,
+        parentScope,
+        dispatcher,
+        initialSnapshot,
+        null,
+        deltaFactory,
+        summaryVisibleEventVisibilities,
+        Unit
+    )
 
     internal constructor(
         epoch: SessionEpoch,
@@ -103,7 +180,8 @@ class WorldSession private constructor(
         contentSnapshot: ContentSnapshot,
         initialSnapshot: WorldSnapshot,
         engine: WorldEngine,
-        dispatcher: CoroutineDispatcher = Dispatchers.Default
+        dispatcher: CoroutineDispatcher = Dispatchers.Default,
+        summaryVisibleEventVisibilities: Set<EventVisibility> = setOf(EventVisibility.PUBLIC)
     ) : this(
         contentSnapshot,
         epoch,
@@ -115,8 +193,16 @@ class WorldSession private constructor(
         { envelope, _, rngState, submissionSequence ->
             DomainDelta(emptyList(), rngState, emptyList(), CommandResult.Rejected(DomainError.UnsupportedFeature(envelope.payload.codecId), submissionSequence))
         },
+        summaryVisibleEventVisibilities,
         Unit
     )
+
+    init {
+        require(EventVisibility.PUBLIC in summaryVisibleEventVisibilities)
+        require(EventVisibility.SYSTEM_HIDDEN !in summaryVisibleEventVisibilities)
+    }
+
+    private val allowedSummaryEventVisibilities = summaryVisibleEventVisibilities.toSet()
 
     private val sessionJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + sessionJob + dispatcher)
@@ -134,6 +220,7 @@ class WorldSession private constructor(
     private var authoritativeWorld: AuthoritativeWorldState? = initialSnapshot?.world
     private var latestPublication: CommittedPublication? = null
     private val publicationFlow = MutableStateFlow<CommittedPublication?>(null)
+    private val timeAdvanceSummaryInputs = mutableMapOf<ReceiptKey, TimeAdvanceSummaryInput>()
     private var activeAdvanceCommandId: CommandId? = null
     private var restoredAdvanceAwaitingResume = false
     private var systemHaltedReason: String? = null
@@ -143,6 +230,25 @@ class WorldSession private constructor(
 
     val publications: StateFlow<CommittedPublication?> = publicationFlow.asStateFlow()
     val runtimeState: StateFlow<SessionRuntimeState> = runtimeStateFlow.asStateFlow()
+
+    suspend fun refreshTimeAdvanceSummary(commandId: CommandId): TimeAdvanceSummaryView? = lifecycleMutex.withLock {
+        val publication = latestPublication
+            ?.takeIf { it.sourceCommandId == commandId && it.timeAdvanceTerminal != null }
+            ?: return@withLock null
+        publication.timeAdvanceSummary?.let { return@withLock it }
+        val key = ReceiptKey(epoch, commandId)
+        val input = timeAdvanceSummaryInputs[key] ?: return@withLock null
+        val world = authoritativeWorld ?: return@withLock null
+        val terminal = world.timeAdvance
+            ?.takeIf { it.commandEpoch == epoch && it.commandId == commandId && it.status != null }
+            ?: return@withLock null
+        val summary = runCatching { buildTimeAdvanceSummary(input, world, terminal) }.getOrNull()
+            ?: return@withLock null
+        timeAdvanceSummaryInputs.remove(key)
+        latestPublication = publication.copy(timeAdvanceSummary = summary)
+        publicationFlow.value = latestPublication
+        summary
+    }
 
     private fun updateRuntimeStateLocked() {
         runtimeStateFlow.value = SessionRuntimeState(epoch, lifecycle, activeAdvanceCommandId)
@@ -883,7 +989,7 @@ class WorldSession private constructor(
                 rngState = delta.rngState
                 stateVersion = receipt.stateVersion
                 delta.worldChange?.let { authoritativeWorld = it.after }
-                publishCommitted(envelope, delta)
+                publishCommitted(envelope, delta, updateTimeAdvanceSummary(envelope, delta, receiptKey))
             }
 
             is CommandResult.Rejected -> if (receipt.stateVersion != stateVersion) return "rejected receipt changed state version"
@@ -892,7 +998,11 @@ class WorldSession private constructor(
         return null
     }
 
-    private fun publishCommitted(envelope: CommandEnvelope<out WorldCommandPayload>, delta: DomainDelta) {
+    private fun publishCommitted(
+        envelope: CommandEnvelope<out WorldCommandPayload>,
+        delta: DomainDelta,
+        summary: TimeAdvanceSummaryView?
+    ) {
         val world = authoritativeWorld ?: return
         val terminal = world.timeAdvance
             ?.takeIf { it.commandEpoch == envelope.sessionEpoch && it.commandId == envelope.commandId && it.status != null }
@@ -908,17 +1018,119 @@ class WorldSession private constructor(
                     sealedOutcomeHash = state.sealedElapsedOutcome?.hash.takeIf { decision }
                 )
             }
-        latestPublication = CommittedPublication(
+            latestPublication = CommittedPublication(
             PublicSnapshot(epoch, stateVersion, world.clock),
             delta.events.asSequence()
-                .filter { it.visibility == EventVisibility.PUBLIC }
+                .filter(::isSummaryVisible)
                 .map { event -> PublicDomainEvent(event.eventId, event.gameMinute, event.payload.codecId) }
                 .toList(),
             envelope.commandId,
-            terminal
+            terminal,
+            summary
         )
         publicationFlow.value = latestPublication
     }
+
+    private fun updateTimeAdvanceSummary(
+        envelope: CommandEnvelope<out WorldCommandPayload>,
+        delta: DomainDelta,
+        receiptKey: ReceiptKey
+    ): TimeAdvanceSummaryView? {
+        if (envelope.payload !is AdvanceTimePayload) return null
+        val before = delta.worldChange?.before ?: return null
+        val context = timeAdvanceSummaryInputs[receiptKey]
+            ?: TimeAdvanceSummaryInput(before, envelope.actorId).also { timeAdvanceSummaryInputs[receiptKey] = it }
+        context.visibleEvents += delta.events.filter(::isSummaryVisible)
+
+        val world = authoritativeWorld ?: return null
+        val terminal = world.timeAdvance
+            ?.takeIf { it.commandEpoch == envelope.sessionEpoch && it.commandId == envelope.commandId && it.status != null }
+            ?: return null
+        val summary = runCatching { buildTimeAdvanceSummary(context, world, terminal) }.getOrNull()
+        if (summary != null) timeAdvanceSummaryInputs.remove(receiptKey)
+        return summary
+    }
+
+    private fun buildTimeAdvanceSummary(
+        input: TimeAdvanceSummaryInput,
+        terminalWorld: AuthoritativeWorldState,
+        terminal: TimeAdvanceState
+    ): TimeAdvanceSummaryView {
+        val terminalReason = checkNotNull(terminal.status)
+        val publicEvents = input.visibleEvents.sortedWith(
+            compareBy<DomainEvent<out DomainEventPayload>> { it.gameMinute.value }
+                .thenBy { it.subMinuteMs.value }
+                .thenBy { it.eventSequence.value }
+        )
+        val knownEvents = publicEvents.filter(::isKnownSummaryEvent)
+        val majorEvents = knownEvents.filter { it.importance.ordinal >= EventImportance.HIGH.ordinal }
+            .map { PublicTimeAdvanceEvent(it.payload.codecId, it.gameMinute) }
+        val importantChanges = knownEvents.filter { it.importance == EventImportance.NORMAL }
+            .map { PublicTimeAdvanceEvent(it.payload.codecId, it.gameMinute) }
+        val lowBundles = publicEvents.filter { it.importance == EventImportance.LOW }
+            .groupBy { it.payload.codecId }
+            .entries
+            .sortedBy { entry -> publicEvents.indexOfFirst { it.payload.codecId == entry.key } }
+            .map { PublicLowImportanceBundle(it.key, it.value.size) }
+        val visibleActions = terminalWorld.calendar.actions.filter { action ->
+            input.observerId != null &&
+                ((action.payload.ownerType == "PLAYER" && action.payload.ownerId == input.observerId) ||
+                    action.participants.any { it.entityType == "PLAYER" && it.entityId == input.observerId })
+        }
+        val completedWork = visibleActions
+            .asSequence()
+            .filter { action ->
+                action.status == ScheduledActionStatus.COMPLETED &&
+                    input.startWorld.calendar.actions.firstOrNull { it.actionId == action.actionId }?.status != ScheduledActionStatus.COMPLETED
+            }
+            .sortedBy { it.actionId.value }
+            .map { PublicCompletedWork(it.actionKind, it.dueMinute) }
+            .toList()
+        val resourceWarnings = visibleActions.flatMap { action -> action.claims.map(ResourceClaim::resource) }
+            .distinct()
+            .sortedWith(compareBy<ResourceIdentity> { it.kind }.thenBy { it.id })
+            .filter { resource ->
+                input.startWorld.calendar.available(resource) > 0L && terminalWorld.calendar.available(resource) == 0L
+            }
+            .map { resource -> PublicResourceWarning(resource.kind, terminalWorld.calendar.available(resource)) }
+        val continuation = when (terminalReason) {
+            TimeAdvanceResult.INTERRUPTED -> PublicTimeAdvanceContinuation.RESUME
+            TimeAdvanceResult.DECISION_REQUIRED -> PublicTimeAdvanceContinuation.DECISION
+            else -> null
+        }
+        val nextAction = when (terminalReason) {
+            TimeAdvanceResult.INTERRUPTED -> PublicTimeAdvanceNextAction.CONTINUE
+            TimeAdvanceResult.DECISION_REQUIRED -> PublicTimeAdvanceNextAction.CHOOSE_DECISION
+            TimeAdvanceResult.FAILED -> PublicTimeAdvanceNextAction.RETRY
+            else -> PublicTimeAdvanceNextAction.ACKNOWLEDGE
+        }
+        return TimeAdvanceSummaryView(
+            elapsedMinutes = Math.subtractExact(terminalWorld.clock.minute.value, input.startWorld.clock.minute.value),
+            terminalReason = terminalReason,
+            majorEvents = majorEvents.take(TimeAdvanceSummaryView.MAX_SECTION_ITEMS),
+            majorEventsOverflowCount = (majorEvents.size - TimeAdvanceSummaryView.MAX_SECTION_ITEMS).coerceAtLeast(0),
+            completedWork = completedWork.take(TimeAdvanceSummaryView.MAX_SECTION_ITEMS),
+            completedWorkOverflowCount = (completedWork.size - TimeAdvanceSummaryView.MAX_SECTION_ITEMS).coerceAtLeast(0),
+            resourceWarnings = resourceWarnings.take(TimeAdvanceSummaryView.MAX_SECTION_ITEMS),
+            resourceWarningsOverflowCount = (resourceWarnings.size - TimeAdvanceSummaryView.MAX_SECTION_ITEMS).coerceAtLeast(0),
+            importantChanges = importantChanges.take(TimeAdvanceSummaryView.MAX_SECTION_ITEMS),
+            importantChangesOverflowCount = (importantChanges.size - TimeAdvanceSummaryView.MAX_SECTION_ITEMS).coerceAtLeast(0),
+            lowImportanceBundles = lowBundles.take(TimeAdvanceSummaryView.MAX_SECTION_ITEMS),
+            lowImportanceBundlesOverflowCount = (lowBundles.size - TimeAdvanceSummaryView.MAX_SECTION_ITEMS).coerceAtLeast(0),
+            unknownImportantEventCount = publicEvents.count {
+                it.importance.ordinal >= EventImportance.HIGH.ordinal && !isKnownSummaryEvent(it)
+            },
+            continuation = continuation,
+            nextAction = nextAction
+        )
+    }
+
+    private fun isKnownSummaryEvent(event: DomainEvent<out DomainEventPayload>): Boolean =
+        event.payload.codecId == ElapsedActionAppliedEventPayload.CODEC_ID ||
+            BoundaryDomainEventType.forCodec(event.payload.codecId) != null
+
+    private fun isSummaryVisible(event: DomainEvent<out DomainEventPayload>): Boolean =
+        event.visibility != EventVisibility.SYSTEM_HIDDEN && event.visibility in allowedSummaryEventVisibilities
 
     private fun stopAfterUncertainCommit() {
         sessionJob.cancel(kotlinx.coroutines.CancellationException("commit outcome cannot be reconciled"))
@@ -940,6 +1152,12 @@ class WorldSession private constructor(
             event.sourceVersion != expectedVersion ||
             event.eventSequence != EventSequence(Math.addExact(expectedSequenceStart, index.toLong()))
     }?.let { (index, _) -> "event metadata mismatch at index $index" }
+
+    private data class TimeAdvanceSummaryInput(
+        val startWorld: AuthoritativeWorldState,
+        val observerId: EntityId?,
+        val visibleEvents: MutableList<DomainEvent<out DomainEventPayload>> = mutableListOf()
+    )
 
     private data class QueuedCommand(
         val envelope: CommandEnvelope<out WorldCommandPayload>,
@@ -978,9 +1196,19 @@ object ProcessWorldSessionCoordinator {
         contentSnapshot: ContentSnapshot,
         initialSnapshot: WorldSnapshot,
         engine: WorldEngine,
-        dispatcher: CoroutineDispatcher = Dispatchers.Default
+        dispatcher: CoroutineDispatcher = Dispatchers.Default,
+        summaryVisibleEventVisibilities: Set<EventVisibility> = setOf(EventVisibility.PUBLIC)
     ): WorldSessionHandle? = acquireForTest {
-        WorldSession(epoch, savePort, parentScope, contentSnapshot, initialSnapshot, engine, dispatcher)
+        WorldSession(
+            epoch,
+            savePort,
+            parentScope,
+            contentSnapshot,
+            initialSnapshot,
+            engine,
+            dispatcher,
+            summaryVisibleEventVisibilities
+        )
     }
 
     internal suspend fun acquireForTest(create: () -> WorldSession): WorldSessionHandle? = mutex.withLock {
@@ -1028,6 +1256,9 @@ object ProcessWorldSessionCoordinator {
 
         suspend fun requestControl(request: ControlRequest): ControlRequestResult =
             lease.session.requestControl(request)
+
+        suspend fun refreshTimeAdvanceSummary(commandId: CommandId): TimeAdvanceSummaryView? =
+            lease.session.refreshTimeAdvanceSummary(commandId)
 
         suspend fun pause(): SessionRuntimeState = lease.session.pause()
 

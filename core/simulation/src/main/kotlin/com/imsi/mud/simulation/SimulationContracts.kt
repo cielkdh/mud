@@ -679,11 +679,76 @@ data class PublicTimeAdvanceTerminal(
     }
 }
 
+/** A redacted, non-authoritative terminal projection for one TimeAdvance command. */
+data class PublicTimeAdvanceEvent(val type: String, val gameMinute: GameMinute) {
+    init { require(type.isNotBlank()) }
+}
+
+data class PublicCompletedWork(val actionKind: String, val completedMinute: GameMinute) {
+    init { require(actionKind.isNotBlank()) }
+}
+
+data class PublicResourceWarning(val resourceKind: String, val availableQuantity: Long) {
+    init {
+        require(resourceKind.isNotBlank())
+        require(availableQuantity >= 0)
+    }
+}
+
+data class PublicLowImportanceBundle(val type: String, val count: Int) {
+    init {
+        require(type.isNotBlank())
+        require(count > 0)
+    }
+}
+
+enum class PublicTimeAdvanceContinuation { RESUME, DECISION }
+
+enum class PublicTimeAdvanceNextAction { ACKNOWLEDGE, CONTINUE, CHOOSE_DECISION, RETRY }
+
+data class TimeAdvanceSummaryView(
+    val elapsedMinutes: Long,
+    val terminalReason: TimeAdvanceResult,
+    val majorEvents: List<PublicTimeAdvanceEvent>,
+    val majorEventsOverflowCount: Int,
+    val completedWork: List<PublicCompletedWork>,
+    val completedWorkOverflowCount: Int,
+    val resourceWarnings: List<PublicResourceWarning>,
+    val resourceWarningsOverflowCount: Int,
+    val importantChanges: List<PublicTimeAdvanceEvent>,
+    val importantChangesOverflowCount: Int,
+    val lowImportanceBundles: List<PublicLowImportanceBundle>,
+    val lowImportanceBundlesOverflowCount: Int,
+    val unknownImportantEventCount: Int,
+    val continuation: PublicTimeAdvanceContinuation?,
+    val nextAction: PublicTimeAdvanceNextAction
+) {
+    init {
+        require(elapsedMinutes >= 0)
+        require(majorEvents.size <= MAX_SECTION_ITEMS && completedWork.size <= MAX_SECTION_ITEMS)
+        require(resourceWarnings.size <= MAX_SECTION_ITEMS && importantChanges.size <= MAX_SECTION_ITEMS)
+        require(lowImportanceBundles.size <= MAX_SECTION_ITEMS)
+        require(listOf(
+            majorEventsOverflowCount,
+            completedWorkOverflowCount,
+            resourceWarningsOverflowCount,
+            importantChangesOverflowCount,
+            lowImportanceBundlesOverflowCount,
+            unknownImportantEventCount
+        ).all { it >= 0 })
+    }
+
+    companion object {
+        const val MAX_SECTION_ITEMS = 5
+    }
+}
+
 data class CommittedPublication(
     val snapshot: PublicSnapshot,
     val events: List<PublicDomainEvent>,
     val sourceCommandId: CommandId,
-    val timeAdvanceTerminal: PublicTimeAdvanceTerminal? = null
+    val timeAdvanceTerminal: PublicTimeAdvanceTerminal? = null,
+    val timeAdvanceSummary: TimeAdvanceSummaryView? = null
 )
 
 interface SavePort {

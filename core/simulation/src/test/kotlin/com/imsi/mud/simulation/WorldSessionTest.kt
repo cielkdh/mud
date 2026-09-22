@@ -18,6 +18,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -865,6 +866,168 @@ class WorldSessionTest {
         session.close()
     }
 
+    @Test
+    fun `terminal time advance publication projects a bounded redacted summary after commit`() = runBlocking {
+        val before = summarySnapshot()
+        val savePort = RecordingSavePort()
+        val session = WorldSession(
+            SessionEpoch(1), savePort, this, ContentSnapshot.emptyForTest(), before, Dispatchers.Unconfined
+        ) { envelope, receiptVersion, rng, submissionSequence ->
+            summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world)
+        }
+
+        assertAccepted(session.execute(summaryEnvelope("summary-completed")), 1)
+
+        val publication = checkNotNull(session.publications.value)
+        val summary = checkNotNull(publication.timeAdvanceSummary)
+        assertEquals(10L, summary.elapsedMinutes)
+        assertEquals(TimeAdvanceResult.COMPLETED, summary.terminalReason)
+        assertEquals(5, summary.majorEvents.size)
+        assertEquals(1, summary.majorEventsOverflowCount)
+        assertEquals(listOf("calendar.day.started.v1"), summary.importantChanges.map(PublicTimeAdvanceEvent::type))
+        assertEquals(listOf(PublicLowImportanceBundle(UnsupportedFeatureEventPayload.CODEC_ID, 2)), summary.lowImportanceBundles)
+        assertEquals(1, summary.unknownImportantEventCount)
+        assertEquals(listOf(PublicCompletedWork("summary.work", worldSessionTestMinute(10))), summary.completedWork)
+        assertEquals(listOf(PublicResourceWarning("MATERIAL", 0)), summary.resourceWarnings)
+        assertFalse(summary.toString().contains("ore"))
+        assertFalse(summary.completedWork.any { it.actionKind == "secret.work" })
+        assertEquals(PublicTimeAdvanceNextAction.ACKNOWLEDGE, summary.nextAction)
+        assertEquals(null, summary.continuation)
+        assertEquals(10, publication.events.size)
+        assertFalse(publication.events.any { it.eventId.value == "summary-completed/10" })
+        assertFalse(publication.events.any { it.eventId.value == "summary-completed/11" })
+        assertFalse(publication.events.any { it.type == "hidden.summary.v1" })
+        assertFalse(summary.toString().contains("summary-completed"))
+        assertFalse(summary.toString().contains("SessionEpoch"))
+        assertEquals(summary, session.refreshTimeAdvanceSummary(CommandId("summary-completed")))
+        session.close()
+    }
+
+    @Test
+    fun `terminal time advance summary includes only explicitly authorized scoped events`() = runBlocking {
+        val before = summarySnapshot()
+        val session = WorldSession(
+            SessionEpoch(1),
+            RecordingSavePort(),
+            this,
+            ContentSnapshot.emptyForTest(),
+            before,
+            Dispatchers.Unconfined,
+            setOf(EventVisibility.PUBLIC, EventVisibility.PARTICIPANTS, EventVisibility.OBSERVER_SCOPED),
+            { envelope, receiptVersion, rng, submissionSequence ->
+                summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world)
+            }
+        )
+
+        assertAccepted(session.execute(summaryEnvelope("summary-scoped")), 1)
+
+        val publication = checkNotNull(session.publications.value)
+        assertEquals(12, publication.events.size)
+        assertTrue(publication.events.any { it.eventId.value == "summary-scoped/10" })
+        assertTrue(publication.events.any { it.eventId.value == "summary-scoped/11" })
+        assertEquals(3, publication.timeAdvanceSummary?.unknownImportantEventCount)
+        assertFalse(publication.events.any { it.eventId.value == "summary-scoped/12" })
+        session.close()
+    }
+
+    @Test
+    fun `summary visibility policy never accepts system hidden events`() = runBlocking {
+        val before = summarySnapshot()
+        assertThrows(IllegalArgumentException::class.java) {
+            WorldSession(
+                SessionEpoch(1), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), before,
+                Dispatchers.Unconfined, setOf(EventVisibility.PUBLIC, EventVisibility.SYSTEM_HIDDEN)
+            ) { envelope, receiptVersion, rng, submissionSequence ->
+                summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world)
+            }
+        }
+        Unit
+    }
+
+    @Test
+    fun `summary visibility policy is frozen when a session starts`() = runBlocking {
+        val before = summarySnapshot()
+        val policy = mutableSetOf(EventVisibility.PUBLIC)
+        val session = WorldSession(
+            SessionEpoch(1), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), before,
+            Dispatchers.Unconfined, policy
+        ) { envelope, receiptVersion, rng, submissionSequence ->
+            summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world)
+        }
+        policy += EventVisibility.PARTICIPANTS
+
+        assertAccepted(session.execute(summaryEnvelope("summary-frozen-policy")), 1)
+        assertFalse(session.publications.value!!.events.any { it.eventId.value == "summary-frozen-policy/10" })
+        session.close()
+    }
+
+    @Test
+    fun `summary omits work and resources without an authorized player actor`() = runBlocking {
+        val before = summarySnapshot()
+        val session = WorldSession(
+            SessionEpoch(1), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), before, Dispatchers.Unconfined
+        ) { envelope, receiptVersion, rng, submissionSequence ->
+            summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world)
+        }
+
+        assertAccepted(session.execute(summaryEnvelope("summary-no-actor", null)), 1)
+        val summary = checkNotNull(session.publications.value?.timeAdvanceSummary)
+        assertTrue(summary.completedWork.isEmpty())
+        assertTrue(summary.resourceWarnings.isEmpty())
+        session.close()
+    }
+
+    @Test
+    fun `failed or halted time advance never publishes a summary`() = runBlocking {
+        val before = summarySnapshot()
+        val failed = WorldSession(
+            SessionEpoch(1), FailingSavePort(), this, ContentSnapshot.emptyForTest(), before, Dispatchers.Unconfined
+        ) { envelope, receiptVersion, rng, submissionSequence ->
+            summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world)
+        }
+        val failedResult = failed.execute(summaryEnvelope("summary-failed")) as CommandResult.Rejected
+        assertTrue(failedResult.error is DomainError.PersistenceFailure)
+        assertEquals(null, failed.publications.value)
+        failed.close()
+
+        val halted = WorldSession(
+            SessionEpoch(1), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), before, Dispatchers.Unconfined
+        ) { _, _, rng, submissionSequence ->
+            DomainDelta(emptyList(), rng, emptyList(), CommandResult.Rejected(DomainError.SystemHalted("summary halt"), submissionSequence))
+        }
+        val haltedResult = halted.execute(summaryEnvelope("summary-halted")) as CommandResult.Rejected
+        assertTrue(haltedResult.error is DomainError.SystemHalted)
+        assertEquals(null, halted.publications.value)
+        halted.close()
+    }
+
+    @Test
+    fun `terminal time advance summaries expose only the continuation and next action required by each result`() = runBlocking {
+        val cases = listOf(
+            TimeAdvanceResult.COMPLETED to (null to PublicTimeAdvanceNextAction.ACKNOWLEDGE),
+            TimeAdvanceResult.INTERRUPTED to (PublicTimeAdvanceContinuation.RESUME to PublicTimeAdvanceNextAction.CONTINUE),
+            TimeAdvanceResult.DECISION_REQUIRED to (PublicTimeAdvanceContinuation.DECISION to PublicTimeAdvanceNextAction.CHOOSE_DECISION),
+            TimeAdvanceResult.CANCELLED to (null to PublicTimeAdvanceNextAction.ACKNOWLEDGE),
+            TimeAdvanceResult.UNREACHABLE to (null to PublicTimeAdvanceNextAction.ACKNOWLEDGE),
+            TimeAdvanceResult.LIMIT_REACHED to (null to PublicTimeAdvanceNextAction.ACKNOWLEDGE),
+            TimeAdvanceResult.FAILED to (null to PublicTimeAdvanceNextAction.RETRY)
+        )
+        cases.forEachIndexed { index, (result, expected) ->
+            val before = summarySnapshot()
+            val session = WorldSession(
+                SessionEpoch(1), RecordingSavePort(), this, ContentSnapshot.emptyForTest(), before, Dispatchers.Unconfined
+            ) { envelope, receiptVersion, rng, submissionSequence ->
+                summaryDelta(envelope, receiptVersion, rng, submissionSequence, before.world, result)
+            }
+            assertAccepted(session.execute(summaryEnvelope("summary-terminal-$index")), 1)
+            val summary = checkNotNull(session.publications.value?.timeAdvanceSummary)
+            assertEquals(result, summary.terminalReason)
+            assertEquals(expected.first, summary.continuation)
+            assertEquals(expected.second, summary.nextAction)
+            session.close()
+        }
+    }
+
     private fun unsupportedEnvelope(
         commandId: String,
         feature: String,
@@ -915,6 +1078,156 @@ class WorldSessionTest {
         ),
         RngState(emptyList()),
         emptyMap()
+    )
+
+    private fun summaryEnvelope(
+        commandId: String,
+        actorId: EntityId? = entityId("actor-1")
+    ): CommandEnvelope<AdvanceTimePayload> = CommandEnvelope.create(
+        CommandId(commandId),
+        SessionEpoch(1),
+        StateVersion(0),
+        actorId,
+        AdvanceTimePayload(
+            TimeAdvanceGoal.UntilMinute(worldSessionTestMinute(10)),
+            ProgressionMode.FAST_FORWARD,
+            TimeTraversalLimits(worldSessionTestMinute(10), maxBoundaryCount = 8)
+        )
+    )
+
+    private fun summarySnapshot(): WorldSnapshot {
+        val resource = ResourceIdentity("MATERIAL", "ore")
+        val action = ScheduledAction(
+            entityId("summary-action"),
+            "summary.work",
+            ScheduledActionPayload(
+                "PLAYER",
+                entityId("actor-1"),
+                listOf(ScheduledEntityRef("PLAYER", entityId("actor-1"))),
+                SchedulePriority.PERSONAL_COMMITMENT,
+                listOf(ResourceClaim(resource, 1L, ResourceClaimPolicy.CONSUME_ON_RESERVE)),
+                ActionKindPolicyProfile(
+                    resumable = true,
+                    progressBasis = "MINUTE",
+                    interruptionPolicy = ActionInterruptionPolicy(ActionInterruptionResult.CONTINUE),
+                    cancellationPolicy = ActionCancellationPolicy(CancellationStage.entries.associateWith { ActionCancellationRule(0, 0, true) }),
+                    consequenceEventCodec = "summary.work.cancelled.v1"
+                ),
+                "summary.work.completed",
+                "summary.work.completed.v1",
+                canBePreempted = false
+            ),
+            worldSessionTestMinute(0),
+            worldSessionTestMinute(10),
+            status = ScheduledActionStatus.PLANNED
+        )
+        val hidden = action.copy(
+            actionId = entityId("hidden-action"),
+            actionKind = "secret.work",
+            payload = action.payload.copy(
+                ownerType = "NPC",
+                ownerId = entityId("npc-1"),
+                participants = listOf(ScheduledEntityRef("NPC", entityId("npc-1"))),
+                resourceClaims = emptyList()
+            )
+        )
+        return WorldSnapshot(
+            StateVersion(0),
+            AuthoritativeWorldState(
+                WorldClock(worldSessionTestMinute(0)),
+                ScheduleCalendar(listOf(action, hidden), ResourceLedger(mapOf(resource to 1L))),
+                null,
+                BoundaryRegistryBinding(1, emptyList())
+            ),
+            RngState(emptyList()),
+            emptyMap()
+        )
+    }
+
+    private fun summaryDelta(
+        envelope: CommandEnvelope<out WorldCommandPayload>,
+        receiptVersion: StateVersion,
+        rng: RngState,
+        submissionSequence: Long,
+        before: AuthoritativeWorldState,
+        terminalResult: TimeAdvanceResult = TimeAdvanceResult.COMPLETED
+    ): DomainDelta {
+        val payload = envelope.payload as AdvanceTimePayload
+        val resource = ResourceIdentity("MATERIAL", "ore")
+        val completed = before.calendar.actions.map { it.copy(status = ScheduledActionStatus.COMPLETED) }
+        val terminal = TimeAdvanceState(
+            payload.goal,
+            null,
+            processedBoundaryCount = 1,
+            status = terminalResult,
+            commandEpoch = envelope.sessionEpoch,
+            commandId = envelope.commandId,
+            pendingDecisionGateId = "summary-gate".takeIf { terminalResult == TimeAdvanceResult.DECISION_REQUIRED },
+            pendingDecisionChoiceIds = listOf("continue").takeIf { terminalResult == TimeAdvanceResult.DECISION_REQUIRED }.orEmpty(),
+            pendingSuffix = summaryPendingSuffix().takeIf { terminalResult == TimeAdvanceResult.DECISION_REQUIRED },
+            progressionMode = payload.mode,
+            limits = payload.limits
+        )
+        val after = before.copy(
+            clock = WorldClock(worldSessionTestMinute(10)),
+            calendar = ScheduleCalendar(
+                completed,
+                ResourceLedger(
+                    owned = mapOf(resource to 0L),
+                    consumed = mapOf(resource to 1L),
+                    claimStates = mapOf(ResourceClaimKey(entityId("summary-action"), resource) to ResourceClaimState.CONSUMED)
+                )
+            ),
+            timeAdvance = terminal
+        )
+        val publicKnown = (0..5).map { index ->
+            EventImportance.HIGH to BoundaryDomainEventPayload(
+                BoundaryDomainEventType.CALENDAR_DAY_STARTED,
+                canonicalPayloadHash("{\"index\":$index}"),
+                "summary-major-$index"
+            )
+        } + listOf(
+            EventImportance.NORMAL to BoundaryDomainEventPayload(
+                BoundaryDomainEventType.CALENDAR_DAY_STARTED,
+                canonicalPayloadHash("{\"normal\":true}"),
+                "summary-normal"
+            ),
+            EventImportance.LOW to UnsupportedFeatureEventPayload("summary-low-a"),
+            EventImportance.LOW to UnsupportedFeatureEventPayload("summary-low-b"),
+            EventImportance.HIGH to UnsupportedFeatureEventPayload("summary-unknown")
+        )
+        val events = (publicKnown.map { EventVisibility.PUBLIC to it } + listOf(
+            EventVisibility.PARTICIPANTS to (EventImportance.HIGH to UnsupportedFeatureEventPayload("summary-participant")),
+            EventVisibility.OBSERVER_SCOPED to (EventImportance.HIGH to UnsupportedFeatureEventPayload("summary-observer")),
+            EventVisibility.SYSTEM_HIDDEN to (EventImportance.HIGH to UnsupportedFeatureEventPayload("hidden.summary"))
+        )).mapIndexed { index, (visibility, pair) ->
+            DomainEvent(
+                EventId("${envelope.commandId.value}/$index"),
+                null,
+                null,
+                envelope.sessionEpoch,
+                envelope.commandId,
+                receiptVersion,
+                worldSessionTestMinute(10),
+                SubMinuteMillis(0),
+                EventSequence(index.toLong()),
+                visibility,
+                pair.first,
+                pair.second
+            )
+        }
+        return DomainDelta(emptyList(), rng, events, CommandResult.Accepted(submissionSequence), WorldStateChange(before, after))
+    }
+
+    private fun summaryPendingSuffix(): PendingBoundarySuffix = PendingBoundarySuffix(
+        listOf(
+            BoundaryCandidate(
+                BoundaryKey(worldSessionTestMinute(10), BoundaryCategory.WORLD_EVENT, 0, 0, "summary-gate", "", "summary"),
+                "calendar.day.start.v1",
+                "CalendarBoundaryPayload.v1",
+                "{\"minute\":10}"
+            )
+        )
     )
 
     private fun kotlinx.coroutines.CoroutineScope.moneySession(savePort: RecordingSavePort): WorldSession = WorldSession(

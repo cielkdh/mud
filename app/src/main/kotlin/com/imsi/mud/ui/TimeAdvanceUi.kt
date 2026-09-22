@@ -51,6 +51,7 @@ import com.imsi.mud.simulation.TimeAdvanceContinuation
 import com.imsi.mud.simulation.TimeAdvanceGoal
 import com.imsi.mud.simulation.TimeAdvanceInterruptPolicy
 import com.imsi.mud.simulation.TimeAdvanceResult
+import com.imsi.mud.simulation.TimeAdvanceSummaryView
 import com.imsi.mud.simulation.TimeTraversalLimits
 import com.imsi.mud.simulation.WorldCommandPayload
 import com.imsi.mud.simulation.WorldSession
@@ -300,15 +301,7 @@ data class AdvanceInProgressViewState(
 )
 
 data class TimeAdvanceSummary(
-    val elapsed: String,
-    val stopReason: String,
-    val majorEvents: List<String>,
-    val completedWork: List<String>,
-    val resourceWarnings: List<String>,
-    val importantChanges: List<String>,
-    val bundleCount: Int,
-    val unknownImportantCount: Int,
-    val nextActionLabel: String?
+    val projection: TimeAdvanceSummaryView
 )
 
 data class TimeAdvanceViewState(
@@ -348,7 +341,8 @@ data class TimeAdvanceCommittedSnapshot(
     val decisionChoices: List<PublicDecisionChoice> = emptyList(),
     val predecessorEpoch: Long? = null,
     val pendingSuffixHash: String? = null,
-    val sealedOutcomeHash: String? = null
+    val sealedOutcomeHash: String? = null,
+    val timeAdvanceSummary: TimeAdvanceSummaryView? = null
 )
 
 sealed interface TimeAdvanceUiAction {
@@ -413,7 +407,8 @@ private fun com.imsi.mud.simulation.CommittedPublication.toTimeAdvanceCommittedS
         },
         predecessorEpoch = snapshot.sessionEpoch.value,
         pendingSuffixHash = timeAdvanceTerminal?.pendingSuffixHash?.value,
-        sealedOutcomeHash = timeAdvanceTerminal?.sealedOutcomeHash?.value
+        sealedOutcomeHash = timeAdvanceTerminal?.sealedOutcomeHash?.value,
+        timeAdvanceSummary = timeAdvanceSummary
     )
 
 class TimeAdvanceController internal constructor(
@@ -422,7 +417,8 @@ class TimeAdvanceController internal constructor(
     private val runtimeState: () -> SessionRuntimeState,
     private val currentVersion: () -> StateVersion?,
     private val newCommandId: () -> CommandId,
-    private val currentPublication: () -> TimeAdvanceCommittedSnapshot? = { null }
+    private val currentPublication: () -> TimeAdvanceCommittedSnapshot? = { null },
+    private val refreshSummary: suspend (CommandId) -> Unit = {}
 ) {
     constructor(
         session: WorldSession,
@@ -433,7 +429,8 @@ class TimeAdvanceController internal constructor(
         runtimeState = { session.runtimeState.value },
         currentVersion = { session.publications.value?.snapshot?.stateVersion },
         newCommandId = newCommandId,
-        currentPublication = { session.publications.value?.toTimeAdvanceCommittedSnapshot() }
+        currentPublication = { session.publications.value?.toTimeAdvanceCommittedSnapshot() },
+        refreshSummary = { session.refreshTimeAdvanceSummary(it) }
     )
 
     constructor(
@@ -445,10 +442,21 @@ class TimeAdvanceController internal constructor(
         runtimeState = { session.runtimeState.value },
         currentVersion = { session.publications.value?.snapshot?.stateVersion },
         newCommandId = newCommandId,
-        currentPublication = { session.publications.value?.toTimeAdvanceCommittedSnapshot() }
+        currentPublication = { session.publications.value?.toTimeAdvanceCommittedSnapshot() },
+        refreshSummary = { session.refreshTimeAdvanceSummary(it) }
     )
 
     fun currentCommittedSnapshot(): TimeAdvanceCommittedSnapshot? = currentPublication()
+
+    suspend fun refreshCommittedSummary(commandId: CommandId) {
+        try {
+            refreshSummary(commandId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // A read projection failure must not turn a committed command into a gameplay retry.
+        }
+    }
 
     fun currentRuntimeState(): SessionRuntimeState = runtimeState()
 
@@ -596,7 +604,11 @@ class TimeAdvanceController internal constructor(
     ): TimeAdvanceDispatchResult.Command {
         val runtime = runtimeState()
         val envelope = CommandEnvelope.create(commandId, runtime.epoch, currentVersion(), actorId, payload)
-        return TimeAdvanceDispatchResult.Command(execute(envelope), kind, commandId)
+        val result = execute(envelope)
+        if (kind == TimeAdvanceCommandKind.TIME_ADVANCE && result is CommandResult.Accepted) {
+            refreshCommittedSummary(commandId)
+        }
+        return TimeAdvanceDispatchResult.Command(result, kind, commandId)
     }
 }
 
@@ -700,30 +712,22 @@ private suspend fun awaitControlCommit(
     var inactiveSinceNanos: Long? = null
     val processingDeadlineNanos = System.nanoTime() + CONTROL_COMMIT_TIMEOUT_NANOS
     while (true) {
-        val publication = controller.currentCommittedSnapshot()
+        var publication = controller.currentCommittedSnapshot()
         val runtime = controller.currentRuntimeState()
+        if (publication?.sourceCommandId == commandId.value && publication.timeAdvanceTerminal != null && publication.timeAdvanceSummary == null) {
+            controller.refreshCommittedSummary(commandId)
+            publication = controller.currentCommittedSnapshot()
+        }
         val terminal = publication?.timeAdvanceTerminal
-        if (publication?.sourceCommandId == commandId.value && terminal != null) {
+        val summary = publication?.timeAdvanceSummary
+        if (publication?.sourceCommandId == commandId.value && terminal != null && summary != null && summary.terminalReason == terminal) {
             onCommitted(
                 state.copy(
                     status = terminal.uiStatus(),
                     advanceInProgress = null,
                     controlRequest = null,
                     decisionRequired = null,
-                    summary = TimeAdvanceSummary(
-                        elapsed = "${publication.clockMinute} minutes",
-                        stopReason = when (control) {
-                            AdvanceControl.PAUSE -> "Pause applied at the next committed safe time boundary"
-                            AdvanceControl.CANCEL -> "Cancellation applied at the next committed safe time boundary"
-                        },
-                        majorEvents = emptyList(),
-                        completedWork = emptyList(),
-                        resourceWarnings = emptyList(),
-                        importantChanges = emptyList(),
-                        bundleCount = publication.eventCount,
-                        unknownImportantCount = 0,
-                        nextActionLabel = null
-                    ),
+                    summary = TimeAdvanceSummary(summary),
                     publication = publication,
                     continuationOfCommandId = if (terminal == TimeAdvanceResult.INTERRUPTED) commandId.value else null,
                     resumeRequest = if (terminal == TimeAdvanceResult.INTERRUPTED) state.startRequest else null,
@@ -731,6 +735,20 @@ private suspend fun awaitControlCommit(
                         AdvanceControl.PAUSE -> "Pause applied at the next committed safe time boundary."
                         AdvanceControl.CANCEL -> "Cancellation applied at the next committed safe time boundary."
                     }
+                )
+            )
+            return
+        }
+        if (publication?.sourceCommandId == commandId.value && terminal != null) {
+            onCommitted(
+                state.copy(
+                    status = TimeAdvanceStatus.FAILED,
+                    advanceInProgress = null,
+                    controlRequest = null,
+                    summary = null,
+                    publication = publication,
+                    startRequest = null,
+                    errorMessage = "A committed time advance summary was not available."
                 )
             )
             return
@@ -813,12 +831,14 @@ private fun reduceState(
         is CommandResult.Accepted -> if (result.kind == TimeAdvanceCommandKind.TIME_ADVANCE) {
             val terminalSnapshot = publication.timeAdvanceTerminalSnapshotFor(result.commandId)
             val terminal = terminalSnapshot?.timeAdvanceTerminal
-            if (terminal == null) {
+            val summary = terminalSnapshot?.timeAdvanceSummary
+            if (terminal == null || summary == null || summary.terminalReason != terminal) {
                 state.copy(
                     status = TimeAdvanceStatus.FAILED,
                     advanceInProgress = null,
                     summary = null,
-                    errorMessage = "A committed time advance result was not available."
+                    startRequest = null,
+                    errorMessage = "A committed time advance summary was not available."
                 )
             } else {
                 val decisionRequired = if (terminal == TimeAdvanceResult.DECISION_REQUIRED) {
@@ -832,27 +852,14 @@ private fun reduceState(
                         advanceInProgress = null,
                         decisionRequired = null,
                         summary = null,
+                        startRequest = null,
                         errorMessage = "A committed decision gate was missing its public choices."
                     )
                 }
                 state.copy(
                     status = terminal.uiStatus(),
                     advanceInProgress = null,
-                    summary = if (decisionRequired == null) {
-                        TimeAdvanceSummary(
-                            elapsed = publication?.let { "${it.clockMinute} minutes" } ?: "Committed",
-                            stopReason = terminal.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
-                            majorEvents = emptyList(),
-                            completedWork = if (terminal == TimeAdvanceResult.COMPLETED) listOf("Time advance committed") else emptyList(),
-                            resourceWarnings = emptyList(),
-                            importantChanges = emptyList(),
-                            bundleCount = publication?.eventCount ?: 0,
-                            unknownImportantCount = 0,
-                            nextActionLabel = null
-                        )
-                    } else {
-                        null
-                    },
+                    summary = TimeAdvanceSummary(summary),
                     publication = publication,
                     continuationOfCommandId = if (terminal == TimeAdvanceResult.INTERRUPTED) result.commandId.value else null,
                     resumeRequest = if (terminal == TimeAdvanceResult.INTERRUPTED) state.startRequest else null,
@@ -1198,6 +1205,7 @@ private fun AdvanceInProgressPanel(
 
 @Composable
 private fun SummaryPanel(summary: TimeAdvanceSummary) {
+    val projection = summary.projection
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1206,26 +1214,51 @@ private fun SummaryPanel(summary: TimeAdvanceSummary) {
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text("Summary", style = MaterialTheme.typography.titleMedium)
-        Text("Elapsed: ${summary.elapsed}")
-        Text("Stopped: ${summary.stopReason}")
-        SummaryItems("Major events", "major-events", summary.majorEvents)
-        SummaryItems("Completed", "completed", summary.completedWork)
-        SummaryItems("Resource warnings", "resource-warnings", summary.resourceWarnings)
-        SummaryItems("Important changes", "important-changes", summary.importantChanges)
-        Text("Bundles: ${summary.bundleCount}")
-        Text("Unknown important items: ${summary.unknownImportantCount}")
-        summary.nextActionLabel?.let { Text("Next: $it") }
+        Text("Elapsed: ${projection.elapsedMinutes} minutes")
+        Text("Stopped: ${projection.terminalReason.displayLabel()}")
+        SummaryItems(
+            "Major events",
+            "major-events",
+            projection.majorEvents.map { "${it.type} at minute ${it.gameMinute.value}" },
+            projection.majorEventsOverflowCount
+        )
+        SummaryItems(
+            "Completed",
+            "completed",
+            projection.completedWork.map { "${it.actionKind} at minute ${it.completedMinute.value}" },
+            projection.completedWorkOverflowCount
+        )
+        SummaryItems(
+            "Resource warnings",
+            "resource-warnings",
+            projection.resourceWarnings.map { "${it.resourceKind} (${it.availableQuantity} available)" },
+            projection.resourceWarningsOverflowCount
+        )
+        SummaryItems(
+            "Important changes",
+            "important-changes",
+            projection.importantChanges.map { "${it.type} at minute ${it.gameMinute.value}" },
+            projection.importantChangesOverflowCount
+        )
+        SummaryItems(
+            "Low importance bundles",
+            "low-importance-bundles",
+            projection.lowImportanceBundles.map { "${it.type}: ${it.count}" },
+            projection.lowImportanceBundlesOverflowCount
+        )
+        Text("Unknown important items: ${projection.unknownImportantEventCount}")
+        Text("Continuation: ${projection.continuation?.displayLabel() ?: "None"}")
+        Text("Next: ${projection.nextAction.displayLabel()}")
     }
 }
 
 @Composable
-private fun SummaryItems(label: String, tag: String, items: List<String>) {
-    items.take(SUMMARY_ITEM_LIMIT).forEachIndexed { index, item ->
+private fun SummaryItems(label: String, tag: String, items: List<String>, overflowCount: Int) {
+    items.forEachIndexed { index, item ->
         Text("$label: $item", modifier = Modifier.testTag("phase2-time-summary-$tag-$index"))
     }
-    val remaining = items.size - SUMMARY_ITEM_LIMIT
-    if (remaining > 0) {
-        Text("$label: $remaining more", modifier = Modifier.testTag("phase2-time-summary-$tag-overflow"))
+    if (overflowCount > 0) {
+        Text("$label: $overflowCount more", modifier = Modifier.testTag("phase2-time-summary-$tag-overflow"))
     }
 }
 
@@ -1317,7 +1350,9 @@ private fun ScheduleResolution.label(): String = name.replace('_', ' ').lowercas
 
 private fun statusLabel(status: TimeAdvanceStatus): String = status.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
-private const val SUMMARY_ITEM_LIMIT = 5
+private fun TimeAdvanceResult.displayLabel(): String = name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+
+private fun Enum<*>.displayLabel(): String = name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 
 private fun textModifier(tag: String, description: String, index: Float): Modifier = Modifier
     .testTag(tag)
