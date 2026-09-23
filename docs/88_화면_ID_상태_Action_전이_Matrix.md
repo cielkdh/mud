@@ -19,7 +19,7 @@ STOPPED → RESTORED
 | `READY` | 상호작용 가능 | 권위 snapshot version 표시/보관 |
 | `EMPTY` | 정상이나 데이터 없음 | 원인+다음 행동 제공 |
 | `MUTATING` | Command 처리 중 | 중복 탭 방지, 취소 가능성 표시 |
-| `DIRTY_CONFIRM` | 마지막 durable save 이후 변경 존재 | 손실 범위·저장 후/저장하지 않고/취소 CTA를 함께 표시 |
+| `DIRTY_CONFIRM` | 마지막 complete checkpoint 이후 current DB 변경 존재 | current는 durable하나 이전 저장 지점으로 돌아갈 수 없는 범위·저장 지점 남기고/없이 계속/취소 CTA 표시 |
 | `DELETE_CONFIRM` | 사용자가 전체 세이브 삭제를 요청하고 대상·영향을 확인 중 | 가문·플레이 시간·진행도와 선택적 Export를 표시하고 취소를 기본 포커스로 둔다; 확인 전 변경 금지 |
 | `DELETING` | 전체 세이브 삭제가 접수되어 결과를 확인 중 | 중복 삭제/시작 CTA를 막고, active writer close/drain 이유를 표시하며 확정 전 빈 상태를 보이지 않는다 |
 | `DELETE_COMPLETED` | 전체 세이브 삭제가 durable하게 확인됨 | 삭제 결과를 한 번 알리고 SAVE 목록의 EMPTY 상태로 이동 |
@@ -39,7 +39,7 @@ P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 
 |---|---|---|---|---|---|---|---|---|
 | SCR-START-001 | 시작/이어하기 | start | P3/P22 | LOADING/READY/EMPTY/ERROR/BLOCKED | 최근 슬롯 이어하기/새 게임/가져오기 | 성공한 세션 open 후 HOME 또는 SCR-START-002 | 슬롯 checksum/version | `QUERY` / `NAVIGATION` |
 | SCR-START-002 | 새 게임/슬롯 생성 | start/new | P3/P4/P22 | DRAFT/CREATING/ERROR/BLOCKED | 슬롯·seed·기본 profile 확인/생성 | receipt와 첫 complete generation 확인 후 HOME | content/balance 호환·중복 실행 방지 | `CMD-P3-F001` (`CreateNewWorld`) |
-| SCR-START-003 | 저장되지 않은 진행 확인 | start/dirty | P3/P22 | DIRTY_CONFIRM/SAVING/DISCARDING/CANCELLED/ERROR/BLOCKED | 저장 후 계속/저장하지 않고 계속/취소 | 취소 시 이전 화면, 완료 시 목적지 | dirty generation·활성 command | `CMD-P3-F001` / `LOCAL_UI` |
+| SCR-START-003 | 최근 저장 지점 이후 진행 확인 | start/dirty | P3/P22 | DIRTY_CONFIRM/SAVING/DISCARDING/CANCELLED/ERROR/BLOCKED | 저장 지점 남기고 계속/저장 지점 없이 계속/취소 | 취소 시 이전 화면, 완료 시 목적지 | dirty generation·활성 command | `CMD-P3-F001` / `LOCAL_UI` |
 | SCR-HOME-001 | 홈 | home | P22 | READY/LOADING/ERROR | 던전 카드 선택 | SCR-DUN-001 | - | `NAVIGATION` |
 | SCR-DUN-001 | 던전 목록 | dungeon/list | P8/P22 | LOADING/READY/EMPTY/ERROR | 필터/던전 선택 | SCR-DUN-002 | 공개정보 정책 | `QUERY` |
 | SCR-DUN-002 | 던전 상세 | dungeon/detail/{id} | P8/P22 | LOADING/READY/ERROR | 입장/등록/추적 | SCR-DUN-003 | 파티·거리·상태 Guard | `CMD-P9-F001` |
@@ -87,10 +87,10 @@ P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 
 | SCR-RECOR-002 | 통계 | records/stats | P21 | LOADING/READY | 기간/지표 | SCR-RECOR-001 | aggregate 검증 | `QUERY` |
 | SCR-SEARCH-001 | 전역 검색 | search | P21/P22 | IDLE/LOADING/READY/MUTATING/EMPTY/ERROR | 검색/필터/정렬/북마크 전환 | 대상 상세 | 공개정보 authorization·observer 권한 | `QUERY FUNC-P21-003` / `CMD-P21-F003` |
 | SCR-NOTI-001 | 알림 센터 | notifications | P22 | READY/EMPTY | 읽음/이동 | 딥링크 대상 | event visibility | `LOCAL_PROJECTION` / `NAVIGATION` |
-| SCR-SAVE-001 | 세이브/로드 | save | P3/P22 | LOADING/READY/EMPTY/SAVING/DELETE_CONFIRM/DELETING/DELETE_COMPLETED/DELETE_ERROR/ERROR/BLOCKED | 슬롯 선택/미리보기/수동저장/로드/가져오기/내보내기/전체 세이브 삭제 | 성공한 load의 session open 후 월드; 삭제 성공 후 EMPTY; 그 외 저장 목록 | 슬롯 선택·세션/무결성/dirty guard/전체 삭제 명시 확인 | `CMD-P3-F001` (`CheckpointWorld`) / `CMD-P3-F003` / `CMD-P3-F005` / `QUERY` / save maintenance |
-| SCR-SAVE-002 | 세이브 복구 | save/recovery | P3 | LOADING/RECOVERABLE/EMPTY/VALIDATING/RECOVERY_LOADING/CORRUPTED/RECOVERY_COMPLETED/ERROR/BLOCKED | 후보 비교/복원/다른 후보/뒤로 | RECOVERY_COMPLETED와 새 session open 확인 후 HOME; Back은 SCR-SAVE-001 | checksum/version/complete generation | `CMD-P3-F003` |
-| SCR-SAVE-003 | 세이브 호환·마이그레이션 | save/migration | P3 | LOADING/COMPATIBLE/MIGRATION_AVAILABLE/MIGRATING/INCOMPATIBLE/MIGRATION_ERROR/BLOCKED | COMPATIBLE은 열기, MIGRATION_AVAILABLE은 변환 후 열기, INCOMPATIBLE은 내보내기/뒤로 | 성공 시 선택 월드, 실패/취소 시 슬롯 목록 | schema/content/balance compatibility·원본 보존 | `CMD-P3-F004` |
-| SCR-SAVE-004 | 세이브 파일 가져오기/내보내기 | save/archive | P3 | FILE_PICKER/VALIDATING/IMPORTING/IMPORTED/EXPORTING/EXPORTED/CANCELLED/PERMISSION_DENIED/ERROR/BLOCKED | 파일 선택/가져오기/내보내기/취소 | 성공은 SCR-SAVE-001, 취소/실패는 호출 화면 | SAF permission/format/checksum/content binding·기존 슬롯 보존 | `CMD-P3-F005` / `QUERY` |
+| SCR-SAVE-001 | 세이브/로드 | save | P3/P22 | LOADING/READY/EMPTY/SAVING/DELETE_CONFIRM/DELETING/DELETE_COMPLETED/DELETE_ERROR/ERROR/BLOCKED | 슬롯 선택/미리보기/수동저장/로드/가져오기/내보내기/전체 세이브 삭제 | 성공한 load의 session open 후 월드; 삭제 성공 후 EMPTY; 그 외 저장 목록 | 슬롯 선택·세션/무결성/dirty guard/전체 삭제 명시 확인 | `CMD-P3-F001` (`CheckpointWorld`) / lifecycle restore / `MNT-P3-IMPORT` / `QRY-P3-EXPORT` / save maintenance |
+| SCR-SAVE-002 | 세이브 복구 | save/recovery | P3 | LOADING/RECOVERABLE/EMPTY/VALIDATING/RECOVERY_LOADING/CORRUPTED/RECOVERY_COMPLETED/ERROR/BLOCKED | 후보 비교/복원/다른 후보/뒤로 | RECOVERY_COMPLETED와 새 session open 확인 후 HOME; Back은 SCR-SAVE-001 | checksum/version/complete generation | `MNT-P3-START-CHECKPOINT` / `QRY-P3-INTEGRITY` |
+| SCR-SAVE-003 | 세이브 호환·마이그레이션 | save/migration | P3 | LOADING/COMPATIBLE/MIGRATION_AVAILABLE/MIGRATING/INCOMPATIBLE/MIGRATION_ERROR/BLOCKED | COMPATIBLE은 열기, MIGRATION_AVAILABLE은 변환 후 열기, INCOMPATIBLE은 내보내기/뒤로 | 성공 시 선택 월드, 실패/취소 시 슬롯 목록 | schema/content/balance compatibility·원본 보존 | `MNT-P3-MIGRATE` |
+| SCR-SAVE-004 | 세이브 파일 가져오기/내보내기 | save/archive | P3 | FILE_PICKER/VALIDATING/IMPORTING/IMPORTED/EXPORTING/EXPORTED/CANCELLED/PERMISSION_DENIED/ERROR/BLOCKED | 파일 선택/가져오기/내보내기/취소 | 성공은 SCR-SAVE-001, 취소/실패는 호출 화면 | SAF permission/format/checksum/content binding·기존 슬롯 보존 | `MNT-P3-IMPORT` / `QRY-P3-EXPORT` |
 | SCR-RET-001 | 귀환 조건 | return | P20 | PROGRESSING/ELIGIBLE | 증표/조건/귀환 | SCR-RET-002 | 모든 필수조건 | `QUERY` / `CMD-P20-F004` |
 | SCR-RET-002 | 귀환/후일담 | return/ending | P20 | ELIGIBLE/ENDING_COMMITTED/PRESENTED | 귀환/잔류/연대기 | 종료 또는 HOME | ending commit | `CMD-P20-F004` |
 | SCR-SET-001 | 설정/접근성 | settings | P22 | READY | theme/font/motion/TalkBack 지원값 | 이전 | - | `LOCAL_PREFERENCE` |
@@ -137,7 +137,7 @@ P0는 아래 registry에 새 Screen ID나 실제 gameplay route를 추가하지 
 | 일정 PREEMPT/CANCEL_AND_INSERT·진행 중/FINAL_BOUNDARY 취소·손실 동반 변경 | `PublicConsequencePreview.v1`로 현재/새/취소 일정, 환불·손실, 소비·반환 자원, 잃는 진행률, 공개 관계·평판, 재예약 가능 여부를 표시하고 hidden 값은 제거. preview hash/row version stale이면 재확인 | confirm 전 취소 가능. commit 후 일반 Undo 금지, action kind 취소/재예약 정책만 사용 |
 | 세대 교체 | 상속/개인귀속/후계자 상태 최종 확인 | commit 전 취소, commit 후 SaveGeneration 복원 정책만 사용 |
 | 귀환 엔딩 | 조건·종료 영향·후일담 안내, Hold/Confirm | ENDING_COMMITTED 후 일반 Undo 금지 |
-| 세이브 로드/새 게임 | dirty 손실 범위와 저장 후/저장하지 않고/취소 선택 | confirm 전 취소, 기존 정상 generation 보존 |
+| 세이브 로드/새 게임 | 마지막 checkpoint 이후 되돌릴 수 없는 범위와 저장 지점 남기고/없이 계속/취소 선택 | confirm 전 취소, 기존 정상 generation 보존 |
 | 세이브 복구 | 후보별 정상 시각·진행·손실 경계·원본 보존 표시 | 검증 성공 전 기존 슬롯 삭제·덮어쓰기 금지 |
 | 세이브 전체 삭제 | 영향 대상·가문·플레이 시간·진행도 표시, 선택 슬롯 범위를 밝힌 Export, 명시적 확인과 취소 | 별도 DELETE_CONFIRM → DELETING; 확인 전 변경 0, 완료 확정 전 EMPTY 전환 금지. 한 슬롯 Export를 전체 백업으로 표시하지 않음 |
 | 세이브 가져오기 | 새 슬롯·이름 충돌·권한 정책 명시 | 기존 슬롯 자동 덮어쓰기 금지 |

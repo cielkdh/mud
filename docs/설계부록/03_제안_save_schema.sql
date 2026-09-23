@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS world_state (
   engine_order_version INTEGER NOT NULL,
   state_hash_version TEXT NOT NULL DEFAULT 'StateHash.v1',
   player_id TEXT,
+  state_hash_state_version INTEGER NOT NULL CHECK(state_hash_state_version>=0),
   state_hash TEXT NOT NULL
 );
 
@@ -182,19 +183,21 @@ CREATE TABLE IF NOT EXISTS save_generation (
   content_version TEXT NOT NULL,
   balance_version TEXT NOT NULL,
   manifest_codec TEXT NOT NULL DEFAULT 'CompleteGenerationManifest.v1',
+  shard_layout_version TEXT NOT NULL DEFAULT 'ShardLayout.v1',
   required_domain_set_version TEXT NOT NULL,
   required_domain_set_hash TEXT NOT NULL,
   expected_shard_count INTEGER NOT NULL CHECK(expected_shard_count>0),
   manifest_hash TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('WRITING','COMMITTED','ABORTED')),
+  status TEXT NOT NULL CHECK(status='COMMITTED'),
   UNIQUE(branch_id,generation_no)
 );
-CREATE INDEX IF NOT EXISTS ix_save_generation_1 ON save_generation(status,generation_no);
+CREATE INDEX IF NOT EXISTS ix_save_generation_1 ON save_generation(branch_id,status,generation_no DESC);
 
 CREATE TABLE IF NOT EXISTS checkpoint_chunk (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   sha256 TEXT NOT NULL,
+  codec_id TEXT NOT NULL,
   codec_version INTEGER NOT NULL,
   encoding TEXT NOT NULL,
   uncompressed_bytes INTEGER NOT NULL CHECK(uncompressed_bytes>=0),

@@ -509,5 +509,15 @@
     ],
     "owner": "사용자 / 개발보조·Phase 1 개발리더·QA",
     "approved_at": "2026-09-23"
+  },
+  {
+    "id": "C34",
+    "title": "Phase 3 저장 프로토콜·호환성 정합화",
+    "status": "사용자 추가 리뷰 반영 / 구현·Android·Room 실행 NOT_RUN",
+    "sources": "Phase 3, 81 codec/upcaster, 83 generation, 84 Command/Event, Android·SQLite 공식 동작",
+    "proposal": "P3 maintenance/read/lifecycle을 gameplay Command Registry와 분리하고 저장 당시 RequiredDomainSet 구조 완전성 및 지원 upcaster를 호환 기준으로 삼는다. SQLiteProfile.v1, WAL 완료 barrier, 물리 GC shrink, Android cloud/D2D live-file exclusion, branch 우선 recovery, ShardLayout.v1·ChunkHash.v1, 독립 백업 Latest/Previous, checked Long Import 공간, SaveArchiveManifest.v1을 Phase 3 Gate에 연결한다. 설계 반영은 구현 PASS가 아니다.",
+    "phases": [3],
+    "owner": "사용자 / 수석 기술 리뷰어",
+    "approved_at": "2026-09-23"
   }
 ]

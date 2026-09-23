@@ -44,17 +44,20 @@ P3-TASK-001의 첫 단계에서 최소 `:core:save` module·Room test harness를
 
 이번 설계 리뷰에서 다음 계약을 구현 전 필수 기준선으로 확정한다.
 
-1. **완전 generation 판정**: `CompleteGenerationManifest.v1`은 required domain-set version/hash, expected shard count, ordered `(domainKey, shardNo, chunkHash)` 목록의 manifest hash를 가진다. `save_generation.status='COMMITTED'` 전환은 등록된 required domain 집합이 모두 존재하고 중복·미등록 shard가 없으며 실제 행 수와 expected shard count 및 manifest hash가 일치할 때만 허용한다. 로더는 registry version/hash가 현재와 다르면 해당 세대를 불완전/비호환으로 거절한다.
+1. **완전 generation 판정**: `CompleteGenerationManifest.v1`은 저장 당시 `RequiredDomainSet.v1` version/hash, layout version, expected shard count, ordered `(domainKey, shardNo, chunkHash)` 목록의 manifest hash를 가진다. `COMMITTED` 전환은 해당 저장 시점의 등록 domain이 모두 존재하고 중복·미등록 shard 없이 행 수·manifest hash가 맞을 때만 허용한다. 로더는 hash로 저장 당시 registry descriptor를 찾아 구조적 완전성을 먼저 검사하고 각 saved codec/version의 직접 decode 또는 순차 upcast·validator를 확인한다. 현재 registry hash와 같을 필요는 없다. descriptor 미등록, 누락 domain, 해석 불가 codec은 `IncompatibleSave`로 거절하고 원본을 보존한다.
 2. **복구 교체 상태 머신**: 파일 교체는 `PREPARED → VALIDATED → OLD_RENAMED → CANDIDATE_RENAMED → CLEANED` 단계로 기록한다. 각 단계 전후에 candidate DB와 WAL checkpoint 결과, DB 파일, 부모 디렉터리의 durable flush를 확인한다. `restore.intent`가 남은 모든 crash cut에서 기존 `save.db`, `save.previous.db`, candidate 중 checksum·manifest·`integrity_check`를 통과한 완전 파일만 선택하며, 두 파일을 동시에 writer가 열 수 없도록 process-local recovery lock과 Room connection close/join을 요구한다.
 3. **모듈·앱 소유권**: 실제 Gradle module은 `:core:save`와 기존 `:core:content`를 사용한다. 일반 Task의 `:core:database`/`:core:data` 표기는 `:core:save` 내부 논리 package를 뜻하며 별도 module을 만들지 않는다. Save/Content adapter는 `:core:save`, Activity/session 조립·launcher·Loading/Error/Retry UI는 `:app`이 소유한다. UI·호출 경로 Task의 `tasks.json` module 필드에는 `:app / :core:save (logical database/data package)`를 사용한다.
 4. **profile 값의 지위**: 청크 크기, busy 재시도, archive 상한과 확장자는 제품 계약값이 아니라 versioned `config.phase_3` profile로 취급한다. profile 값은 테스트 실행 전에 하나의 값으로 고정하고, 변경 시 결정대장과 관련 acceptance를 함께 갱신한다.
 5. **활성 schema 범위**: P2가 이미 소유한 `scheduled_action`, `occupancy`, `resource_reservation`은 장기 진행·예약·경제 복구에 필수이므로 P3 active baseline에 포함한다. 제안 SQL 부록에서 이 세 테이블을 제외한 후속 Phase 도메인 테이블만 `FUTURE_PHASE_REFERENCE`로 표시하며 P3 최초 Room v1 생성·migration·Gate 대상에서 제외한다.
-6. **RequiredDomainSet.v1**: 완전 generation의 필수 집합은 `world_state`, `command_receipt`, `world_event`, `rng_state`, `scheduled_action`, `occupancy`, `resource_reservation`, `time_advance_state`, `content_binding`, `recovery_checkpoint`와 현재 registry에 등록된 모든 권위 domain codec의 sorted `(domainKey, codecVersion)` 항목이다. 등록 domain이 dirty인데 codec·shard가 없거나, 등록되지 않은 domain payload가 snapshot에 있으면 `COMMITTED` 전환을 거절한다. 장기 진행의 summary 시작 비교 기준도 `time_advance_state`의 권위 복구 입력에 포함되어야 한다. 후속 Phase domain은 registry 등록 전까지 generation에 포함하지 않으며, 저장 payload가 이를 참조하면 `IncompatibleSave`로 격리한다.
+6. **RequiredDomainSet.v1**: 생성 시 필수 집합은 `world_state`, `command_receipt`, `world_event`, `rng_state`, `scheduled_action`, `occupancy`, `resource_reservation`, `time_advance_state`, `content_binding`, `recovery_checkpoint`와 그때 등록된 권위 domain codec의 sorted `(domainKey, codecVersion)` 항목이다. version/hash로 식별되는 과거 descriptor는 해당 generation을 보존하는 동안 registry에 유지한다. 생성에서는 누락/미등록 payload를 거절하고, 로드에서는 저장 당시 descriptor의 구조 완전성 검사 뒤 현재 codec의 직접 decode/upcast를 허용한다. 장기 진행 summary 시작 기준은 `time_advance_state`의 권위 입력이며, 해석 불가한 후속 Phase domain은 부분 복원하지 않고 `IncompatibleSave`로 격리한다.
 7. **경제·콘텐츠 버전 의미**: 저장된 금화·아이템·자원·보상·예약 정산 결과와 RNG counter는 저장 시점의 `content_version`·`balance_version` 의미를 보존한다. 로드·복구·재시도에서 현재 balance를 사용해 retroactive reprice/re-roll하지 않는다. 새 balance는 명시된 호환 migration을 통과한 뒤의 신규 명령부터 적용하며, migration 불가 시 원본 세대와 결과를 보존한 채 차단한다.
 8. **복구 모드 의미**: `RESUME`은 마지막 committed segment의 cursor, RNG, 예약·점유를 그대로 이어가며 재추첨하지 않는다. `START_CHECKPOINT`는 해당 checkpoint의 clock/RNG/예약을 통째로 복원하고 복원된 snapshot에 없는 claim·completion event를 재사용하지 않는다. 과거 generation load는 새 branch/epoch로 만들고 폐기 branch의 예약·event를 현재 world에 재적용하지 않는다.
 9. **TimeAdvanceSummaryView 재구성**: summary는 비권위 파생값이다. terminal summary는 `command_receipt.actor_id`, committed `world_event`, `time_advance_state.summary_start_*`, terminal `PublicSnapshot`에서 재구성한다. 시작 기준은 admitted command의 첫 segment 전에 캡처해 segment 0과 원자 저장하고 RESUME에서 불변으로 재사용한다. 새 continuation은 새 기준을 캡처한다. actor가 없으면 PUBLIC-only로 제한하며 event/cache에서 권위 입력을 역산하지 않는다. 필드별 source는 §3.1.1을 따른다.
 10. **event compaction 보류**: `consumed_mask`는 consumer별 완료 증거가 아니므로 P3 v1에서는 `world_event` raw row를 compact하지 않는다. chronicle·ledger·recovery 등 consumer receipt 계약이 별도로 존재하고 보존 generation 및 summary 재구성 fixture가 PASS한 뒤에만 compaction을 허용한다.
-11. **전체 DB 손상 복구 경계**: C22의 기본 로컬 백업은 `SaveArchiveService`가 첫 `CreateNewWorld` checkpoint 및 이후 debounce된 autosave checkpoint의 완전 commit 뒤 사용자 동의 아래 앱 전용 독립 파일에 생성한다. 동의가 없으면 백업 불가 상태를 명시한다. 기존 snapshot/export 경로를 재사용하되 임시 파일→SQLite integrity/FK·manifest/hash 검증→파일·부모 디렉터리 sync→최종 파일 게시 순서로 처리한다. 새 백업이 검증되기 전에는 이전 검증 백업을 보존하며, 성공 후 최신 검증본 하나만 유지한다. 백업 실패는 이미 durable한 checkpoint를 취소하지 않고 이전 백업 유지·백업 불가 상태 표시로 처리한다. `save.db` 전체가 손상·사용 불가하면 DB 내부 generation과 복원 임시 파일 `save.previous.db`는 기본 백업 후보가 아니다. 독립 백업/사용자 archive를 DB 메타데이터 없이 검증해 후보로 제시하고, 없으면 `RECOVERY_UNAVAILABLE`·원본 보존·빈 월드 자동 생성 0이다. 기기·저장장치 전체 손실은 별도 export 없이는 보장하지 않는다.
+11. **전체 DB 손상 복구 경계**: C22의 기본 로컬 백업은 `SaveArchiveService`가 첫 `CreateNewWorld` 및 debounce된 autosave checkpoint의 완전 commit 뒤 사용자 동의 아래 앱 전용 독립 파일에 만든다. 동의가 없으면 백업 불가를 명시한다. 임시 파일의 integrity/FK·manifest/hash 검증과 파일·디렉터리 sync 뒤 불변 backup 파일과 원자적으로 게시된 인덱스로 `Latest/Previous` 두 검증 세대를 회전하며, 새 인덱스가 durable하기 전에는 기존 두 세대를 삭제하지 않는다. 공간 부족·백업 실패는 durable checkpoint를 취소하지 않고 검증본을 보존하며 백업 열화를 표시한다. `save.db` 전체 불능 시 DB 내부 generation과 교체 임시 파일 `save.previous.db`는 독립 후보가 아니다. 두 독립 백업/사용자 archive를 DB 메타데이터 없이 검증해 제안하고, 없으면 `RECOVERY_UNAVAILABLE`·원본 보존·빈 월드 자동 생성 0이다. 기기 전체 손실은 별도 export 없이는 보장하지 않는다.
+
+12. **StateHash cadence**: 전역 84 계약대로 일반 commit은 stateVersion만 증가하고 `state_hash`와 `state_hash_state_version`은 그대로 둔다. 첫 world 생성·checkpoint·명시적 restore만 전체 권위 상태를 scan해 두 값을 함께 확정한다. 정상 reopen에서 hash 버전이 current보다 오래되면 current hash로 비교하지 않는다. integrity/FK·도메인 불변식으로 current를 검증하고 계산한 current hash는 진단/테스트에만 쓴다.
+13. **Dirty 재기동**: dirty shard key는 성능 힌트이지 권위 데이터가 아니다. process reopen 시 currentStateVersion이 마지막 complete checkpoint보다 크거나 registry version이 다르면 dirty baseline=`UNKNOWN`이다. 첫 checkpoint는 frozen current의 모든 registered shard를 canonical encode/hash해 이전 완전 manifest와 비교하고 변경 shard만 새 chunk로 만든다. 성공 뒤에만 `KNOWN`으로 전환하고 증분 dirty를 재개한다. checkpoint 실패·불명확 결과에는 힌트를 지우지 않으며 freeze version이 바뀌면 plan을 재검증한다. 새 dirty table은 만들지 않는다.
 
 ### 3.1.1 `TimeAdvanceSummaryView.v1` 재구성·공개 계약
 
@@ -93,6 +96,10 @@ P3-TASK-001에서 P2 envelope의 actor를 receipt까지, scoped `DomainEvent`의
 | Export / import | export는 committed snapshot read; import는 maintenance coordinator의 격리 candidate/new-slot operation | export는 일관된 snapshot/close barrier를 읽고 외부 문서에 원자적으로 완성 표시한다. import는 archive 검증 후 새 slot candidate를 원자 활성화한다. | export는 gameplay receipt/event 0. import도 기존 gameplay world를 mutate하지 않으며 gameplay receipt/event 0; 성공 안내는 archive/slot 작업 검증 뒤에만 게시한다. |
 | Integrity audit / garbage collection | audit는 read-only query; GC는 coordinator/SaveCoordinator의 명시적 maintenance operation | audit는 변경 0. GC는 보존 root 검증 뒤 하나의 저장 transaction 또는 원자 파일 작업으로 수행 | audit는 receipt/event 0. GC도 gameplay receipt/event 0; 실패 시 보존 대상은 그대로 유지되고 완료 publication은 성공 확정 뒤에만 게시한다. |
 
+이 표의 모든 maintenance 작업은 WorldEngine·gameplay `DomainDelta`·RNG draw·gameplay `command_receipt`/`DomainEvent`를 사용하지 않는다. `CHECKPOINT`만 바깥 `CommandEnvelope`/receipt 1개를 소유하며 GenerationStore 내부에는 0개다. `RESUME`은 GAMEPLAY, `START_CHECKPOINT`는 LIFECYCLE_RESTORE다. 성공 알림은 durable 결과 확인 후의 lifecycle/maintenance publication이지 gameplay event가 아니다.
+
+Migration·Import·Export·GC·Restore는 gameplay commandId 대신 안정적인 `MaintenanceOperationId(operationId, operationType, inputFingerprint)`를 쓴다. 같은 ID·fingerprint 재시도는 journal/sidecar의 terminal `resultReference`를 반환하거나 미완료 파일·DB 상태를 reconcile하고, 같은 ID·다른 fingerprint는 거절한다. DB-only 효과는 같은 transaction의 `recovery_journal.operation_id/action_kind/detail_json`(canonical fingerprint·status·resultReference)에, 파일 후보/교체·Import/Export는 효과 전 sync된 sidecar intent에 ID·fingerprint·예정 resultReference를 기록한다. 재기동 시 미완료 intent를 먼저 reconcile하고 사용자 재시도는 같은 ID로 합류하므로 새 Import slot을 중복 생성하지 않는다. `command_receipt`를 재사용하지 않는다.
+
 ### 3.2 Phase3 public UI/UX 계약 (v31.10)
 
 이 절은 P3 UI·호출 경로 Task가 공통으로 따르는 사용자 화면 계약이다. 기술 상태명·DB 필드·generation ID를 그대로 사용자에게 표시하지 않으며, 모든 문구와 상태는 `PublicProjection`으로 변환한 뒤 게시한다. 이 절의 상태·CTA·접근성 조건이 각 UI Task의 generic `Loading/Empty/Error/Blocked/성공` 문구보다 우선한다.
@@ -103,7 +110,7 @@ P3-TASK-001에서 P2 envelope의 actor를 receipt까지, scoped `DomainEvent`의
 |---|---|---|---|---|
 | `SCR-START-001` | `LOADING`, `READY`, `EMPTY`, `ERROR`, `BLOCKED` | 앱 시작·이어하기·새 게임 진입 | 저장이 있으면 `이어하기`, 비어 있으면 `새 게임` | `가져오기`, `뒤로` |
 | `SCR-START-002` | `DRAFT`, `CREATING`, `ERROR`, `BLOCKED` | 새 월드 정보 확인·생성 | 유효한 입력에서 `새 월드 만들기` | `취소`, 오류 상태의 `다시 시도` |
-| `SCR-START-003` | `DIRTY_CONFIRM`, `SAVING`, `DISCARDING`, `CANCELLED`, `ERROR`, `BLOCKED` | 저장되지 않은 진행을 잃지 않고 이동 | 상태별 동작은 아래 CTA 표 참조 | `취소` |
+| `SCR-START-003` | `DIRTY_CONFIRM`, `SAVING`, `DISCARDING`, `CANCELLED`, `ERROR`, `BLOCKED` | 최근 저장 지점 이후 진행의 복원 가능 범위를 확인하고 이동 | 상태별 동작은 아래 CTA 표 참조 | `취소` |
 | `SCR-SAVE-001` | `LOADING`, `READY`, `EMPTY`, `SAVING`, `DELETE_CONFIRM`, `DELETING`, `DELETE_COMPLETED`, `DELETE_ERROR`, `ERROR`, `BLOCKED` | 현재 저장·수동 슬롯 조회·전체 세이브 삭제 | 선택 슬롯 상태별 `저장` 또는 `불러오기` | `가져오기`, `내보내기`, `전체 세이브 삭제`, `뒤로` |
 | `SCR-SAVE-002` | `LOADING`, `RECOVERABLE`, `EMPTY`, `VALIDATING`, `RECOVERY_LOADING`, `RECOVERY_COMPLETED`, `CORRUPTED`, `ERROR`, `BLOCKED` | 검증된 후보에서 복구 | 검증 가능한 후보에서 `복구` | `진단 정보`(개발/복구 권한만), `뒤로` |
 | `SCR-SAVE-003` | `LOADING`, `COMPATIBLE`, `MIGRATION_AVAILABLE`, `MIGRATING`, `INCOMPATIBLE`, `MIGRATION_ERROR`, `BLOCKED` | 버전 호환·마이그레이션 안내 | 상태별 동작은 아래 CTA 표 참조 | `내보내기`, `뒤로` |
@@ -121,9 +128,9 @@ P3-TASK-001에서 P2 envelope의 actor를 receipt까지, scoped `DomainEvent`의
 | `START-002 / DRAFT` | 슬롯 이름·seed·기본 profile을 확인하고 생성 결과를 미리 알린다. | `새 월드 만들기` 전에는 생성하지 않는다. `취소`는 시작 화면으로 돌아간다. |
 | `START-002 / CREATING` | 월드와 첫 저장을 준비 중이라고 알린다. | receipt와 첫 complete generation을 확인할 때까지 생성·이어하기·가져오기를 중복 실행하지 않는다. 확정 전에는 HOME을 표시하지 않는다. |
 | `START-002 / ERROR·BLOCKED` | 생성 실패와 기능 미제공/선행 조건 차단을 구분하고, 기존 슬롯 영향 여부를 설명한다. | 결과가 미확정이면 조회로 먼저 확인한다. 안전하게 재실행 가능한 오류만 `다시 시도`; 항상 `취소` 또는 `뒤로`를 제공한다. |
-| `START-003 / DIRTY_CONFIRM` | 마지막 저장 이후 변경과 저장하지 않을 때 잃는 범위를 설명한다. | `저장 후 계속`, `저장하지 않고 계속`, `취소`. 저장 실패 시 목적지로 이동하지 않는다. |
+| `START-003 / DIRTY_CONFIRM` | current DB 진행은 durable하지만 마지막 checkpoint/slot 이후 상태로 되돌아갈 저장 지점은 없음을 설명한다. | `저장 지점 남기고 계속`, `저장 지점 없이 계속`, `취소`. 저장 실패 시 목적지로 이동하지 않는다. |
 | `START-003 / SAVING·DISCARDING` | 현재 처리 중인 작업과 취소 가능 여부를 알린다. | 안전한 취소만 허용한다. 취소 불가 구간에서는 mutation CTA를 잠그고 완료 조건을 설명한다. |
-| `START-003 / CANCELLED·ERROR·BLOCKED` | 취소/실패/차단 상태와 미저장 진행이 유지되는지 알린다. | `CANCELLED`는 원래 화면으로 복귀한다. 오류는 안전한 재시도, 정책상 가능한 `저장하지 않고 계속`, 취소 중 가능한 행동만 제공한다. |
+| `START-003 / CANCELLED·ERROR·BLOCKED` | 취소/실패/차단 상태와 current 진행이 유지되는지 알린다. | `CANCELLED`는 원래 화면으로 복귀한다. 오류는 안전한 재시도, 정책상 가능한 `저장 지점 없이 계속`, 취소 중 가능한 행동만 제공한다. |
 | `SAVE-001 / READY` | 최근 저장·수동 저장·복구 가능 저장 그룹을 보여주고 선택한 슬롯의 미리보기를 제공한다. | 선택 후 정상 슬롯은 `불러오기`, 빈 수동 슬롯은 `여기에 저장`; 기존 수동 슬롯 교체는 별도 확인 후에만 허용한다. |
 | `SAVE-001 / EMPTY` | 저장 슬롯이 없음을 알린다. | 활성 월드가 있으면 `첫 수동 저장`; 활성 월드가 없으면 `새 게임`, `가져오기`, `뒤로`. `불러오기`와 `전체 세이브 삭제`는 제공하지 않는다. |
 | `SAVE-001 / SAVING·LOADING` | 대상 슬롯과 저장/불러오기 진행 이유를 표시한다. | 중복 mutation CTA를 막는다. 취소 불가 시 이유를 알린다. 불러오기는 세션 open 확인 후에만 대상 월드로 이동한다. |
@@ -149,14 +156,14 @@ P3-TASK-001에서 P2 envelope의 actor를 receipt까지, scoped `DomainEvent`의
 | `SAVE-004 / IMPORTED·EXPORTED` | 가져온 새 슬롯 또는 내보낸 파일의 결과를 알린다. | `슬롯 보기`/`저장 목록으로` 등 완료 후 행동을 제공한다. |
 | `SAVE-004 / PERMISSION_DENIED·ERROR·BLOCKED` | 권한 거부, 파일 오류, 기능 차단을 구분하고 기존 슬롯에 미친 영향을 알린다. | 가능한 경우 권한 재요청/파일 다시 선택/재시도; 항상 취소 또는 뒤로 경로 제공. |
 
-수동 저장은 1~5번 슬롯 중 대상 선택부터 시작한다. 빈 슬롯은 신규 저장 대상으로, 기존 슬롯은 덮어쓰기 대상으로 구분한다. 덮어쓰기 확인에는 대상 이름·세계 날짜·캐릭터를 다시 보여주며, 확인 전 기존 슬롯을 유지한다. 슬롯 선택 미리보기에는 캐릭터, 가문 세대, 파티·길드, 위치, 최근 중요 사건 3개, 귀환 진행도를 포함한다. 전체 세이브 삭제는 별도 위험 행동으로 제공하며 한 슬롯 삭제나 공간 확보 동작과 혼동되지 않게 한다.
+수동 저장은 1~5번 슬롯 중 대상 선택부터 시작한다. 빈 슬롯은 신규 저장 대상으로, 기존 슬롯은 덮어쓰기 대상으로 구분한다. 덮어쓰기 확인에는 대상 이름·세계 날짜·캐릭터를 다시 보여주며, 확인 전 기존 슬롯을 유지한다. 슬롯 선택 미리보기에는 캐릭터, 가문 세대, 파티·길드, 위치, 최근 중요 사건 3개, 귀환 진행도를 포함한다. 다섯 슬롯은 같은 `save.db` 안의 generation이므로 DB 전체 손상에 독립적인 백업이 아님을 도움말에 명시하고, 별도 검증 백업/사용자 export와 구분한다. 전체 세이브 삭제는 별도 위험 행동으로 제공한다.
 
 `가져오기`는 검증 결과와 호환 여부를 보여준 뒤 새 슬롯 이름을 확정한다. 이름 충돌 시 기존 슬롯을 변경하지 않고 새 이름 입력 또는 취소만 허용한다. `내보내기`는 사용자가 선택한 슬롯 하나를 대상으로 하며, SAF 문서 쓰기와 검증이 끝난 뒤에만 완료를 알린다.
 
 #### 3.2.2 사용자 동선과 안전 경계
 
 1. **Cold launch**: header metadata만 먼저 읽고 `이어하기` 또는 `EMPTY`를 표시한다. 첫 `CreateNewWorld` receipt와 complete generation이 확인되기 전에는 HOME/gameplay를 표시하지 않는다.
-2. **Dirty 이동**: 현재 진행이 마지막 durable generation보다 앞서면 로드·새 게임·Import 전에 `저장 후 계속 / 저장하지 않고 계속 / 취소`를 제공한다. `저장하지 않고 계속`은 손실 범위를 문구로 명시하고, 수동 저장·복구 화면으로의 Back은 취소로 처리한다.
+2. **Dirty 이동**: current 진행이 마지막 complete generation보다 앞서면 로드·새 게임·Import 전에 `저장 지점 남기고 계속 / 저장 지점 없이 계속 / 취소`를 제공한다. current transaction은 이미 durable하며, `저장 지점 없이 계속`은 이 진행으로 되돌아갈 checkpoint가 없어진다는 뜻과 손실 범위를 명시한다. 수동 저장·복구 화면으로의 Back은 취소로 처리한다.
 3. **중복 조작**: 저장/복구/마이그레이션 CTA뿐 아니라 `이어하기`의 exclusive session acquire, `새 월드 만들기`, `가져오기`도 launcher 단일 시작 gate를 공유한다. 첫 동작 접수 즉시 경쟁 시작 CTA를 비활성화하고 현재 대기 이유를 알린다. 취소는 해당 operation이 안전하게 중단 가능한 구간에서만 허용한다. mutation 재요청은 결과 확인 전 중복 제출하지 않는다.
 4. **복구**: 후보마다 사용자용 시각·캐릭터·진행·위치·상태·예상 손실 범위를 보여준다. 기존 정상 슬롯은 복구 성공 확인 전 삭제·덮어쓰지 않는다. 파일 복구와 새 session open이 모두 성공한 뒤 `RECOVERY_COMPLETED`를 한 번 게시하고 새 branch/epoch로 이어간다.
 5. **Migration/호환 불가**: 원본을 보존한 채 `이 버전에서는 열 수 없습니다` 또는 `변환이 필요합니다`를 표시한다. schema 번호·codec 이름·checksum은 기본 화면에서 숨긴다.
@@ -261,10 +268,13 @@ Activity recreate 또는 프로세스 종료 시 mutation 결과가 미확정이
 2. **writer와 저장 자원의 생명주기를 같은 lease로 묶는다.** `ProcessWorldSessionCoordinator`의 활성 lease는 `WorldSession`, `SaveCoordinator`, DB connection, content read handle을 함께 소유한다. 일반 close 순서는 `명령 접수 중지 → 안전 경계 drain → child job cancel/join → DB checkpoint/barrier → connection/handle close → lease 해제`로 고정한다. 파일 복원에서는 old session과 모든 DB connection을 close/join한 뒤에도 복구 작업이 배타 lease를 유지하고, 파일 교체·검증·새 DB/session open을 마친 뒤에만 새 session을 게시하고 lease를 넘긴다. 복구 중 다른 writer acquire는 거절한다. 반복 close는 같은 completion을 기다리며, close 실패·불명확 상태에서는 lease를 유지해 새 writer acquire를 차단한다. 이 대기는 Main thread를 block하지 않는다.
 3. **복구 crash harness와 복원 기준을 고정한다.** P3-TASK-001 전에 실제 단말의 process-kill/recovery spike를 통과한다. SQLite candidate는 WAL checkpoint 성공 후 DB를 닫고 파일을 sync한다. `restore.intent.tmp`를 완전히 쓰고 sync한 뒤 `restore.intent`로 원자 교체하고 부모 디렉터리를 sync한다. source→`save.previous.db` rename 및 candidate→`save.db` rename 각각 후 부모 디렉터리를 sync하며, 해당 sync 성공 전 다음 stage를 durable 완료로 기록하지 않는다. candidate rename과 부모 디렉터리 sync 완료가 설치 commit point이고, `CANDIDATE_RENAMED` journal 기록이 늦거나 누락될 수 있으므로 재기동은 stage 문자열뿐 아니라 실제 파일 identity·integrity로 reconcile한다. 모든 파일/디렉터리 sync 실패는 전진 차단이며 source 보존 또는 재기동 reconcile 전까지 성공 publication과 새 session open을 금지한다. `PREPARED`, `VALIDATED`, `OLD_RENAMED`, `CANDIDATE_RENAMED`, `CLEANED`의 직전·직후 cut은 host runner가 수행하고 instrumentation은 자기 프로세스를 종료하지 않는다. 프로세스 강제 종료 검증은 갑작스러운 전원 차단·저장장치/controller의 flush 위반을 증명하지 않으며, 그 보장은 별도 Release 기기·파일시스템 qualification이다. WAL·storage full·candidate swap·`save.previous.db` fallback spike가 실패하면 adapter Task를 시작하지 않고 차단 결정을 기록한다.
 4. **generation의 의미를 원자 commit과 분리한다.** 정상 `save.db`가 유효하면 재기동 기준은 generation 번호가 아니라 마지막으로 durable commit된 current transaction/stateVersion이다. commit 전 종료는 이전 transaction 상태, durable commit 후 종료는 새 current rows·RNG·events·receipt·cursor를 함께 복원하며, generation lag만으로 성공 commit을 되돌리지 않는다. 일반 mutation은 `save_generation`을 생성하지 않으며 complete manifest와 slot은 checkpoint 경계의 oracle이다. 읽을 수 있는 DB 안의 generation corruption은 그 DB 내 검증된 complete generation으로 복구할 수 있다. DB 전체가 손상·사용 불가한 경우에는 독립적으로 읽히는 로컬 backup/archive만 후보가 되며, 후보가 없으면 자동 초기화 없이 차단하고 원본·손실 경계를 보존한다. 명시적 `START_CHECKPOINT`도 선택 generation의 예상 손실 경계를 표시한다. 따라서 P3-UT/CT/IT-001과 회귀 테스트의 “같은 generation” 표현은 “동일한 원자 commit/stateVersion에서 current row·RNG·event·receipt가 함께 확정되고, checkpoint를 수행한 경우에만 같은 complete generation에 포함됨”으로 해석한다.
-5. **활성 schema는 allowlist와 validator의 이중 기준으로 검증한다.** `RequiredDomainSet.v1`은 완전 generation에 담을 권위 snapshot domain 집합이지 Room 물리 테이블 목록이 아니다. 최초 Room v1/export의 `RoomV1TableAllowlist`는 이 집합의 10개 active 테이블과 저장·복구 metadata 6개(`save_generation`, `checkpoint_chunk`, `generation_chunk`, `save_slot`, `migration_history`, `recovery_journal`)로 고정한다. `dialogue_session`과 combat checkpoint를 포함한 후속 Phase 예시 테이블·codec·fixture는 `FUTURE_PHASE_REFERENCE`로 남기며 v1 생성 대상에서 제외한다. 이 문서와 SQL 부록의 `CREATE` 예시는 reference이며, 실제 Room schema export는 물리 allowlist의 extra/missing table 검사와 별도의 RequiredDomainSet codec/shard 검사를 통과해야 한다. baseline 생성·migration 경로에서는 `IF NOT EXISTS`로 누락을 숨기지 않는다. status enum/row-level CHECK는 DDL이, complete manifest·required domain·중복/미등록 shard 불변식은 SaveCoordinator의 write validator와 RecoveryService의 load validator가 각각 소유하고 음성 fixture를 둔다.
+5. **활성 schema는 allowlist와 validator의 이중 기준으로 검증한다.** `RequiredDomainSet.v1`은 완전 generation에 담을 권위 snapshot domain 집합이지 Room 물리 테이블 목록이 아니다. 최초 Room v1/export의 `RoomV1TableAllowlist`는 이 집합의 10개 active 테이블과 저장·복구 metadata 6개(`save_generation`, `checkpoint_chunk`, `generation_chunk`, `save_slot`, `migration_history`, `recovery_journal`)로 고정한다. `dialogue_session`과 combat checkpoint를 포함한 후속 Phase 예시 테이블·codec·fixture는 `FUTURE_PHASE_REFERENCE`로 남기며 v1 생성 대상에서 제외한다. 이 문서와 SQL 부록의 `CREATE` 예시는 reference이며, 실제 Room schema export는 물리 allowlist의 extra/missing table 검사와 별도의 RequiredDomainSet codec/shard 검사를 통과해야 한다. baseline 생성·migration 경로에서는 `IF NOT EXISTS`로 누락을 숨기지 않는다. 고정 enum과 row-level CHECK는 DDL이 방어한다. 확장 가능한 `save_slot.slot_kind/status`, `recovery_checkpoint.checkpoint_kind/status`, `migration_history.status`, `recovery_journal.action_kind`는 DDL CHECK 대상이 아니며 versioned `SaveMetadataVocabulary.v1`의 write/load validator가 미등록 값을 거절한다. Task-001 G에서 실제 허용값·버전·upcast를 freeze하고 미등록 값의 write/load 음성 fixture가 없으면 Gate를 열지 않는다. complete manifest·required domain·중복/미등록 shard는 SaveCoordinator write validator와 RecoveryService load validator가 검사한다.
 
 6. **공식 테스트 매핑은 ID별 실행 대상을 식별하되 별도 증거 묶음을 만들지 않는다.** `tests.json`의 각 P3 ID는 처음 `PLANNED`이며 `case_key`=공식 ID, source/command/result locator=null이다. P3-TASK-001은 실제 spike case만 source·runner 결과를 확인해 `BOUND`로 바꾼다. 각 기능 검증 Task(005/010/015/020/025/030)는 자기 공식 case가 실제 test source·runner locator와 `BOUND`가 된 뒤 REVIEW에 진입하고, P3-TASK-031은 전체 P3 mapping이 `BOUND`여야 REVIEW에 진입한다. 하나의 suite/command가 여러 ID를 실행해도 locator는 case를 독립 식별한다. `BOUND`는 추적성이지 PASS 증거가 아니며 각 case는 직접 실행 전까지 `NOT_RUN`이다. XML·로그·hash·bundle의 별도 복사는 요구하지 않는다.
 7. **빌드 bootstrap을 선행 조건으로 둔다.** `:core:save` Gradle module, Room/KSP 및 schema export 설정, P3 profile/version catalog, JVM/Android test source set을 먼저 확정한다. P2 `:core:simulation` SavePort를 임의로 대체하지 않고 contract diff와 adapter conformance를 남긴 뒤 Room 구현을 연결한다.
+8. **SQLiteProfile.v1을 schema 생성 전에 고정한다.** `save.db`는 `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout=250ms`, `wal_autocheckpoint=1000 pages`, `auto_vacuum=INCREMENTAL`을 사용한다. 마지막 값은 최초 table 생성 전에 적용하고 Room open/reopen에서 실제 PRAGMA 값을 검증한다. NORMAL의 보증은 process crash 기준이며 전원·커널 장애의 최근 commit 보존을 주장하지 않는다. `content.db`의 read-only 계약은 유지한다. P3-TASK-001 C spike가 해당 Room/Android 조합에서 profile 설정·복구 barrier를 입증하지 못하면 adapter 진행을 차단한다.
+9. **WAL 파일 barrier는 완료를 검사한다.** export/file-copy/restore/독립 backup candidate의 파일 snapshot 전에 신규 reader 차단→child/read job join→모든 Room connection quiesce→`wal_checkpoint(TRUNCATE)` 결과의 `busy=0`, 남은 frame 0 확인→connection close→WAL/SHM sidecar 상태 확인→DB·부모 디렉터리 sync 순서다. 호출 성공만으로 완료로 판정하지 않는다. 온라인 backup API를 사용하면 동일 snapshot 완전성·integrity oracle을 별도로 증명한다.
+10. **OS 백업은 복구 프로토콜 밖의 파일 복원을 막는다.** P3-TASK-001 A에서 Android 12+ cloud/D2D `data_extraction_rules.xml`과 이전 버전 `fullBackupContent`를 명시적 allowlist로 작성한다. `save.db`, `-wal`, `-shm`, `restore.intent`, candidate, `save.previous.db`, 임시/독립 backup은 모두 제외한다. 검증된 self-contained archive도 기본 자동 백업 대상이 아니며 사용자 SAF export만 지원한다. 실제 manifest/규칙과 cloud·D2D 모드별 restore fixture가 확인되기 전 OS 백업 지원을 주장하지 않는다.
 
 #### 3.3.1 일반 commit·restore 교체의 재기동 oracle
 
@@ -314,7 +324,7 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 |---|---|
 | 기능 목적 | 현재상태 스키마·Dirty 단위 저장을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§2429](#src-2429), [§2430](#src-2430), [§2431](#src-2431), [§2432](#src-2432), [§2433](#src-2433), [§2437](#src-2437), [§2441](#src-2441), [§2446](#src-2446), [§2450](#src-2450), [§2471](#src-2471), [§2484](#src-2484), [§2485](#src-2485), [§2487](#src-2487), [§2492](#src-2492), [§2497](#src-2497) 외 10 개 |
-| 기능 요구사항 | 1. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다<br>2. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다<br>3. 일반 mutation은 current normalized row·RNG·receipt·events만 동일 write transaction에서 갱신하고 SaveGeneration을 매번 만들지 않는다<br>4. 명시/자동/위험경계 checkpoint만 current snapshot의 불변 청크·완전 manifest를 만들며 성공한 commit 뒤 save-layer dirty shard key를 해제한다<br>5. `SaveCoordinator`는 `:core:simulation`의 `SavePort` 구현이며 CommandEnvelope·새 commandId·중첩 receipt/Event를 만들지 않는다. WorldEngine은 구체 SaveCoordinator나 Room을 참조하지 않는다 |
+| 기능 요구사항 | 1. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다<br>2. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다<br>3. 일반 mutation은 current normalized row·RNG·receipt·events만 동일 write transaction에서 갱신하고 SaveGeneration/stateHash를 매번 만들지 않는다<br>4. 명시/자동/위험경계 checkpoint만 current snapshot의 불변 청크·완전 manifest/stateHash를 만들며 성공한 commit 뒤 save-layer dirty shard key를 해제한다. reopen의 UNKNOWN dirty는 §3.1 규칙으로 재구성한다<br>5. `SaveCoordinator`는 `:core:simulation`의 `SavePort` 구현이며 CommandEnvelope·새 commandId·중첩 receipt/Event를 만들지 않는다. WorldEngine은 구체 SaveCoordinator나 Room을 참조하지 않는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | 외부 `WorldSession.execute(command: SaveCommand) -> CommandResult`, `SaveCommand = CheckpointWorld | CreateNewWorld`<br>계약 `SavePort.findReceipt` / `commit` / `commitSegment` / `checkpoint`<br>구현 `SaveCoordinator` mapper·commit/segment/checkpoint |
@@ -323,7 +333,7 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 | 입력 검증 | Dirty set 공집합 → 필요 metadata 변경 없으면 NoOp; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | RNG row 쓰기 단계에서 예외 → 예약·자원·RNG 전부 이전 값; typed DomainError 로상위호출에전달 |
 | Transaction | 일반 mutation은 `SavePort.commit` 1회로 current rows/RNG/events/receipt만 확정한다. 명시적 저장·새 게임은 `WorldSession.execute(SaveCommand)`에서 시작하고 `SavePort.checkpoint` 1회로 완전 manifest/slot/receipt를 확정한다. checkpoint는 이전 mutation을 재적용하지 않는다. 내부 command/receipt 중첩은 허용하지 않는다. |
-| 상태 변화 | SNAPSHOTTED → WRITING → COMMITTED/ABORTED |
+| 상태 변화 | SNAPSHOTTED → transaction 내부 WRITING → COMMITTED/rollback |
 | 소유 모듈 | :core:save |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P3-TASK-001](#p3-task-001) · [P3-TASK-002](#p3-task-002) · [P3-TASK-003](#p3-task-003) · [P3-TASK-004](#p3-task-004) · [P3-TASK-005](#p3-task-005) |
@@ -334,7 +344,7 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 2. content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB 를 transaction 안에서 호출하지 않는다
 3. DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다
 4. 일반 mutation은 current normalized row·RNG·receipt·events만 갱신한다. checkpoint/new game은 frozen current snapshot을 immutable chunk와 complete manifest로 만든다.
-5. SaveCoordinator mapper가 관리하는 dirty shard key는 checkpoint 성공 뒤에만 해제하며 simulation에 노출하지 않는다.
+5. SaveCoordinator mapper의 dirty shard key는 checkpoint 성공 뒤에만 해제한다. reopen 뒤 UNKNOWN이면 모든 등록 shard hash와 직전 완전 manifest를 비교해 재구성하며 simulation에 노출하지 않는다.
 6. WorldSession만 typed `DomainDelta` 또는 frozen `WorldSnapshot`을 SavePort에 넘긴다. WorldEngine은 SavePort를 호출하지 않는다. SaveCoordinator 구현은 envelope를 새로 만들거나 commandId/receipt/Event를 추가하지 않는다.
 7. WorldSession은 SavePort 성공 확인 뒤에만 PublicView/후속 event를 apply·publish하고, 실패·불확정에는 메모리/DB 상태를 게시하지 않는다. WorldEngine은 plan 계산만 수행한다.
 
@@ -378,7 +388,7 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 | 입력 검증 | 수동슬롯 이름 동일2 개 → slotId 가 달라 충돌 없음; required ID/enum/범위/상태/version 은변경 전에검사 |
 | 예외 계약 | 새 청크 완료 전 종료 → g1 의 완전 manifest 로 복구; g2 조각 혼합 없음; typed DomainError 로상위호출에전달 |
 | Transaction | `GenerationStore.create`는 바깥 `CheckpointWorld`/`CreateNewWorld`의 frozen snapshot에서 generation plan을 만드는 내부 단계다. 바깥 `WorldSession`이 receipt-first 검사를 하고 `SavePort.checkpoint` 한 번으로 current rows·generation manifest·chunk 참조·receipt를 확정한다. WorldEngine의 별도 command, 중첩 receipt/event는 없다. commit 성공 전 publication은 금지한다. |
-| 상태 변화 | WRITING → COMMITTED; retained roots → reachability GC |
+| 상태 변화 | transaction 내부 계획/쓰기 → durable COMMITTED 또는 rollback(세대 행 없음); retained roots → reachability GC |
 | 소유 모듈 | :core:save |
 | 신규/수정 | 기존 코드 미제공: 신규/adapter 제안이다. 동일 책임의 기존 모듈이 있으면 공개 interface 를 유지하고 내부 추가로 변경을 최소화한다. |
 | 관련 Task | [P3-TASK-006](#p3-task-006) · [P3-TASK-007](#p3-task-007) · [P3-TASK-008](#p3-task-008) · [P3-TASK-009](#p3-task-009) · [P3-TASK-010](#p3-task-010) |
@@ -386,7 +396,7 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 
 #### 처리 순서 및 데이터 흐름
 1. 바깥 `CheckpointWorld`/`CreateNewWorld` envelope의 durable receipt를 expectedVersion 검사·계산보다 먼저 조회한다.
-2. 검증된 frozen snapshot에서 변경 shard와 full manifest를 계획한다. `GenerationStore`는 저장 내용을 조립할 뿐 WorldEngine 명령이나 별도 receipt를 소유하지 않는다.
+2. 검증된 frozen snapshot에서 변경 shard와 full manifest를 계획한다. dirty baseline UNKNOWN이면 모든 등록 shard를 canonical 비교한다. `GenerationStore`는 저장 내용을 조립할 뿐 WorldEngine 명령이나 별도 receipt를 소유하지 않는다.
 3. 변경 청크만 저장하고 미변경 청크 참조를 재사용하며 세대 delta-chain replay는 기본으로 하지 않는다.
 4. 자동 3세대·수동 5슬롯·전투/진행/마이그레이션 root를 분리한다.
 5. 보존 root에서 도달 가능한 청크는 GC하지 않고, 과거 generation load는 별도 START_CHECKPOINT lifecycle 경계에서 새 branch/epoch로 처리한다.
@@ -501,9 +511,9 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 |---|---|
 | 정상 | `GREENFIELD_V1` + exported v1 + releasedFixtures=[] → fresh v1 생성·재오픈·대표 권위행 왕복 일치, migration 이력 0개 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성이나 기존 저장 상태 변경은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
+| 일부 성공 | 단일 maintenance operation은 부분 성공을 허용하지 않는다. 독립 batch는 항목별 operation 결과를 journal에 기록하고 gameplay receipt/event를 만들지 않는다. |
 | 일부 실패 | 실패 복제본 격리·원본으로 복귀 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
+| 중복 실행 | 같은 `operationId/inputFingerprint`는 기존 migration 결과를 반환하고 다른 fingerprint는 거절한다. gameplay receipt/event는 만들지 않는다. |
 | 재기동 후 | 정상 DB는 마지막 durable current transaction의 stateVersion·receipt·RNG·event/cursor를 재조회한다. 명시적 checkpoint 복원만 선택 generation에서 새 branch/epoch로 시작한다. |
 | 비정상 데이터 | UnsupportedSaveVersion·원본 hash 동일; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
 | 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
@@ -523,7 +533,7 @@ P3는 공통 `SavePort`에 `checkpoint(envelope, frozenSnapshot, checkpointPlan)
 |---|---|
 | 기능 목적 | 오프라인 Export·Import·아카이브 보호을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§2451](#src-2451), [§2500](#src-2500), [§2501](#src-2501), [§2502](#src-2502), [§2503](#src-2503), [§2504](#src-2504), [§2505](#src-2505), [§2506](#src-2506), [§2507](#src-2507), [§2508](#src-2508), [§2509](#src-2509), [§2510](#src-2510), [§2511](#src-2511), [§2515](#src-2515), [§3084](#src-3084) 외 2 개 |
-| 기능 요구사항 | 1. SAF 로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다<br>2. 경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding 을 검사한다<br>3. WAL 사용 중 열린 save.db 만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다<br>4. checksum 은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다<br>5. §3.1의 기본 독립 백업은 사용자 Export와 별개로 checkpoint 뒤 SaveArchiveService가 생성·검증·교체한다 |
+| 기능 요구사항 | 1. SAF 로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다<br>2. SaveArchiveManifest.v1·경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding을 검사한다; Import 전 checked Long 공간 요구량을 확인한다<br>3. WAL 사용 중 열린 save.db 만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다<br>4. checksum 은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다<br>5. §3.1의 기본 독립 백업은 사용자 Export와 별개로 checkpoint 뒤 SaveArchiveService가 생성·검증·교체한다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `SaveArchiveService.importArchive(input: LocalDocument) -> NewSlotResult` |
@@ -553,9 +563,9 @@ Export: committed snapshot → archive write/verification → 외부 document �
 |---|---|
 | 정상 | 정상 archive 가져오기 → 새 slotId·기존 슬롯 hash 불변·동일 상태 복원 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성이나 기존 저장 상태 변경은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
+| 일부 성공 | 단일 maintenance operation은 부분 성공을 허용하지 않는다. 독립 batch는 항목별 operation 결과를 journal에 기록하고 gameplay receipt/event를 만들지 않는다. |
 | 일부 실패 | 완성 표시하지 않음·부분파일 제거·기존 save 보존 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
+| 중복 실행 | 같은 `operationId/inputFingerprint`는 기존 새 slot 또는 export 결과를 반환하고 다른 fingerprint는 거절한다. gameplay receipt/event는 만들지 않는다. |
 | 재기동 후 | 정상 DB는 마지막 durable current transaction의 stateVersion·receipt·RNG·event/cursor를 재조회한다. 명시적 checkpoint 복원만 선택 generation에서 새 branch/epoch로 시작한다. |
 | 비정상 데이터 | UnsafeArchive 오류·외부 파일 생성0; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
 | 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
@@ -575,7 +585,7 @@ Export: committed snapshot → archive write/verification → 외부 document �
 |---|---|
 | 기능 목적 | 무결성 검사·복구·보존 GC 을 독립된 책임으로 구현한다. 입력, 실패 처리, 저장 경계가 분리되어 있지 않으면 여러 모듈이 동일 상태를 중복 수정할 수 있다. 이를 명시적인 명령/조회 계약으로 통일한다. |
 | 관련 요구사항 | [§2421](#src-2421), [§2463](#src-2463), [§2464](#src-2464), [§2465](#src-2465), [§2466](#src-2466), [§2467](#src-2467), [§2476](#src-2476), [§2477](#src-2477), [§2478](#src-2478), [§2480](#src-2480), [§2482](#src-2482), [§2491](#src-2491), [§2517](#src-2517), [§2524](#src-2524), [§2525](#src-2525) 외 3 개 |
-| 기능 요구사항 | 1. quick load 는 핵심참조·시계·player·소유권·예약·RNG 를 검사하고 deep audit 은 전체 graph 를 검사한다<br>2. 읽을 수 있는 DB의 세대 손상은 최신 정상 generation부터 제안한다; DB 전체가 사용 불가하면 독립 검증 로컬 backup/archive만 후보로 쓰며, 후보가 없으면 `RECOVERY_UNAVAILABLE`로 차단하고 원본을 보존한다<br>3. 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다<br>4. 공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다 |
+| 기능 요구사항 | 1. quick load 는 핵심참조·시계·player·소유권·예약·RNG 를 검사하고 deep audit 은 전체 graph 를 검사한다<br>2. 읽을 수 있는 DB의 세대 손상은 검증된 current branch에서만 자동 제안한다; 타 branch는 명시 선택한다; DB 전체가 사용 불가하면 독립 검증 로컬 backup/archive만 후보로 쓰며, 후보가 없으면 `RECOVERY_UNAVAILABLE`로 차단하고 원본을 보존한다<br>3. 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다<br>4. 논리 GC와 물리 freelist 회수를 분리하며 수동 슬롯은 자동 삭제하지 않는다 |
 | 비기능/운영 | 완전 오프라인, 결정론, 재시도 멱등성, 실패 범위 명시, 원문 정보 공개 정책을 준수한다. 로컬 진단은 기록하되 사용자 메모나 숨은 정보를 일반 로그로 수집하지 않는다. |
 | 성능/안정성 | 입력 크기, 큐, 재시도에는 유한한 상한을 둔다. DB/이미지/CPU 작업은 Main 에서 실행하지 않는다. P24 의 성능 예산을 추적하되 현재는 측정 전이다. 핵심 상태 처리에 실패하면 완전한 직전 상태를 보존한다. |
 | 주요 메소드 | `SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport`; GC는 coordinator/SaveCoordinator가 명시적으로 실행 |
@@ -592,7 +602,7 @@ Export: committed snapshot → archive write/verification → 외부 document �
 
 #### 처리 순서 및 데이터 흐름
 1. `audit`는 quick load에서 핵심 참조·시계·player·소유권·예약·RNG를, deep audit에서 전체 graph를 읽고 report와 GC 후보만 반환한다.
-2. 읽을 수 있는 DB의 generation 손상은 최신 정상 세대→이전 자동 저장 순으로 제안하고, 전체 DB 손상·사용 불가는 독립 검증 backup/archive만 후보로 삼는다. 후보가 없으면 복구를 차단하며 audit 자체는 복구를 실행하지 않는다.
+2. 읽을 수 있는 DB의 generation 손상은 검증된 `world_state.branch_id`의 current branch root→해당 branch의 최신 정상 autosave 순으로 제안한다. 다른 branch는 자동 선택하지 않고 사용자에게 원래 branch·손실 경계를 표시해 명시 선택을 받는다. current row를 신뢰할 수 없으면 검증된 독립 branch hint가 없을 때 자동 fallback을 중단한다. 전체 DB 손상·사용 불가는 독립 검증 backup/archive만 후보로 삼으며 audit 자체는 복구를 실행하지 않는다.
 3. GC 직전 보존 root와 대상 도달성을 다시 검사한다. 즐겨찾기/가문/귀환증표/역사 인물 및 root 청크는 삭제하지 않는다.
 4. 공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다.
 5. 명시적 maintenance GC만 원자 저장 경계에서 적용한다. 실패 시 rollback하여 보존 대상을 유지하고 active session/publication을 바꾸지 않는다.
@@ -604,9 +614,9 @@ Audit: `generationId, depth` → read-only `SaveIntegrityService.audit` → `Int
 |---|---|
 | 정상 | 읽을 수 있는 DB에서 현재 g3 손상, g2 정상 → g2 복원 제안·손실 경계와 시간 표시 |
 | 대상 없음 | 조회는 Empty, 단건 쓰기는 NotFound 를 반환한다. 임의의 대상 생성이나 기존 저장 상태 변경은 하지 않는다. |
-| 일부 성공 | 원자적 단건 처리에는 부분 성공을 허용하지 않는다. 정비 프리셋이나 독립 활동 batch 만 항목별 receipt 와 성공/실패 목록을 제공한다. 하나의 원자적 정산을 분할하지 않는다. |
+| 일부 성공 | 단일 maintenance operation은 부분 성공을 허용하지 않는다. 독립 batch는 항목별 operation 결과를 journal에 기록하고 gameplay receipt/event를 만들지 않는다. |
 | 일부 실패 | 트랜잭션 rollback·모든 보존 root 로드 가능; 전체 DB 사용 불가 + 독립 검증 후보 없음 → `RECOVERY_UNAVAILABLE`, 원본 보존, 빈 월드 자동 생성 금지 |
-| 중복 실행 | 동일 명령의 효과는 1 회만 반영하며, 동일 조회의 출력은 동치여야 한다. 다른 payload 에 같은 멱등키를 재사용하면 오류를 반환한다. |
+| 중복 실행 | audit는 read-only 동치, GC는 같은 `operationId/inputFingerprint`의 terminal 결과를 반환하며 다른 fingerprint를 거절한다. gameplay receipt/event는 만들지 않는다. |
 | 재기동 후 | 정상 DB는 마지막 durable current transaction의 stateVersion·receipt·RNG·event/cursor를 재조회한다. 명시적 checkpoint 복원만 선택 generation에서 새 branch/epoch로 시작한다. |
 | 비정상 데이터 | 보존 root 검증 후 그 chunk 만 GC; 잘못된 FK/enum/NaN 은검증 실패로격리/안전정지. |
 | 외부 시스템 장애 | 필수 외부 서버는 없다. 로컬 DB/파일/OS/asset 오류는 실패 테스트로 검증하며, 네트워크를 복구의 필수 조건으로 추가하지 않는다. |
@@ -635,37 +645,52 @@ Audit: `generationId, depth` → read-only `SaveIntegrityService.audit` → `Int
 
 일반 command commit과 SaveGeneration 생성은 분리한다. 일반 commit은 current materialization을 항상 durable하게 만들지만 불변 청크를 생성하지 않는다. generation은 수동 저장, debounce된 자동 저장, 전투 시작/종료, 장기 진행 시작/종료, migration 전, 앱 background safe point에서만 만든다. 같은 stateVersion에 이미 완전 generation이 있으면 metadata만 갱신하거나 NoOp하고 중복 청크를 만들지 않는다. `PublicSnapshot.checkpointGenerationId`는 마지막 완전 generation이며 현재 stateVersion과 같을 필요가 없다.
 
-기본 청크 목표는 비압축 256KiB, 최대1MiB(보완 목표)이다. 안정적인 domain+ID range shard 를 사용하여 한 행 변경이 전체 세계 청크를 바꾸지 않게 한다. 변경 청크만 새로 만들고 변경 없는 청크 참조는 재사용한다. **전체 manifest**이므로 부모 delta 체인을 끝없이 읽지 않는다. 부모 링크는 이력용이며 root pruning 시 tombstone metadata 만 남기거나 별도 ancestry archive 로 이동한다.
+`ShardLayout.v1`은 `(domainKey, stableEntityKey의 canonical UTF-8 bytes)`를 SHA-256으로 분할한다. domain별 첫 8비트 prefix를 기본 bucket으로 쓰고, 비압축 canonical payload가 1MiB를 넘는 bucket만 다음 hash bit로 재귀 분할한다. 분할은 그 bucket 안에서만 일어나며 shard 번호는 prefix 길이와 bit열의 결정적 정수 인코딩, 행 순서는 stableEntityKey byte 순이다. 단일 행이 1MiB를 넘거나 등록 최대 depth(24)에 도달해도 초과하면 checkpoint를 거절하고 기존 세대를 보존한다. 256KiB는 관측 목표, 1MiB는 강제 상한이다. manifest는 layout version·실제 prefix/shard 목록을 보존하고 변경 없는 chunk 참조를 재사용한다. **전체 manifest**이므로 부모 delta 체인을 읽지 않는다. 부모 링크는 이력용이다.
+
+`ChunkHash.v1`은 `(codecId UTF-8, codecVersion canonical decimal ASCII, encoding UTF-8, encodedPayloadBytes)` 각 항목의 unsigned 4-byte big-endian byte length와 bytes를 순서대로 이어 SHA-256한 값이다. encoding은 timestamp·랜덤 header 없는 deterministic byte output으로 고정한다. `checkpoint_chunk.sha256` UNIQUE는 이 물리 encoding identity에만 적용한다. 읽을 때 hash를 먼저 검증하고, 등록 codec으로 bounded decode한 뒤 `uncompressed_bytes`·canonical payload·domain validator를 검사한다. 같은 논리 payload라도 codec/encoding이 다르면 다른 chunk이며 조용히 충돌 재사용하지 않는다.
 
 기존 world의 `CheckpointWorld` 경계는 아래와 같다. `frozen`의 `command_receipt`·`world_event`는 frozen stateVersion까지 이미 commit된 항목만 포함한다. 현재 `CheckpointWorld`의 바깥 receipt는 snapshot에 자기 자신을 넣지 않고, manifest와 동일 transaction에 별도로 저장한다. 정상 reopen에서는 이 durable receipt를 먼저 조회해 멱등 재호출을 막는다. 과거 generation을 명시적으로 복원하면 이전 branch/epoch의 receipt를 새 branch 명령으로 재실행하지 않는다. `CreateNewWorld`는 같은 원자 transaction에서 초기 current rows/RNG를 materialize한 뒤 초기 manifest와 바깥 receipt를 확정하되 기존 gameplay mutation을 재적용하지 않는다.
 
 ```kotlin
 val frozen = captureAtWorldActorBoundary() // 현재 checkpoint command의 receipt는 제외
-val encoded = codecRegistry.encodeChangedShards(frozen) // DB lock 밖
+val encoded = codecRegistry.encodeChangedShards(frozen) // UNKNOWN이면 전체 registered shard 비교; DB lock 밖
 writeTransaction {
     verifyEpochAndVersion()
     existingReceiptOrRejectKeyReuse()
     verifyFrozenStateVersion()
     insertImmutableChunks(encoded)
+    insertCommittedGeneration() // FK parent, transaction 밖에는 commit 전 비가시
     insertCompleteGenerationManifest()
     persistOuterCheckpointReceipt()
     verifyLocalConstraints()
-    markGenerationCommitted()
     rotateLogicalAutoSlotsOnlyAfterSuccess()
 }
 publishCheckpointOnlyAfterCommit()
 ```
-위 block 은 Room3 구현 시 `withWriteTransaction` 계열을 사용한다(기술검증 부록 E01). `SQLITE_BUSY`는 같은 불변 plan 으로 제한 재시도하되 다른 world version 이면 재검증한다. 50/100/200ms 최대3 회는 **보완 설정값**이며 IO/손상/공간부족에는 무한 재시도하지 않는다. 커밋 결과가 불명확하면 receipt 부터 조회하고 비용명령을 다시 계산하지 않는다.
+`COMMITTED` 세대 행은 transaction 성공 시에만 durable하다. 실패·kill은 전부 rollback되어 세대 행이 남지 않으며 maintenance/staging 기록만 실패를 나타낸다. 원문 부록의 `WRITING/ABORTED`는 현행 durable DB 상태가 아니다. 위 block 은 Room3 구현 시 `withWriteTransaction` 계열을 사용한다(기술검증 부록 E01). `SQLITE_BUSY`는 같은 불변 plan 으로 제한 재시도하되 다른 world version 이면 재검증한다. 50/100/200ms 최대3 회는 **보완 설정값**이며 IO/손상/공간부족에는 무한 재시도하지 않는다. 커밋 결과가 불명확하면 receipt 부터 조회하고 비용명령을 다시 계산하지 않는다.
 
-로드는 ①파일/버전검사 ②전체 manifest 해시 ③각청크 checksum ④RequiredDomainSet.v1의 전 domain decode ⑤FK/소유권/RNG/예약 불변식 ⑥새 branch/epoch ⑦current materialization 원자교체 ⑧UI 게시 순서이다. P3 active baseline과 후속 Phase domain을 한 목록으로 가정하지 않으며, 등록된 domain 누락·미등록 payload·codec 부재는 `IncompatibleSave`로 거절한다. 앱 private directory에 동일 schema의 `save.restore.<operationId>.db`를 만들고 보존할 slot/generation metadata를 복사한 뒤 선택 generation을 전부 materialize·`foreign_key_check`·`integrity_check`·stateHash 검증한다. DB connection을 모두 닫고 fsync된 `restore.intent` marker를 기록한 다음 `save.db → save.previous.db`, candidate→`save.db` rename 순서로 교체한다. 시작 시 marker가 남아 있으면 두 파일의 checksum/manifest를 검사해 완전한 쪽만 선택하며, 성공 후 history를 `recovery_journal`에 옮기고 marker/previous를 정책에 따라 정리한다. source generation과 기존 DB는 성공 확인 전 삭제하지 않는다.
+구버전 generation 복원은 저장 당시 schema·StateHash version의 canonical 상태를 **upcast 전에** 재계산해 source `state_hash`와 대조하고, `state_hash_state_version`이 source snapshot stateVersion과 같은지 확인한다. 지원하지 않는 source hash version은 `IncompatibleSave`, source 값 불일치는 무결성 실패로 원본을 보존한다. 그 뒤 codec을 순차 upcast·검증하고 새 branch/epoch의 candidate를 materialize하여 현재 `StateHash.v1`을 계산한다. candidate의 `state_hash`·`state_hash_version`·`state_hash_state_version`을 새 stateVersion에 맞춰 함께 저장·재검증하며 source hash와 직접 비교하지 않는다.
 
-GC 는 자동/수동/전투/장기진행/마이그레이션 root 의 모든 참조를 mark 한 후 미참조청크만 sweep 한다. 부모 ancestry 메타데이터가 남는 것과 청크가 필요한 것은 별개이다. 보존 세대의 checksum/복원시험에 실패하면 GC 를 금지한다. 수동슬롯은 자동정리 대상이 아니다.
+로드는 ①파일/버전 ②저장 당시 RequiredDomainSet descriptor·manifest ③각 chunk hash ④saved codec decode와 upcast 전 source StateHash ⑤순차 upcast·validator ⑥FK/소유권/RNG/예약 불변식 ⑦새 branch/epoch의 candidate materialization·현재 StateHash ⑧검증 candidate 원자 설치 ⑨UI 게시 순서다. P3 active baseline과 후속 Phase domain을 한 목록으로 가정하지 않으며, 저장 당시 구조 완전성과 현재 registry 해석 가능성은 별개다. 미등록 descriptor·누락 domain·해석 불가 codec은 `IncompatibleSave`로 거절한다. 앱 private directory에 동일 schema의 `save.restore.<operationId>.db`를 만들고 보존할 slot/generation metadata를 복사한 뒤 선택 generation을 전부 materialize·`foreign_key_check`·`integrity_check`·새 candidate StateHash를 검증한다. DB connection을 모두 닫고 fsync된 `restore.intent` marker를 기록한 다음 `save.db → save.previous.db`, candidate→`save.db` rename 순서로 교체한다. 시작 시 marker가 남아 있으면 두 파일의 checksum/manifest를 검사해 완전한 쪽만 선택하며, 성공 후 history를 `recovery_journal`에 옮기고 marker/previous를 정책에 따라 정리한다. source generation과 기존 DB는 성공 확인 전 삭제하지 않는다.
+
+GC 는 자동/수동/전투/장기진행/마이그레이션/복구 root 의 모든 참조를 mark 한 후 미참조청크만 sweep 한다. 부모 ancestry 메타데이터가 남는 것과 청크가 필요한 것은 별개이다. 보존 세대의 checksum/복원시험에 실패하면 GC 를 금지한다. 수동슬롯은 자동정리 대상이 아니다. 물리 파일 축소는 논리 sweep과 별개다. 안전한 maintenance window에서 `freelist_count/page_count`를 측정하고 bounded `incremental_vacuum`을 반복한다. compact export 대비 live save 비율 1.25 초과 시 축소를 예약하며 NFR 1.5 미달 여부를 실측한다. incremental 방식으로 회수할 수 없으면 검증된 compact candidate를 기존 restore-style swap으로 교체하고, 공간/동기화 실패 시 원본을 보존한다.
+
+| root | 보존·해제 조건 |
+|---|---|
+| AUTO / MANUAL | 검증된 최신 자동 3세대 / 사용자가 선택한 수동 5슬롯. 수동은 명시적 교체·삭제 전 해제 금지 |
+| COMBAT / TIME_ADVANCE | active 작업당 최신 root 1개; 해당 작업 terminal 확정 후 후속 autosave checkpoint 성공 시 해제 |
+| MIGRATION | 검증 미완료 operation당 root 1개; 새 schema open·integrity PASS·사용자 정상 진입 후 해제 |
+| RECOVERY | 진행 중 restore당 root 1개; restore terminal 검증과 후속 독립 backup 검증 성공 후 해제 |
+
+각 root는 생성 stateVersion·releaseCondition·maxRetention 정책을 slot/checkpoint 또는 maintenance 기록에 보존한다. maxRetention은 GC 재평가·경고 상한이지 안전조건을 무시하는 강제 삭제 기한이 아니다. 해제조건 미충족·검증 실패 시 보호를 유지하고 공간 압박을 명시적으로 보고한다.
 
 `world_event`는 전체 세계의 영구 source of truth가 아니며 current rows+완전 generation이 복원의 기준이다. 다만 P3 v1에서는 consumer별 receipt 계약이 없으므로 raw event를 compact하지 않는다. chronicle/bookmark/ledger/recovery checkpoint/미완료 outbox가 참조하는 event는 기간과 무관하게 보존한다. 후속 consumer receipt registry와 summary 재구성 fixture가 추가되고 모든 consumer receipt가 완료된 뒤에만 compact 조건을 재검토한다. `command_receipt`는 참조 world_event가 없고 current/직전 session epoch가 아니며 보존 generation의 replay/감사 대상이 아닐 때 event보다 나중에 삭제한다. Event/JSON/BLOB codec은 모든 보존 generation과 raw row를 registry scan했을 때 참조 0이고 migration+restore fixture가 PASS하기 전 제거할 수 없다.
 
-Export 는 검증된 snapshot DB 를 staging 하여 archive 로 발행한다. 열린 DB 의 main 파일만 복사하지 않는다. 지원되는 online backup 또는 월드정지→commit drain→checkpoint 확인→connection close→파일복사→재오픈 barrier 를 선택한다. SQLite/드라이버 실제 backup 지원 여부는 구현 spike 에서 확인한다. WAL checkpoint 호출 성공 여부를 검사하지 않은 파일복사는 금지한다.
+Export 는 검증된 snapshot DB 를 staging 하여 archive 로 발행한다. 열린 DB 의 main 파일만 복사하지 않는다. 지원되는 online backup 또는 §3.3의 reader/connection quiesce·WAL 완료 barrier를 선택한다. SQLite/드라이버 실제 backup 지원 여부는 구현 spike 에서 확인한다.
 
-Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 을 시작 후보로 둔다. 장기 세이브 실측 후 조정 가능하되 무제한 압축해제는 불가하다. `.bxmsave`는 원문 예시 명칭이며 실제 앱 확장자는 제품명 결정과 함께 확정한다.
+`SaveArchiveManifest.v1`은 `archiveFormatVersion`, `createdByAppVersion`, `schemaVersion`, `minimumReaderVersion`, `manifestCodec`, `hashAlgorithm`, 정렬된 entry 경로·byte length·SHA-256, `contentVersion/balanceVersion/bindingHash`, snapshot payload identity를 포함한다. canonical manifest hash와 각 entry checksum·크기·경로를 추출 전에 검증한다. 알 수 없는 새 format/minimumReaderVersion 또는 지원하지 않는 codec은 원본을 보존하며 `IncompatibleSave`로 거절한다. 구 format은 등록된 순차 archive migrator로만 해석한다.
+
+Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 을 시작 후보로 둔다. 전체 archive/expanded entry의 메모리 적재를 금지한다. 모든 byte counter·합계는 overflow-checked `Long`으로 계산한다. 사전 공간 요구량은 선언된 expanded staging + candidate DB + 현재 DB 안전분 + WAL/임시 파일 + 백업 회전분 + 고정 margin의 checked sum이며 가용 공간보다 크면 시작하지 않는다. MIN 단말의 4GB 가용 공간이 최대 크기 Import 허용을 뜻하지 않는다. streaming read에서 entry별 압축·해제 byte와 합계·비율을 즉시 계산하고 bounded buffer→temp/staging file로 기록하며 incremental checksum을 검증한 뒤에만 candidate를 활성화한다. 진행 중 ENOSPC·한도·checksum 실패는 staging만 폐기하고 원본·기존 slot을 유지한다. `.bxmsave`는 원문 예시 명칭이며 실제 앱 확장자는 제품명 결정과 함께 확정한다.
 
 
 ## 6. DB 상세 설계
@@ -686,7 +711,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | scheduled_action | save.db | P2/P3 복구 baseline | R/I/U(도메인명령에따름); tombstone/GC 만 D | completion_event_id | status,due_minute,id; actor_id,start_minute |
 | occupancy | save.db | P2/P3 복구 baseline | R/I/U(도메인명령에따름); tombstone/GC 만 D | resource_kind,resource_id,action_id | resource_kind,resource_id,status,start_minute,end_minute |
 | resource_reservation | save.db | P2/P3 복구 baseline | R/I/U(도메인명령에따름); tombstone/GC 만 D | resource_kind,resource_id,action_id | resource_kind,resource_id,status; action_id |
-| save_generation | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | branch_id,generation_no | status,generation_no |
+| save_generation | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | branch_id,generation_no | branch_id,status,generation_no DESC |
 | save_slot | save.db | P3 | R/I/U(도메인명령에따름); tombstone/GC 만 D | slot_kind,ordinal | generation_id |
 | time_advance_state | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | command_epoch,request_id | status,next_boundary_minute,request_id |
 | world_event | save.db | P2 | R/I/U(도메인명령에따름); tombstone/GC 만 D | source_epoch,source_command_id,event_sequence | game_minute,id, event_type,game_minute, source_epoch,source_command_id,event_sequence |
@@ -699,6 +724,7 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | 필드/제약 | 용도 |
 |---|---|
 | sha256 TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| codec_id TEXT NOT NULL | 등록된 stable domain codec ID; ChunkHash.v1 입력 |
 | codec_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | encoding TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | uncompressed_bytes INTEGER NOT NULL CHECK(uncompressed_bytes>=0) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
@@ -801,11 +827,12 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | content_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | balance_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | manifest_codec TEXT NOT NULL | `CompleteGenerationManifest.v1` 고정. required domain 집합과 shard 목록의 canonical codec |
+| shard_layout_version TEXT NOT NULL | 저장 당시 deterministic shard partition algorithm; `ShardLayout.v1` |
 | required_domain_set_version TEXT NOT NULL | 저장 시 사용한 필수 domain registry 버전 |
 | required_domain_set_hash TEXT NOT NULL | 필수 domain·codec·shard 규칙 집합의 canonical hash |
 | expected_shard_count INTEGER NOT NULL CHECK(expected_shard_count>0) | 완전 manifest가 가져야 하는 shard 수 |
 | manifest_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| status TEXT NOT NULL CHECK(status IN ('WRITING','COMMITTED','ABORTED')) | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| status TEXT NOT NULL CHECK(status='COMMITTED') | 완전 manifest와 같은 transaction에서 확정한 durable 세대만 저장. WRITING/ABORTED는 staging/operation 상태이며 세대 행이 아님 |
 
 삭제 시 부모행 제거는 별도 참조 재기록/보존 정책. 부모는 provenance 이며 복원 delta-chain 에 의존하지 않음.
 #### `save_slot` 필드 및 관계
@@ -890,8 +917,9 @@ Import 보완한도: archive 1GiB, expanded4GiB, entries10,000, 압축비200:1 �
 | rng_version TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | engine_order_version INTEGER NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
 | state_hash_version TEXT NOT NULL | canonical state hash 계약 버전 |
+| state_hash_state_version INTEGER NOT NULL | 저장된 state_hash가 가리키는 stateVersion; 일반 commit 뒤 현재 버전보다 오래될 수 있음 |
 | player_id TEXT | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
-| state_hash TEXT NOT NULL | 선언된 타입·NULL/참조조건을 준수. 값의 의미는 이름과 해당기능 계약을 기준으로 함 |
+| state_hash TEXT NOT NULL | 해당 state_hash_state_version의 canonical StateHash.v1; current hash로 무조건 해석하지 않음 |
 
 PK id는 `WORLD`만 허용한다. bootstrap/quick-load가 정확히 1행을 확인한다. Seed 는 unsigned64 를 고정16 진수 TEXT 로 직렬화.
 
@@ -909,9 +937,12 @@ SELECT payload_hash, result_json, state_version FROM command_receipt
 WHERE epoch=:epoch AND command_id=:commandId;
 -- 일반 mutation은 current 행/RNG/event/receipt를 하나의 write transaction에 확정한다.
 -- 새 청크/manifest/slot은 별도 checkpoint transaction에서 함께 확정한다.
-UPDATE world_state SET row_version=row_version+1, state_hash=:newHash
+UPDATE world_state SET row_version=row_version+1
 WHERE id=:worldId AND session_epoch=:epoch AND row_version=:expectedVersion;
 -- affectedRows=1 필수. 0이면 Conflict 및 transaction rollback.
+-- checkpoint/첫 world 생성/명시적 restore에서만 전체 scan hash와 버전을 함께 확정한다.
+UPDATE world_state SET state_hash=:checkpointHash, state_hash_state_version=:committedVersion
+WHERE id=:worldId AND session_epoch=:epoch AND row_version=:committedVersion;
 SELECT gc.domain_key, gc.shard_no, c.payload, c.sha256
 FROM generation_chunk gc JOIN checkpoint_chunk c ON c.id=gc.chunk_id
 JOIN save_generation g ON g.id=gc.generation_id
@@ -931,6 +962,7 @@ CREATE TABLE IF NOT EXISTS checkpoint_chunk (
   id TEXT PRIMARY KEY NOT NULL,
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   sha256 TEXT NOT NULL,
+  codec_id TEXT NOT NULL,
   codec_version INTEGER NOT NULL,
   encoding TEXT NOT NULL,
   uncompressed_bytes INTEGER NOT NULL CHECK(uncompressed_bytes>=0),
@@ -1037,14 +1069,15 @@ CREATE TABLE IF NOT EXISTS save_generation (
   content_version TEXT NOT NULL,
   balance_version TEXT NOT NULL,
   manifest_codec TEXT NOT NULL DEFAULT 'CompleteGenerationManifest.v1',
+  shard_layout_version TEXT NOT NULL DEFAULT 'ShardLayout.v1',
   required_domain_set_version TEXT NOT NULL,
   required_domain_set_hash TEXT NOT NULL,
   expected_shard_count INTEGER NOT NULL CHECK(expected_shard_count>0),
   manifest_hash TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('WRITING','COMMITTED','ABORTED')),
+  status TEXT NOT NULL CHECK(status='COMMITTED'),
   UNIQUE(branch_id,generation_no)
 );
-CREATE INDEX IF NOT EXISTS ix_save_generation_1 ON save_generation(status,generation_no);
+CREATE INDEX IF NOT EXISTS ix_save_generation_1 ON save_generation(branch_id,status,generation_no DESC);
 
 CREATE TABLE IF NOT EXISTS save_slot (
   id TEXT PRIMARY KEY NOT NULL,
@@ -1149,6 +1182,7 @@ CREATE TABLE IF NOT EXISTS world_state (
   engine_order_version INTEGER NOT NULL,
   state_hash_version TEXT NOT NULL DEFAULT 'StateHash.v1',
   player_id TEXT,
+  state_hash_state_version INTEGER NOT NULL CHECK(state_hash_state_version>=0),
   state_hash TEXT NOT NULL
 );
 ```
@@ -1193,9 +1227,9 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 항목 | 설계 |
 |---|---|
 | Task ID | P3-TASK-001 |
-| 목적 | 전체 P3 기능 Task의 선행 bootstrap/공통 계약·증거 매핑을 하나의 리뷰 가능한 PR 로 완료한다. |
-| 상세 구현 내용 | 첫 단계에 최소 `:core:save` module·Room test harness를 만들고 실제 단말 storage/recovery spike(WAL·storage full·candidate swap·previous fallback)를 통과한 뒤 외부 `WorldSession.execute` gameplay commit/segment와 바깥 `CreateNewWorld`/`CheckpointWorld` checkpoint를 분리해 DTO·오류·불변식을 확정한다. `EMPTY` genesis, 첫 생성 실패, 불확정 commit의 receipt reconcile을 포함한다. P2 envelope actor→receipt.actor_id와 scoped DomainEvent audience→SavePort commit DTO 전달을 확정한다. 모든 P3 case는 `PLANNED`로 등록하되 실제 spike source가 존재하는 case만 `BOUND`한다. §3.1.2 권위 경계와 §3.3.1 crash oracle을 봉인하기 전 다른 기능 lane을 시작하지 않는다. SaveCoordinator는 중첩 command·receipt/event를 만들지 않는다. |
-| 대상 모듈 | :core:simulation / :core:save |
+| 목적 | 전체 P3 기능 Task의 선행 bootstrap을 A/B/C/D/G 독립 검토 단계로 완료한다. |
+| 상세 구현 내용 | A: 최소 `:core:save` module·Room harness와 SQLiteProfile.v1·Android cloud/D2D backup exclusion. B: `SavePort` gameplay/checkpoint 분리, actor/audience 전달, `EMPTY` genesis·receipt reconcile. C: 실제 단말 WAL 완료 barrier·storage full·candidate swap·previous fallback process-kill spike. D: P2 conformance 및 공식 Test source↔case 매핑·현재 QA 증거 확인(`첨부 ZIP만`은 NOT_VERIFIED). G: §3.1.2 권위 경계·§3.3.1 crash oracle과 A~D 증거를 승인하는 bootstrap Gate. A~D는 별도 작은 변경·리뷰로 진행하고 G 전 다른 기능 lane을 시작하지 않는다. SaveCoordinator 중첩 command/receipt/event는 0이다. |
+| 대상 모듈 | :core:simulation / :core:save / :app (backup rules) |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, command_receipt, world_event, rng_state, save_generation; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
 | 설정 변경 | config.func_p3_001 profile/한도/flag 를버전 관리. 원문 값과보완 값구분; dynamic version 금지. |
@@ -1206,9 +1240,9 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 설계 결정 의존 | C14, C15, C16, C31 |
 | 현재 차단/상태 | NOT_STARTED |
 | 담당 역할/담당자 | 담당 개발자 / 미지정 |
-| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06; 초기 계획 가정 |
+| 공수 O/M/P / 기대 인일 | 0.65/1.0/1.7 / 1.06은 구 추정치; A~D/G별 재산정 전 일정 약속에 사용 금지 |
 | Test | P3-UT-001, P3-BT-001, P3-FT-001, P3-CT-001, P3-IT-001 |
-| 완료 조건 | 실제 harness의 storage/recovery spike와 §3.3.1 process-kill crash oracle 통과, 생성된 spike case만 `BOUND` 및 validator parity, 외부 gameplay/checkpoint command당 receipt 1개·maintenance/lifecycle의 gameplay receipt/event 0·SaveCoordinator 중첩 command 0을 포함한 DTO/fixture 승인 |
+| 완료 조건 | A/B/C/D 각각 리뷰·증거 확인 뒤 G Gate 통과. SQLiteProfile readback·cloud/D2D backup exclusion·WAL 완료 barrier와 실제 harness의 storage/recovery spike와 §3.3.1 process-kill oracle, P2 실제 repository source↔JUnit 및 QA 증거 freshness 확인, 생성된 spike case만 `BOUND` 및 validator parity, 외부 gameplay/checkpoint command당 receipt 1개·maintenance/lifecycle gameplay receipt/event 0·SaveCoordinator 중첩 command 0 |
 | 리뷰/PR/증거 | 미지정 / 미작성 / 미실행; 관리데이터에 갱신 |
 
 <a id="p3-task-002"></a>
@@ -1242,7 +1276,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-003 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 world_state, command_receipt, world_event, rng_state, save_generation. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
+| 상세 구현 내용 | GAMEPLAY은 typed Delta·RNG·source events·바깥 receipt를 SavePort.commit/commitSegment 한 번에 원자 commit한다. CHECKPOINT는 frozen snapshot·완전 manifest·바깥 receipt만 SavePort.checkpoint에 넣고 내부 Delta/event/RNG draw는 만들지 않는다. 일반 commit의 stateHash는 갱신하지 않으며 affected rows·재실행을 검사한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, command_receipt, world_event, rng_state, save_generation; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1362,7 +1396,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-008 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 save_generation, save_slot, checkpoint_chunk, generation_chunk. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다. |
+| 상세 구현 내용 | `CHECKPOINT` 내부 GenerationStore plan: frozen snapshot·dirty UNKNOWN 재구성·chunk·완전 manifest·slot을 바깥 `SavePort.checkpoint` transaction에 연결한다. 바깥 receipt 1개 외 별도 CommandEnvelope/DomainDelta/receipt/event/RNG draw/publication은 0개다. affected rows·동일 ID 재호출·실패 rollback을 검사한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | save_generation, save_slot, checkpoint_chunk, generation_chunk; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1434,7 +1468,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-011 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession 의 DTO/오류/불변식 정의. 입력 checkpointId, desiredRecoveryMode(RESUME 또는 START_CHECKPOINT), installedCodecs, versionBinding. RESUME은 마지막 committed segment의 cursor·RNG·예약·점유를 그대로 이어가고, START_CHECKPOINT는 checkpoint snapshot의 clock·RNG·예약을 복원한다. 과거 generation load는 새 branch/epoch로만 시작한다. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
+| 상세 구현 내용 | `RecoveryService.restore(StartCheckpointRequest)`의 DTO/오류/불변식 정의. 입력 checkpointId·installedCodecs·versionBinding; 선택한 complete checkpoint의 clock·RNG·예약·점유를 원자 복원하고 과거 generation은 새 branch/epoch로만 시작한다. `RESUME`은 이 API가 아니라 `WorldSession`/`WorldEngine`의 마지막 committed segment continuation fixture로 검증한다. 정상/경계/실패 assertion manifest 작성. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | recovery_checkpoint, time_advance_state, scheduled_action, occupancy, resource_reservation; dialogue_session은 후속 P11 참조이며 P3 v1 생성 대상이 아니다. 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1482,7 +1516,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-013 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 recovery_checkpoint, time_advance_state, scheduled_action, occupancy, resource_reservation 및 receipt actor·event audience 열. dialogue_session은 후속 P11 참조이며 P3 v1 생성 대상이 아니다. Delta+receipt+RNG+source events+codec을 원자 commit하고 SummaryStart.v1을 첫 segment와 원자 저장·RESUME에서 재사용한다. terminal summary는 receipt.actor_id·EventAudience.v1·SummaryStart.v1·terminal public snapshot에서 재구성하고 scoped event를 사건별로 fail-closed 필터링한다. |
+| 상세 구현 내용 | GAMEPLAY RESUME의 기존 바깥 Delta·RNG·event·receipt는 SavePort.commitSegment에서 원자 확정하고 SummaryStart.v1을 첫 segment에서 저장·재사용한다. START_CHECKPOINT는 별도 RecoveryService lifecycle operation으로 candidate를 검증·교체하며 gameplay Delta/receipt/event/RNG draw는 0이다. terminal summary는 receipt.actor_id·EventAudience.v1·SummaryStart.v1·terminal public snapshot에서 재구성한다. dialogue_session은 후속 P11 참조다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | recovery_checkpoint, time_advance_state, scheduled_action, occupancy, resource_reservation; dialogue_session은 후속 P11 참조이며 P3 v1 생성 대상이 아니다. 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1602,7 +1636,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-018 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | GREENFIELD_V1은 최초 v1 생성·재오픈 adapter와 빈 migration registry를 구현한다. LEGACY_CHAIN은 실제 exported schema/fixture가 있을 때만 migration_history, save_generation, content_binding 변환을 활성화하고 원본 hash·단계별 결과·재실행을 검사한다. |
+| 상세 구현 내용 | GREENFIELD_V1은 최초 v1 생성·재오픈 adapter와 빈 migration registry를 구현한다. LEGACY_CHAIN의 MNT-P3-MIGRATE는 operationId/inputFingerprint로 재실행을 reconcile하고 gameplay command/receipt/event/RNG 변경 0이다. 실제 exported schema/fixture가 있을 때만 migration_history, save_generation, content_binding 변환을 활성화하고 원본 hash·단계별 결과·재실행을 검사한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | migration_history, save_generation, content_binding; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1698,7 +1732,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-022 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | SAF 로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다; 경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding 을 검사한다; WAL 사용 중 열린 save.db 만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다; checksum 은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다. 정해진 입력에서는 '새 slotId·기존 슬롯 hash 불변·동일 상태 복원'을 만족해야 한다. |
+| 상세 구현 내용 | SAF 로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다; SaveArchiveManifest.v1·경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding을 검사한다; Import 전 checked Long 공간 요구량을 확인한다; WAL 사용 중 열린 save.db 만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다; checksum 은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다. 정해진 입력에서는 '새 slotId·기존 슬롯 hash 불변·동일 상태 복원'을 만족해야 한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | save_slot, save_generation, recovery_journal; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1722,7 +1756,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-023 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 save_slot, save_generation, recovery_journal. Delta+receipt+RNG+source events+codec 원자 commit과 affected rows/충돌/재실행을 검증한다. SaveArchiveService가 첫 CreateNewWorld 및 debounce autosave checkpoint의 durable commit 후 앱 전용 독립 백업을 생성·검증·게시하며 새 검증본 전까지 이전 검증본을 보존한다. |
+| 상세 구현 내용 | `ARCHIVE_IMPORT/EXPORT` maintenance operationId·inputFingerprint·journal/sidecar로 재시도 결과를 reconcile한다. gameplay WorldEngine/CommandEnvelope/DomainDelta/receipt/event/RNG mutation/publication은 0개다. streaming 한도·가용 공간·checksum·candidate 검증 후 Import 새 slot을 1회 활성화한다. SaveArchiveService는 첫 CreateNewWorld·debounce autosave checkpoint의 durable commit 후 독립 백업을 생성·검증·게시하며 Latest/Previous 두 검증본을 회전하고 새 검증본 전까지 이전 검증본을 보존한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | save_slot, save_generation, recovery_journal; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1794,7 +1828,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-026 |
 | 목적 | 계약 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport 의 DTO/오류/불변식 정의. 입력 generationId, quick/deep, retainedRootIds[], repairMode. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
+| 상세 구현 내용 | SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport 의 DTO/오류/불변식 정의. 입력 generationId, quick/deep, retainedRootIds[]; GC request는 별도 maintenance operation. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | checkpoint_chunk, generation_chunk, save_generation, recovery_journal; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1818,7 +1852,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-027 |
 | 목적 | 알고리즘 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | quick load 는 핵심참조·시계·player·소유권·예약·RNG 를 검사하고 deep audit 은 전체 graph 를 검사한다; 손상은 최신 정상 세대→이전 자동 저장 순으로 제안한다; 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다; 공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다. 정해진 입력에서는 'g2 복원 제안·손실 경계와 시간 표시'을 만족해야 한다. |
+| 상세 구현 내용 | quick load 는 핵심참조·시계·player·소유권·예약·RNG 를 검사하고 deep audit 은 전체 graph 를 검사한다; 손상은 current branch의 최신 정상 세대만 자동 제안하고 타 branch는 명시 선택한다; 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다; 공간 확보는 캐시부터 하고 GC 후 freelist/물리 크기를 회수·측정하며 수동 저장을 자동 삭제하지 않는다. 정해진 입력에서는 'g2 복원 제안·손실 경계와 시간 표시'을 만족해야 한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | checkpoint_chunk, generation_chunk, save_generation, recovery_journal; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1842,7 +1876,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P3-TASK-028 |
 | 목적 | 어댑터 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | 대상 checkpoint_chunk, generation_chunk, save_generation, recovery_journal. 원자 commit 및 affected rows/충돌/재실행을 검증한다. RecoveryService는 save.db 전체 불능 시 DB 메타데이터에 의존하지 않고 독립 백업을 integrity/FK/manifest/hash로 검증한 뒤 후보를 제시하며 부재 시 RECOVERY_UNAVAILABLE과 원본 보존을 보장한다. |
+| 상세 구현 내용 | 대상 checkpoint_chunk, generation_chunk, save_generation, recovery_journal. MNT-P3-GC는 operationId/inputFingerprint·root 재검증 뒤 원자 commit/재실행을 검사하고 gameplay receipt/event/RNG 변경 0이다. RecoveryService는 save.db 전체 불능 시 DB 메타데이터에 의존하지 않고 독립 백업을 integrity/FK/manifest/hash로 검증한 뒤 후보를 제시하며 부재 시 RECOVERY_UNAVAILABLE과 원본 보존을 보장한다. |
 | 대상 모듈 | :core:save |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | checkpoint_chunk, generation_chunk, save_generation, recovery_journal; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -2108,7 +2142,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P3-001, testId=P3-IT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 일반 commit은 같은 stateVersion에 원자 확정되고 generation 생성0; checkpoint 후에만 complete generation이 존재하며 앱/헤드리스 entry 재조회 결과가 동일 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. 일반 commit 뒤 stale state_hash_state_version을 현재 hash로 오판하지 않고, kill/reopen의 UNKNOWN dirty에서 전 shard 비교 후 변경 chunk만 생성한다. SQLiteProfile.v1 PRAGMA readback과 Android 12+/이전 cloud·D2D 복원에서 live/protocol 파일 제외를 검증한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-ut-002"></a>
@@ -2120,9 +2154,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | UT |
 | 대상 기능 | FUNC-P3-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | g1 action RESERVED, g2 action COMPLETED 이후 g1 로드 |
-| 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | RESERVED 복원; g2 내용도 보존; CompleteGenerationManifest.v1의 RequiredDomainSet.v1 version/hash와 ordered shard가 일치하고 등록 domain 누락·미등록 payload·codec 부재 generation은 COMMITTED가 아님 |
+| 입력값 | g1 action RESERVED, g2 action COMPLETED 이후 g1 로드; old RequiredDomainSet/codec v1→현재 v2 upcaster, unknown descriptor, shard prefix split, encoding 변경 |
+| 수행 절차 | ① 구 schema 정상·source hash 변조 fixture 생성 ② upcast 전 저장 당시 canonical source hash/version 검사 ③ 순차 upcast 뒤 candidate hash/version 재계산 ④ 반환값·원본 불변·shard/chunk 결과를 testcase ID로 대조 |
+| 예상 결과 | 저장 당시 descriptor와 source StateHash가 유효하면 지원 v1→v2 upcast는 현재 registry hash가 달라도 복원하고 candidate는 새 hash/version을 가진다. source hash 불일치는 무결성 실패, 미지원 hash version·unknown descriptor·해석 불가 codec·누락 domain은 `IncompatibleSave`로 원본 보존한다. ShardLayout.v1에서 앞쪽 행 삽입은 해당 bucket만 바꾸고 1MiB 초과는 거절한다. ChunkHash.v1은 codec/encoding이 다르면 다른 hash를 낸다. |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P3-002, testId=P3-UT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | RESERVED 복원; g2 내용도 보존 |
@@ -2192,13 +2226,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P3-002 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | g1 action RESERVED, g2 action COMPLETED 이후 g1 로드; 모듈 adapter 를실제 구현으로교체 |
-| 수행 절차 | ① 테스트용실제DB/파일adapter 구성(빌드기능은임시파일root) ② 정상 generation과 등록 domain manifest 생성 ③ 등록 domain 누락·미등록 payload·codec 부재 fixture 각각 제출 ④ 정상입력1회 ⑤ connection/session닫기 ⑥ 동일data 재오픈 ⑦ 과거 generation load로 새 branch/epoch 확인 ⑧ 기대값/출처version 확인. 외부서비스는필수없음. |
-| 예상 결과 | RESERVED 복원; g2 내용도 보존; 정상 generation만 COMMITTED; 누락·미등록·codec 부재는 IncompatibleSave로 격리; 과거 generation load는 기존 branch를 바꾸지 않고 새 branch/epoch를 만들며 앱/헤드리스 entry 재조회 결과가 동일 |
+| 입력값 | g1 action RESERVED, g2 action COMPLETED 이후 g1 로드; 구 registry codec→upcast; branch A g1..g5에서 g2 복원→branch B g1..g2; 모듈 adapter 실제 구현 |
+| 수행 절차 | ① 실제 격리 DB/파일 adapter에 구 codec 완전 generation 생성 ② 등록 domain 누락·미등록 payload·codec 부재·source hash 불일치 fixture 제출 ③ upcast 전 source StateHash/version 검증 ④ 정상본 upcast·candidate 현재 hash/version 검증 ⑤ close/reopen해 새 branch/epoch·원본 불변 확인 ⑥ branch B 손상 시 후보 순서 확인. 외부서비스는 필수없음. |
+| 예상 결과 | 구 descriptor·source StateHash가 유효하고 upcaster가 있으면 현재 registry hash 불일치에도 복원하며 candidate의 새 hash는 해당 stateVersion과 일치한다. source hash 불일치는 원본 보존·게시 0, 미지원 hash version·unknown descriptor·해석 불가 codec은 `IncompatibleSave`다. 과거 load는 새 branch/epoch이며 branch B 손상 시 A의 큰 generationNo를 자동 선택하지 않는다. 기존 branch와 원본·g2 내용은 보존된다. |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=FUNC-P3-002, testId=P3-IT-002, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | RESERVED 복원; g2 내용도 보존; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. 미완료 checkpoint는 durable save_generation 행이 없고 retained root release 전 GC가 참조 chunk를 지우지 않는다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-ut-003"></a>
@@ -2304,7 +2338,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 수행 절차 | ① baseline evidence와 fixture 목록 검증 ② MigrationPlanner 계획 생성 ③ 계획에 출시되지 않은 버전이 없는지 확인 ④ fresh v1 생성·close·reopen 계획 확인 ⑤ 결과를 P3-UT-004로 저장 |
 | 예상 결과 | migrationSteps=[]·가상 v2/v3 없음·fresh v1 왕복 검증 계획 생성; 저장된 결과·예약 정산·RNG는 저장 시점 content/balance 의미를 보존하고 retroactive reprice/re-roll 계획이 없음 |
 | DB/파일 확인 | 순수 계획 테스트는 DB를 열지 않는다. 입력 exported schema hash와 fixture 목록을 증거에 기록한다. |
-| 로그 확인 | feature=FUNC-P3-004, testId=P3-UT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 로그 확인 | feature=FUNC-P3-004, testId=P3-UT-004, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | baselineMode=GREENFIELD_V1, supportedMigrationCount=0 |
 | 성공 기준 | 실제 과거 schema 증거 없이 migration step이 생성되지 않고 fresh-v1 검증 계획만 반환된다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2322,7 +2356,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 수행 절차 | ① 지원 최대버전보다 높은 schema header를 가진 복제본 생성 ② 원본 hash 기록 ③ open/migrate 요청 ④ UnsupportedSaveVersion 확인 ⑤ 원본·활성 slot hash 불변 확인 |
 | 예상 결과 | UnsupportedSaveVersion·원본 hash 동일 |
 | DB/파일 확인 | 원본과 활성 save.db hash는 동일하고 migration_history·save_generation 추가행은 0개다. |
-| 로그 확인 | feature=FUNC-P3-004, testId=P3-BT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 로그 확인 | feature=FUNC-P3-004, testId=P3-BT-004, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | UnsupportedSaveVersion·원본 hash 동일 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2340,7 +2374,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 수행 절차 | ① 원본/복제본 hash 기록 ② 복제본에 실제 chain 적용 ③ 지정 단계 실패 주입 ④ 활성화가 일어나지 않았는지 확인 ⑤ 실패 복제본과 단계 로그 보존 |
 | 예상 결과 | 실패 복제본 격리·원본으로 복귀 |
 | DB/파일 확인 | 원본·활성 slot hash 불변, 실패 복제본만 격리, 완료되지 않은 migration_history가 활성 DB에 남지 않는다. |
-| 로그 확인 | feature=FUNC-P3-004, testId=P3-FT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 로그 확인 | feature=FUNC-P3-004, testId=P3-FT-004, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 실패 복제본 격리·원본으로 복귀 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2353,12 +2387,12 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | Test ID | P3-CT-004 |
 | 테스트 종류 | CT |
 | 대상 기능 | FUNC-P3-004 |
-| 사전 조건 | P0 baselineMode와 실제 schema fixture registry가 고정되고 MigrationPlanner와 SavePort 테스트 구현이 조립되어 있다. |
+| 사전 조건 | P0 baselineMode·실제 schema fixture registry·MigrationPlanner와 maintenance journal adapter가 조립되어 있다. |
 | 입력값 | GREENFIELD_V1 fresh-open 요청 2회; LEGACY_CHAIN이면 실제 동일 archive migration 요청 2회 |
-| 수행 절차 | ① baseline별 실제 컴포넌트 조립 ② 같은 commandId/payload 2회 실행 ③ 다른 payload에 같은 commandId 실행 ④ receipt/migration_history/활성 generation 비교 |
-| 예상 결과 | GREENFIELD_V1은 migration 0개와 동치 open; LEGACY_CHAIN은 실제 단계별 이력 1회씩; 반복 효과 1회, 다른 payload는 IdempotencyKeyReuse |
-| DB/파일 확인 | command_receipt는 1개, GREENFIELD_V1 migration_history 0개, LEGACY_CHAIN은 실제 단계 수와 정확히 일치한다. |
-| 로그 확인 | feature=FUNC-P3-004, testId=P3-CT-004, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 수행 절차 | ① baseline별 컴포넌트 조립 ② 같은 operationId/inputFingerprint 2회 실행 ③ 같은 ID/다른 fingerprint 거절 ④ journal·migration_history·활성 generation 비교 |
+| 예상 결과 | GREENFIELD_V1 migration 0개·동치 open; LEGACY_CHAIN 단계별 이력 1회씩; 같은 operation 효과 1회·다른 fingerprint 거절, gameplay receipt/event 0 |
+| DB/파일 확인 | gameplay command_receipt 추가 0개, GREENFIELD_V1 migration_history 0개, LEGACY_CHAIN은 실제 단계 수와 정확히 일치한다. |
+| 로그 확인 | feature=FUNC-P3-004, testId=P3-CT-004, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | baselineMode별 기대 generation/hash, 중복 활성화 0건 |
 | 성공 기준 | baselineMode별 실제 경로와 멱등 결과가 일치하고 가상 migration 또는 중복 이력이 없다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2393,8 +2427,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | 정상 archive 가져오기 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
 | 예상 결과 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-005, testId=P3-UT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | Export는 live save hash 불변, Import는 격리 새 slot·maintenance journal을 비교한다. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-005, testId=P3-UT-005, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2411,8 +2445,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | archive 에 ../save.db 경로 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
 | 예상 결과 | UnsafeArchive 오류·외부 파일 생성0 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-005, testId=P3-BT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | Export는 live save hash 불변, Import 실패는 기존 slot 불변·candidate 격리. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-005, testId=P3-BT-005, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | UnsafeArchive 오류·외부 파일 생성0 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2429,8 +2463,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | export 중 공간 부족 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
 | 예상 결과 | 완성 표시하지 않음·부분파일 제거·기존 save 보존 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-005, testId=P3-FT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | Export/Import 실패는 원본·기존 slot hash 불변, staging만 격리. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-005, testId=P3-FT-005, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 완성 표시하지 않음·부분파일 제거·기존 save 보존 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2445,11 +2479,11 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | FUNC-P3-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
 | 입력값 | 정상 archive 가져오기; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-005, testId=P3-CT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
+| 수행 절차 | ① 실제 archive adapter 조립 ② 같은 operationId/inputFingerprint 재호출 ③ 다른 fingerprint 거절 ④ slot·journal/sidecar·원본 hash 비교 |
+| 예상 결과 | 새 slotId 1개·기존 slot hash 불변·동일 상태 복원; 같은 operation 효과 1회·다른 fingerprint 거절, gameplay receipt/event/RNG 변경 0 |
+| DB/파일 확인 | 새 slot 1개·journal/sidecar terminal 결과 1개, gameplay receipt/event 추가 0개, 기존 save hash 불변 |
+| 로그 확인 | feature=FUNC-P3-005, testId=P3-CT-005, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 상태 확인 | 같은 operationId의 resultReference·새 slotId 동일, 재호출 추가 효과 0 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
@@ -2462,13 +2496,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | IT |
 | 대상 기능 | FUNC-P3-005 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
-| 입력값 | 정상 archive 가져오기; 모듈 adapter 를실제 구현으로교체 |
+| 입력값 | SaveArchiveManifest.v1 정상/구버전·미지원 새버전, 중복/path traversal, declared 4GiB, checked Long overflow·공간부족·진행 중 ENOSPC; 실제 adapter |
 | 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
-| 예상 결과 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-005, testId=P3-IT-005, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 예상 결과 | 정상 archive는 새 slotId 1개·동일 상태 복원. 미지원 버전·checksum/경로·공간·overflow 실패는 기존 slot/save hash 불변·부분 후보 비공개·메모리 bounded; 검증된 구버전만 순차 migrate한다. |
+| DB/파일 확인 | Import는 검증된 새 slot·maintenance journal terminal 1개, 기존 slot hash 불변. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-005, testId=P3-IT-005, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 새 slotId·기존 슬롯 hash 불변·동일 상태 복원; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. archive/entry streaming과 bounded buffer·증분 checksum을 확인하고 상한 초과·압축폭탄에서 메모리 급증/기존 slot 변경은 0이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-ut-006"></a>
@@ -2483,8 +2517,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | 현재 g3 손상, g2 정상 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
 | 예상 결과 | g2 복원 제안·손실 경계와 시간 표시 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-006, testId=P3-UT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | Audit는 live save hash 불변, GC plan은 read-only다. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-006, testId=P3-UT-006, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | g2 복원 제안·손실 경계와 시간 표시 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2501,8 +2535,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | 미참조 checkpoint chunk 1 개 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
 | 예상 결과 | 보존 root 검증 후 그 chunk 만 GC |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-006, testId=P3-BT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | Audit는 live save hash 불변, 미검증 root의 GC는 쓰기 0개. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-006, testId=P3-BT-006, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 보존 root 검증 후 그 chunk 만 GC |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2519,8 +2553,8 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | GC 중단 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
 | 예상 결과 | 트랜잭션 rollback·모든 보존 root 로드 가능 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-006, testId=P3-FT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | GC 실패는 원자 rollback·보존 root 불변, audit는 read-only. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-006, testId=P3-FT-006, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 트랜잭션 rollback·모든 보존 root 로드 가능 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
@@ -2535,11 +2569,11 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 대상 기능 | FUNC-P3-006 |
 | 사전 조건 | 격리된 테스트 저장소·원문 수치가 고정된 fixture·ScriptedRng/seed42·해당 메소드와 adapter 등록. 제품 설정 미승인 값은 시험 fixture 임을 표시. |
 | 입력값 | 현재 g3 손상, g2 정상; 같은요청2 회 |
-| 수행 절차 | ① 실제 컴포넌트+Fake 외부 port 를 조립 ② 원입력호출 ③ 같은입력재호출 ④ mutation 이면 receipt/영향행수 비교, non-mutation 이면출력동치/원본 hash 비교 |
-| 예상 결과 | g2 복원 제안·손실 경계와 시간 표시; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-006, testId=P3-CT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | g2 복원 제안·손실 경계와 시간 표시; 동일 commandId/payload 반복은 효과1 회, 같은 ID/다른 payload 는 IdempotencyKeyReuse |
+| 수행 절차 | ① audit/GC·restore maintenance adapter 조립 ② 같은 operationId/inputFingerprint 재호출 ③ 다른 fingerprint 거절 ④ root·journal/sidecar·원본 hash 비교 |
+| 예상 결과 | g2 복원 제안·손실 경계 표시; 같은 operation 효과 1회·다른 fingerprint 거절, 보호 root 유지·gameplay receipt/event/RNG 변경 0 |
+| DB/파일 확인 | journal/sidecar terminal 결과 1개·gameplay receipt/event 추가 0개; audit는 live save hash 불변, GC는 해제 root만 sweep |
+| 로그 확인 | feature=FUNC-P3-006, testId=P3-CT-006, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 상태 확인 | 같은 operationId의 resultReference 동일·중복 활성화/GC 0, 미해제 root 보존 |
 | 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
@@ -2555,10 +2589,10 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 입력값 | 현재 g3 손상, g2 정상; 모듈 adapter 를실제 구현으로교체 |
 | 수행 절차 | ① 테스트용실제 DB/파일 adapter 구성(빌드기능은임시파일 root) ② 정상입력1 회 ③ connection/session 닫기 ④ 동일 data 재오픈 ⑤ 기대값/출처 version 확인. 외부서비스는필수없음. |
 | 예상 결과 | g2 복원 제안·손실 경계와 시간 표시; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=FUNC-P3-006, testId=P3-IT-006, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| DB/파일 확인 | GC는 maintenance journal/해제 root·freelist를 조회하고 보존 root hash 불변. gameplay receipt/event/RNG 추가 0개. |
+| 로그 확인 | feature=FUNC-P3-006, testId=P3-IT-006, operationId/inputFingerprint/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | g2 복원 제안·손실 경계와 시간 표시; 앱/헤드리스 entry 가 동일핵심 use case 를호출하고 새세션으로재조회시동일결과 |
-| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. |
+| 성공 기준 | 예상 반환값·DB·로그·상태가 모두 일치하고 예상 밖 mutation/중복효과/미해제자원이 0 건이다. root별 releaseCondition 전에는 GC 보존, 후에는 검증된 미참조 chunk만 sweep한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-rt-001"></a>
@@ -2606,13 +2640,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | REC |
 | 대상 기능 | PHASE-3 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | checkpoint 이후 일반 mutation 1회; process-kill transaction commit 직전/직후; WAL checkpoint·DB close·candidate file sync·intent file/parent-dir sync·source/candidate rename/parent-dir sync cut 및 sync 실패; old session close 중 동시 writer acquire; 전체 save.db 손상/사용 불가 시 SaveArchiveService가 생성한 독립 검증 백업 있음·없음; backup 저장공간 부족; 물리 전원 차단은 제외 |
+| 입력값 | checkpoint 이후 일반 mutation 1회; process-kill transaction commit 직전/직후; WAL checkpoint·DB close·candidate file sync·intent file/parent-dir sync·source/candidate rename/parent-dir sync cut 및 sync 실패; old session close 중 동시 writer acquire; 전체 save.db 손상/사용 불가 시 SaveArchiveService가 생성한 독립 검증 백업 있음·없음; backup 저장공간 부족; reader-held busy checkpoint, Latest/Previous rotation, A/B branch 후보; 물리 전원 차단은 제외 |
 | 수행 절차 | ① checkpoint와 mutation의 stateVersion·current rows·receipt·RNG·events·cursor/hash와 독립 backup identity 보관 ② durable 전/후 process-kill 후 재기동 ③ candidate WAL checkpoint 성공·DB close·file sync, intent temp write/file sync/atomic replace/parent-dir sync 순서와 실패 전진 차단 확인 ④ source→previous 및 candidate→save.db rename와 각 parent-dir sync 앞/뒤에 host runner kill ⑤ 실제 checkpoint 후 SaveArchiveService 백업을 생성하고 전체 save.db 손상 fixture에서 독립 backup 후보 있음·없음 두 경우의 복구 제안/차단, 손실 및 원본 보존 결과 확인 ⑥ 백업 생성 중 storage full을 주입해 이전 검증본 유지·백업 불가 표시·기존 checkpoint 불변 확인 ⑦ stage와 실제 file identity·integrity/FK/manifest/hash/stateVersion을 대조하고 journal terminal sync 전 session/publication 0 확인 ⑧ old close 중 acquire 거절, 검증·journal 완료 후 새 session 인계 확인; process-kill만 검증하고 전원차단 주장은 제외 |
 | 예상 결과 | 일반 transaction은 durable 전이면 이전 stateVersion, durable 후면 새로운 current rows·RNG·events·receipt·cursor를 함께 보존한다. candidate→save.db rename와 parent-dir sync 완료가 설치 commit point이며, integrity 및 terminal journal sync 전 새 session/RESTORED publication은 0이다. sync 실패 시 다음 stage·성공 publication을 차단하고 실제 파일 정체성으로 reconcile한다. 읽을 수 있는 DB 안의 손상 generation은 검증된 이전 generation을 후보로 표시한다. 전체 DB 사용 불가 시 독립 백업만 복구 후보이며, 없으면 `RECOVERY_UNAVAILABLE`·원본 보존·빈 월드 자동 생성 0이다. swap 중 새 writer acquire 0; 모든 cut에서 완전 source 또는 candidate 하나, mixed row·중복 receipt/event/publication 0; process-kill은 전원 차단 보장이 아니다. |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
-| 로그 확인 | feature=PHASE-3, testId=P3-REC-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
+| 로그 확인 | feature=PHASE-3, testId=P3-REC-001, operationId/inputFingerprint/sourceGeneration/resultCode 기록. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | 정상 reopen의 최신 durable current stateVersion·receipt·RNG·event/cursor 일치; restore cut의 operationId·source/candidate generation·manifest·sync 완료·terminal journal outcome·publication exactly-once; 전체 DB 손상 시 독립 후보 유무에 따른 복구/차단·원본 보존; 단일 완전 DB, 부분 혼합 0 |
-| 성공 기준 | 일반 transaction의 durable commit 전/후 경계와 restore 파일/디렉터리 sync cut가 일치하고 각 operationId는 terminal journal 결과 하나만 가진다. integrity/FK/hash와 sync가 확인된 candidate만 새 session/RESTORED publication을 허용한다. 전체 DB 손상 시 독립 백업만 복구 후보가 되고, 후보가 없는 경우 자동 초기화 없이 `RECOVERY_UNAVAILABLE`과 원본 보존을 확인한다. 새 백업 게시 실패 시 기존 검증본이 남고 새 백업 성공으로 표시되지 않는다. process-kill 결과를 전원 차단 증거로 확대하지 않는다. |
+| 성공 기준 | 일반 transaction의 durable commit 전/후 경계와 restore 파일/디렉터리 sync cut가 일치하고 각 operationId는 terminal journal 결과 하나만 가진다. integrity/FK/hash와 sync가 확인된 candidate만 새 session/RESTORED publication을 허용한다. 전체 DB 손상 시 독립 백업만 복구 후보가 되고, 후보가 없는 경우 자동 초기화 없이 `RECOVERY_UNAVAILABLE`과 원본 보존을 확인한다. 새 백업 게시 실패 시 기존 검증본이 남고 새 백업 성공으로 표시되지 않는다. process-kill 결과를 전원 차단 증거로 확대하지 않는다. Reader가 남아 checkpoint busy=1이면 barrier 실패·main-only copy 금지·publication 0이며, Latest/Previous 두 검증본은 신규 실패 시 유지된다. 타 branch 자동 복구는 0이다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-pt-001"></a>
@@ -2624,13 +2658,13 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | PT |
 | 대상 기능 | PHASE-3 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | 10년/100년 synthetic current rows, dirty shard 1%/50%, 일반 command 1,000회, checkpoint 10회, g1→g2→g1 restore swap |
-| 수행 절차 | ① 일반 commit의 latency/DB 증가와 generation 증가 0 확인 ② 1%/50% checkpoint의 새/재사용 chunk와 size 측정 ③ candidate DB materialize/FK/hash 검증 ④ 측정 가능한 latency/PSS/DB bytes 및 bounded 종료 기록 ⑤ process-kill/rename recovery는 P3-REC-001 결과를 참조하고 이 PT case에서 재판정하지 않음 |
-| 예상 결과 | 일반 command마다 SaveGeneration이 생기지 않음, checkpoint 크기는 변경 shard에 비례, candidate의 FK/hash 정합성 및 bounded 종료 충족; process-kill/rename recovery oracle은 P3-REC-001만 소유; P3 v1 world_event raw compaction 0 |
+| 입력값 | 10년/100년 및 300년 추세 synthetic rows, dirty shard 1%/50%, 일반 command 1,000회, checkpoint 10회, g1→g2→g1 restore; 30일 10,000 boundary Room/WAL/reopen fixture; MIN/STD 단말 |
+| 수행 절차 | ① 일반 commit의 latency/DB 증가와 generation 증가 0 확인 ② checkpoint 새/재사용 chunk, Save/Load P95 측정 ③ candidate FK/hash 검증 ④ Room 포함 30일 진행·StrictMode main I/O·PSS·DB bytes 측정 ⑤ 10/100년 world_event row/평균 payload·receipt·chunk 증가량과 compact export/live 비율 기록 ⑥ process-kill oracle은 P3-REC-001 참조 |
+| 예상 결과 | 일반 command generation 0, checkpoint 크기 변경 shard에 비례, candidate 정합·bounded 종료; NFR-PERF-004/007/008/009 및 NFR-SIZE-001/003 수치 충족. P3 v1 world_event raw compaction 0이며 300년은 추세 기록; process-kill oracle은 P3-REC-001 소유 |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-3, testId=P3-PT-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
-| 상태 확인 | generation/chunk/receipt/event 수, 파일별 checksum/stateHash, query plan, P50/P95 latency/PSS/DB bytes |
-| 성공 기준 | 정합성 조건 전부와 bounded 종료를 충족하고 10년/100년 크기·latency baseline을 증거로 저장한다. 미측정 PASS 금지. |
+| 상태 확인 | generation/chunk/receipt/event 수·평균 event payload·증가량, compact/live bytes, 파일별 checksum/stateHash, query plan, P50/P95 latency/PSS/DB bytes·main-thread I/O |
+| 성공 기준 | 정합성·bounded 종료와 Phase3 소유 NFR: 30일 P95 MIN≤4.0s/STD≤2.0s, main I/O 0, Save P95 MIN≤3.0s/STD≤2.0s, Load P95 MIN≤4.0s/STD≤2.5s, 100년 compact export≤128MiB, live≤compact×1.5를 모두 실측 충족한다. 초과·미측정은 P4 Gate 차단; 300년≤256MiB는 Release 추세로 기록한다. GC 전후 freelist/page_count와 live DB 파일 bytes를 측정하고 incremental_vacuum 또는 검증된 compact candidate로 1.5 상한을 회복한다. |
 | 실행 상태/실제 결과/증거 | NOT_RUN / 미실행 / 없음 |
 
 <a id="p3-op-001"></a>
@@ -2642,9 +2676,9 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 테스트 종류 | OP |
 | 대상 기능 | PHASE-3 |
 | 사전 조건 | 본 Phase 모든기능 구현·앞선 Phase Gate 충족 또는명시계약 fixture. 실제대상 kind 에따라 DB/파일/도구테스트 root 분리. 인과관계없는예제값은 각자의하위 fixture 로 순차수행. |
-| 입력값 | (A) DB 안 g3 손상/g2 정상; (B) 전체 save.db 사용 불가/독립 검증 backup g2 있음; (C) 전체 save.db 사용 불가/독립 backup 없음; 네트워크차단 |
+| 입력값 | (A) current branch g3 손상/g2 정상, 타 branch g5 있음; (B) 전체 save.db 불능/독립 Latest·Previous 있음; (C) 독립 후보 없음; 수동 슬롯 5개·네트워크차단 |
 | 수행 절차 | ① 입력 fixture 생성 및 before snapshot/hash 보관 ② 대상 메소드 호출 ③ 반환값과 변경 delta 검증 ④ DB/로그/상태를 아래 예상값과 대조 ⑤ result 와 증거를 testcase ID 로 저장 |
-| 예상 결과 | A는 DB 내부 g2, B는 독립 backup g2만 복구 후보로 제안하고 손실 경계를 표시한다. C는 RECOVERY_UNAVAILABLE·원본 보존·복구 CTA와 빈 월드 자동 생성0; 필수네트워크요청0·게임현실시간catchup0 |
+| 예상 결과 | A는 current branch g2만 자동 제안하고 타 branch g5는 명시 선택. B는 검증된 독립 backup만 제안. C는 RECOVERY_UNAVAILABLE·원본 보존·빈 월드 자동 생성0. 도움말은 수동 5슬롯이 같은 DB의 generation이며 독립 백업이 아님을 설명한다; 필수 네트워크0. |
 | DB/파일 확인 | 권위쓰기 기능은 본 기능 표의 대상 테이블과 receipt 를 before/after 조회; 조회/순수계산/빌드기능은 live save.db hash 불변을 확인. |
 | 로그 확인 | feature=PHASE-3, testId=P3-OP-001, sourceCommandId/seed/version, 결과코드 확인. 숨은 능력치는 일반 플레이 로그에 포함하지 않음. |
 | 상태 확인 | DB 내부 generation과 독립 backup 후보를 구분; 후보가 없을 때 원본 보존·차단·빈 월드 자동 생성0; 손실 경계·세계 시각 표시; 필수네트워크요청0·게임현실시간catchup0 |
@@ -2706,6 +2740,7 @@ UT=Unit,CT=Component,IT=Integration,BT=Boundary,FT=Failure,RT=Regression,CN=Conc
 | 필수 | 본문/원문하위규칙·결정대장·실제 코드일치·독립리뷰승인 | Gate 불가 |
 | 필수 | §3.3의 public persistence contract·lease lifecycle·crash harness·generation semantics·schema allowlist·공식 testcase mapping 고정 | Gate 불가 |
 | 필수 | 모든필수 Task 구현·Unit/Component/Integration/Boundary/Exception/Failure/Regression PASS | Gate 불가 |
+| 필수 | P3-PT-001의 NFR-PERF-004/007/008/009·NFR-SIZE-001/003을 실제 Room/WAL 단말에서 측정해 기준 충족; raw event/receipt/chunk 장기 증가량 기록 | 초과·미측정은 P4 진입 불가; compaction은 후속 P21/P24 판단 |
 | 필수 | DB/소유권/시간/RNG/세이브/가문중관련불변식·crash 복구 | 후속제품활성화불가 |
 | 필수 | 다음 Phase input DTO/codec/schema/fixture 와오류계약검증 | 다음 Phase 통합불가 |
 | 병렬착수허용 | 공개 interface 고정상태에서후속 UIprototype/fixture 작성 | Mock/IN_PROGRESS 표시;완료주장금지 |
@@ -2721,6 +2756,16 @@ Phase Gate Task 는 **P3-TASK-031**, 결과상태는 DESIGN_REVIEW→IMPLEMENTED
 | R-P3-01 | 세대 번호만 보존하고 이전 값 소실 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P3-TASK-031 에서증거심의 | P3-RT-001 |
 | R-P3-02 | WAL 파일 복사 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P3-TASK-031 에서증거심의 | P3-RT-001 |
 | R-P3-03 | 저장공간 부족 | 중간(초기평가) | 높음 | 해당기능 guard/typed error/원자 commit/검증 fixture. P3-TASK-031 에서증거심의 | P3-RT-001 |
+| R-P3-04 | StateHash 버전 혼동 | 중간 | 높음 | hash 버전 marker·stale 비교 금지 | P3-IT-001 |
+| R-P3-05 | 재기동 후 dirty shard 소실 | 중간 | 높음 | UNKNOWN 전 shard 비교 | P3-IT-001 |
+| R-P3-06 | restore swap 중 kill | 중간 | 높음 | 파일 identity·sync cut reconcile | P3-REC-001 |
+| R-P3-07 | maintenance 중복 효과 | 중간 | 높음 | operationId/fingerprint reconcile | P3-CT-004/005/006 |
+| R-P3-08 | recovery root 누수 | 중간 | 중간 | root release 조건·GC 경고 | P3-IT-002/006 |
+| R-P3-09 | archive 압축해제 OOM | 중간 | 높음 | streaming·bounded buffer·size accounting | P3-IT-005 |
+| R-P3-10 | codec registry 불일치 | 중간 | 높음 | RequiredDomainSet·load validator | P3-IT-002 |
+| R-P3-11 | 독립 backup 부재 | 중간 | 높음 | RECOVERY_UNAVAILABLE·원본 보존 | P3-REC-001 |
+| R-P3-12 | close/lease deadlock | 낮음 | 높음 | drain/join 후 단일 lease | P3-REC-001 |
+| R-P3-13 | raw event DB 성장 | 높음 | 중간 | 10/100년 bytes 측정·P21/P24 판단 | P3-PT-001 |
 
 ## 15. Phase 간 연계 및 인계 계약
 

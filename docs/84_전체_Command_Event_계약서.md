@@ -48,11 +48,11 @@ data class DomainEvent<E : DomainEventPayload>(
 
 ### 2.1. `StateHash.v1` 범위와 직렬화
 
-`stateHash`는 매 command의 DB row_version 대체물이 아니라 결정론·복원 동등성 검증값이다. `schema_registry.json`에서 `save` store의 **권위 게임 상태**로 분류된 current row와 `rng_state`를 포함하고, `command_receipt`, `world_event`, `save_generation`, `checkpoint_chunk`, `generation_chunk`, `save_slot`, `migration_history`, `recovery_journal`, 검색/통계 projection, 캐시, UI preference, `row_version`, 현실시각, 기존 `world_state.state_hash`는 제외한다. 포함/제외 분류가 없는 새 save 객체는 schema 검증을 실패시킨다.
+`stateHash`는 매 command의 DB row_version 대체물이 아니라 결정론·복원 동등성 검증값이다. `schema_registry.json`에서 `save` store의 **권위 게임 상태**로 분류된 current row와 `rng_state`를 포함하고, `command_receipt`, `world_event`, `save_generation`, `checkpoint_chunk`, `generation_chunk`, `save_slot`, `migration_history`, `recovery_journal`, 검색/통계 projection, 캐시, UI preference, `row_version`, 현실시각, `world_state.state_hash`와 `state_hash_state_version`은 제외한다. 포함/제외 분류가 없는 새 save 객체는 schema 검증을 실패시킨다.
 
 canonical stream은 `STATEHASH.v1\n` 뒤에 table name UTF-8 오름차순, 각 table의 PK tuple 오름차순, 물리 column name 오름차순으로 `(type-tag, byte-length u32 big-endian, value-bytes)`를 이어 붙인다. 정수는 signed 64-bit big-endian, Boolean은 0/1 한 byte, 문자열은 NFC UTF-8, BLOB은 원바이트, null은 별도 tag다. 각 domain codec의 JSON/AST는 저장 문자열이 아니라 해당 codec의 canonical bytes를 사용한다. 구현 전 golden fixture가 이 byte stream과 SHA-256을 함께 고정한다.
 
-v1은 복잡한 증분 Merkle 구조를 도입하지 않는다. 일반 command는 `stateVersion`만 증가시키고, `stateHash`는 명시적 checkpoint, load/restore, 결정론 Test, crash-cut 검증에서 전체 스캔으로 계산한다. MIN 단말의 100년 fixture에서 checkpoint hash가 500ms를 넘는다는 실측이 있을 때만 같은 canonical leaf 규칙을 유지한 증분 cache를 별도 ADR로 추가한다.
+v1은 복잡한 증분 Merkle 구조를 도입하지 않는다. 일반 command는 `stateVersion`만 증가시키고 `stateHash`를 갱신하지 않는다. `world_state.state_hash_state_version`은 저장된 hash가 가리키는 상태 버전이며 일반 commit 뒤에는 현재 버전보다 오래될 수 있다. checkpoint/최초 world 생성/명시적 restore에서 전체 스캔 hash와 해당 버전을 함께 확정한다. load·결정론 Test·crash-cut은 전체 스캔으로 계산하되 저장된 hash의 버전이 현재 버전과 같을 때만 직접 비교한다. 버전이 오래되면 이를 현재 hash로 오인하지 않고 DB integrity/FK·도메인 불변식으로 current를 검증하며, 계산한 현재 hash는 진단/테스트 값이다. marker가 current보다 앞서면 손상으로 거절한다. MIN 단말의 100년 fixture에서 checkpoint hash가 500ms를 넘는 실측이 있을 때만 같은 canonical leaf 규칙의 증분 cache를 별도 ADR로 검토한다.
 
 ## 3. Command 처리 파이프라인
 
@@ -145,7 +145,6 @@ decision gate open event는 `decision.required.v1`, 선택 적용 event는 `deci
 |---|---|---|
 | CMD-P2-F001 | `PROTOCOL` | 다른 모든 외부 command를 접수하는 facade 자체이며 독립 gameplay command가 아니다. |
 | CMD-P2-F002 | `INTERNAL` | 전투/시간 외부 command가 GameClockMath/RNG 결과를 포함하되 증가 target은 `WorldTimeTraversal`로 처리한다. |
-| CMD-P3-F002, CMD-P3-F004 | `INTERNAL` | 수동/자동 checkpoint, load/import 외부 command가 generation/migration 계산을 포함한다. |
 | CMD-P6-F001, CMD-P6-F003, CMD-P6-F004 | `INTERNAL` | `StartCombat`/`ChooseRetreat`/자동 전투 외부 command의 combat step이다. |
 | CMD-P7-F001~CMD-P7-F004 | `INTERNAL` | 전투·던전 외부 command 안의 AI/phase/encounter 계산이다. |
 | CMD-P8-F002, CMD-P8-F003 | `INTERNAL` | `EnterDungeon`/던전 생성 외부 command 안의 배치 계산이다. |
@@ -153,17 +152,14 @@ decision gate open event는 `decision.required.v1`, 선택 적용 event는 `deci
 
 `INTERNAL` 항목의 Registry Completion/Failure Event 이름은 독립 receipt 결과가 아니라 외부 command에 포함될 수 있는 typed domain outcome 식별자다. 구현 lock 시 독립 command로 승격하려면 사용자/스케줄러 trigger, 멱등키, transaction, UX 실패 표면을 함께 추가해야 한다.
 
+Phase 3의 generation 내부 계산과 Migration/Import/Export/Integrity Audit/GC/`START_CHECKPOINT`는 gameplay Command Registry 밖이며 §7을 따른다.
+
 | Command ID | Phase | Function | Payload/메소드 계약 | Tables | Transaction | Completion Event | Failure Event |
 |---|---|---|---|---|---|---|---|
 | `CMD-P2-F001` | P2 | `FUNC-P2-001` 단일 작성자 명령 처리 | `WorldSession.execute(envelope)`; 내부 `WorldEngine.plan(envelope,snapshot)->ExecutionPlan` | world_state, command_receipt, world_event, rng_state | WorldSession만 authoritative commit/apply/publish 조정 | `EVT-P2-F001-COMMITTED` | `EVT-P2-F001-REJECTED` |
 | `CMD-P2-F003` | P2 | `FUNC-P2-003` 예약·점유·자원 선점 | `reserve`/`cancel`/`resolveConflict`; canonical ResourceIdentity, row versions·SchedulePriority·public consequence/claim 정책 | scheduled_action, occupancy, resource_reservation | Risk confirm의 preview hash+expected row version 재검증 뒤 일정 변경·claim 정산·receipt 원자 처리; P2 자동 선택/hidden 정보 노출 금지 | `EVT-P2-F003-COMMITTED` | `EVT-P2-F003-REJECTED` |
 | `CMD-P2-F004` | P2 | `FUNC-P2-004` 공통 세계시간 traversal·자동중단 | 외부 `AdvanceTime`; 모든 elapsed command는 내부 `WorldTimeTraversal` 사용 | world_state, scheduled_action, time_advance_state, world_event, command_receipt | gate 없는 짧은 action은 outer commit; 중간 gate는 sealed outcome/RNG+prefix/suffix를 durable 보존해 continuation; 장시간 action은 ScheduledAction | `EVT-P2-F004-COMMITTED` | `EVT-P2-F004-REJECTED` |
 | `CMD-P3-F001` | P3 | `FUNC-P3-001` 명시적 checkpoint·새 슬롯 bootstrap | `SaveCommand = CheckpointWorld | CreateNewWorld`; `SavePort.checkpoint` 1회 | world_state, command_receipt, rng_state, save_generation, save_slot | 기존 world의 frozen snapshot과 자기 바깥 receipt를 동일 transaction에 확정하고 자기 receipt는 frozen snapshot에서 제외한다. `EMPTY`의 CreateNewWorld는 미게시 version 0 genesis로 session을 열어 초기 current rows/RNG/manifest/slot/receipt를 원자 확정한 뒤에만 게시한다. 이전 mutation 재적용 없음 | `EVT-P3-F001-COMMITTED` | `EVT-P3-F001-REJECTED` |
-| `CMD-P3-F002` | P3 | `FUNC-P3-002` 복원 가능한 세대·슬롯·불변 청크 | 내부 `GenerationStore.create(snapshot, parent) -> GenerationManifest` | save_generation, save_slot, checkpoint_chunk, generation_chunk | P3-F001/P3-F003/P3-F005 내부 persistence plan; 독립 receipt 없음 | `EVT-P3-F002-COMMITTED` | `EVT-P3-F002-REJECTED` |
-| `CMD-P3-F003` | P3 | `FUNC-P3-003` 장기진행·예약 복구 | `RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession` | recovery_checkpoint, time_advance_state, scheduled_action, occupancy, resource_reservation | P2 active baseline만 복구한다. combat/dialogue codec·domain은 P6/P11 등록 전 `IncompatibleSave`. 일반 `RESUME` mutation은 WorldSession만 authoritative commit/apply/publish한다. `START_CHECKPOINT` 파일 교체는 배타 lease에서 old session/DB close 후 RecoveryService가 수행하고 검증된 새 session만 게시한다. 복구 중 gameplay receipt/event는 생성하지 않는다. | `EVT-P3-F003-COMMITTED` | `EVT-P3-F003-REJECTED` |
-| `CMD-P3-F004` | P3 | `FUNC-P3-004` 마이그레이션·콘텐츠 호환 | `MigrationPlanner.migrate(source: SaveArchive, target: SchemaVersion) -> MigrationResult` | migration_history, save_generation, content_binding | authoritative 변경+receipt 원자 처리 | `EVT-P3-F004-COMMITTED` | `EVT-P3-F004-REJECTED` |
-| `CMD-P3-F005` | P3 | `FUNC-P3-005` 오프라인 Export·Import·아카이브 보호 | `SaveArchiveService.importArchive(input: LocalDocument) -> NewSlotResult` | save_slot, save_generation, recovery_journal | authoritative 변경+receipt 원자 처리 | `EVT-P3-F005-COMMITTED` | `EVT-P3-F005-REJECTED` |
-| `CMD-P3-F006` | P3 | `FUNC-P3-006` 무결성 검사·복구·보존 GC | `SaveIntegrityService.repair(command: RepairCommand, report: IntegrityReport) -> RepairResult` | checkpoint_chunk, generation_chunk, save_generation, recovery_journal | 승인된 repair/GC만 authoritative 변경+receipt 원자 처리; `audit`은 읽기 전용 | `EVT-P3-F006-COMMITTED` | `EVT-P3-F006-REJECTED` |
 | `CMD-P4-F001` | P4 | `FUNC-P4-001` NPC 생성·성별 이름·초상 일괄 확정 | `NpcFactory.create(request: NpcCreationRequest, ctx: CreationContext) -> NpcCreatedDelta` | mercenary, name_registry, portrait_reservation, character_stat | authoritative 변경+receipt 원자 처리 | `EVT-P4-F001-COMMITTED` | `EVT-P4-F001-REJECTED` |
 | `CMD-P4-F002` | P4 | `FUNC-P4-002` 기본스탯·경험치·성장원장 | `GrowthService.applyExperience(id: NpcId, amount: Experience) -> GrowthDelta` | mercenary, character_stat, growth_ledger | authoritative 변경+receipt 원자 처리 | `EVT-P4-F002-COMMITTED` | `EVT-P4-F002-REJECTED` |
 | `CMD-P4-F003` | P4 | `FUNC-P4-003` 잠재력·후천변화·숙련 | `PotentialService.apply(change: PotentialChange, current: CharacterPotential) -> PotentialDelta` | character_stat, potential_event, mastery | authoritative 변경+receipt 원자 처리 | `EVT-P4-F003-COMMITTED` | `EVT-P4-F003-REJECTED` |
@@ -236,8 +232,15 @@ decision gate open event는 `decision.required.v1`, 선택 적용 event는 `deci
 
 ## 7. Query / Tool 계약
 
+Phase 3의 아래 ID는 maintenance/read/lifecycle API 식별자이며 `CommandEnvelope`/gameplay `command_receipt`/`DomainEvent`를 생성하지 않는다. 쓰기는 `MaintenanceOperationId + inputFingerprint`와 maintenance journal/sidecar로 재시도 결과를 reconcile한다.
+
 | Function | 종류 | 변경 허용 | 규칙 |
 |---|---|---|---|
+| `FUNC-P3-002` / `INT-P3-GENERATION` | 내부 persistence | 바깥 checkpoint transaction만 | 불변 청크·manifest 계산; 중첩 command/receipt/event 0 |
+| `FUNC-P3-003` / `MNT-P3-START-CHECKPOINT` | lifecycle restore | 검증 candidate 설치 | 배타 lease·새 branch/epoch; gameplay receipt/event 0 |
+| `FUNC-P3-004` / `MNT-P3-MIGRATE` | maintenance | candidate migration | 원본 보존·operationId 재조회; gameplay receipt/event 0 |
+| `FUNC-P3-005` / `MNT-P3-IMPORT` / `QRY-P3-EXPORT` | maintenance/read | 새 슬롯 / 외부 파일 | Import는 격리 활성화, Export는 검증 snapshot 읽기 |
+| `FUNC-P3-006` / `MNT-P3-GC` / `QRY-P3-INTEGRITY` | maintenance/read | root 재검증 후 sweep / 없음 | 감사 결과로 GC 자동 실행 금지 |
 | `FUNC-P0-001` 원문 기준선과 충돌 판정 | `tool` | 아니오 | 문서/관리 JSON 읽기 전용; 검증 artifact만 기록 |
 | `FUNC-P0-002` 빌드·모듈·기술버전 고정 | `tool` | 아니오 | Gradle build output/lock/report만 기록; 게임 DB 사용 안 함 |
 | `FUNC-P0-003` 공통 타입·명령·오류·이벤트 계약 | `lifecycle/compute` | 아니오 | 실제 명령의 계약 소유; P0는 in-memory SavePort만 사용 |

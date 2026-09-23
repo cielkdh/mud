@@ -134,7 +134,8 @@ def function_registry(contract: str, expected: set[str]) -> tuple[list[str], set
         for function in functions:
             function_commands[function].update(commands)
     failures += [f'mutation without command: {item}' for item in sorted(set(mutation_ids)) if not function_commands[item]]
-    return failures, set(mutation_ids), function_commands, set(command_counts)
+    maintenance_ids = set(re.findall(r'`((?:MNT|QRY|INT)-P3-[A-Z-]+)`', nonmutation_section))
+    return failures, set(mutation_ids), function_commands, set(command_counts) | maintenance_ids
 
 
 def screen_contract_checks(screen_contract: str, expected_functions: set[str], mutation_functions: set[str], function_commands: dict[str, set[str]], defined_commands: set[str]) -> tuple[list[str], list[str], list[str], int]:
@@ -156,12 +157,12 @@ def screen_contract_checks(screen_contract: str, expected_functions: set[str], m
             action_failures.append(f'{row[0] if row else "?"}: expected 9 cells, got {len(row)}')
             continue
         screen_id, execution = row[0], row[8]
-        commands = set(re.findall(r'`(CMD-P\d+-F\d+)`', execution))
+        commands = set(re.findall(r'`((?:CMD-P\d+-F\d+|(?:MNT|QRY|INT)-P3-[A-Z-]+))`', execution))
         functions = set(re.findall(r'(FUNC-P\d+-\d+)', execution))
         referenced_commands.update(commands)
         action_failures += [f'{screen_id}: unknown function {item}' for item in sorted(functions - expected_functions)]
         action_failures += [f'{screen_id}: unknown command {item}' for item in sorted(commands - defined_commands)]
-        if not re.search(r'CMD-P\d+-F\d+|QUERY|NAVIGATION|LOCAL_[A-Z_]+|TOOL(?:_QUERY)?', execution):
+        if not re.search(r'CMD-P\d+-F\d+|(?:MNT|QRY|INT)-P3-[A-Z-]+|QUERY|NAVIGATION|LOCAL_[A-Z_]+|TOOL(?:_QUERY)?', execution):
             action_failures.append(f'{screen_id}: unknown execution contract {execution}')
         if re.search(r'(^|/)(MUTATING|DIRTY)(/|$)', row[4]) and not commands:
             action_failures.append(f'{screen_id}: mutation state has no command')
@@ -487,12 +488,12 @@ def sql_checks() -> None:
                 continuation_failures = [label for label, sql in continuation_probes if not assert_constraint(con, sql)]
                 record('SQL-TimeAdvance continuation exactly-once', continuation_failures,
                        'predecessor (epoch,commandId)당 child 하나, composite FK, epoch/id pair CHECK를 실제 SQLite로 검증')
-                con.execute("INSERT INTO world_state(id,total_game_minutes,sub_minute_ms,world_seed,session_epoch,branch_id,content_version,balance_version,rng_version,engine_order_version,state_hash) VALUES('WORLD',0,0,'0123456789abcdef','e1','b1','c1','b1','PCG32-XSH-RR.v1',1,'h')")
+                con.execute("INSERT INTO world_state(id,total_game_minutes,sub_minute_ms,world_seed,session_epoch,branch_id,content_version,balance_version,rng_version,engine_order_version,state_hash_state_version,state_hash) VALUES('WORLD',0,0,'0123456789abcdef','e1','b1','c1','b1','PCG32-XSH-RR.v1',1,0,'h')")
                 con.execute("INSERT INTO scheduled_action(id,action_kind,start_minute,due_minute,status,payload_json) VALUES('act1','TEST',10,20,'RESERVED','{}')")
                 con.execute("INSERT INTO occupancy(id,resource_kind,resource_id,action_id,start_minute,end_minute,status) VALUES('occ1','FACILITY','CLINIC-001','act1',10,20,'RESERVED')")
                 con.execute("INSERT INTO resource_reservation(id,resource_kind,resource_id,action_id,quantity,status) VALUES('rr1','FACILITY','CLINIC-001','act1',1,'HELD')")
                 invariant_probes = (
-                    ('world_state singleton id', "INSERT INTO world_state(id,total_game_minutes,sub_minute_ms,world_seed,session_epoch,branch_id,content_version,balance_version,rng_version,engine_order_version,state_hash) VALUES('OTHER',0,0,'0123456789abcdef','e1','b1','c1','b1','PCG32-XSH-RR.v1',1,'h')"),
+                    ('world_state singleton id', "INSERT INTO world_state(id,total_game_minutes,sub_minute_ms,world_seed,session_epoch,branch_id,content_version,balance_version,rng_version,engine_order_version,state_hash_state_version,state_hash) VALUES('OTHER',0,0,'0123456789abcdef','e1','b1','c1','b1','PCG32-XSH-RR.v1',1,0,'h')"),
                     ('world_seed fixed16 lower hex', "UPDATE world_state SET world_seed='0123456789abcdeG' WHERE id='WORLD'"),
                     ('scheduled action status', "UPDATE scheduled_action SET status='OTHER' WHERE id='act1'"),
                     ('occupancy resource kind canonical', "UPDATE occupancy SET resource_kind='facility/clinic' WHERE id='occ1'"),
@@ -508,7 +509,9 @@ def sql_checks() -> None:
                 # 2. Whole-generation manifests reference actual historical chunk bytes.
                 for idx, value in ((1,100),(2,60)):
                     payload = json.dumps({'balance':value}, separators=(',',':')).encode()
-                    con.execute('INSERT INTO checkpoint_chunk(id,sha256,codec_version,encoding,uncompressed_bytes,payload) VALUES(?,?,1,\'json\',?,?)', (f'ch{idx}', hashlib.sha256(payload).hexdigest(),len(payload),payload))
+                    parts = (b'fixture.money', b'1', b'json', payload)
+                    chunk_hash = hashlib.sha256(b''.join(len(part).to_bytes(4, 'big') + part for part in parts)).hexdigest()
+                    con.execute('INSERT INTO checkpoint_chunk(id,sha256,codec_id,codec_version,encoding,uncompressed_bytes,payload) VALUES(?,?,\'fixture.money\',1,\'json\',?,?)', (f'ch{idx}', chunk_hash,len(payload),payload))
                     con.execute("INSERT INTO save_generation(id,parent_id,branch_id,generation_no,game_minute,schema_version,content_version,balance_version,required_domain_set_version,required_domain_set_hash,expected_shard_count,manifest_hash,status) VALUES(?,?,'b',?,0,1,'c1','b1','RequiredDomainSet.v1','fixture-hash',1,?,'COMMITTED')",(f'g{idx}',None if idx==1 else 'g1',idx,f'm{idx}'))
                     con.execute("INSERT INTO generation_chunk(id,generation_id,domain_key,shard_no,chunk_id) VALUES(?,?,'money',0,?)",(f'gc{idx}',f'g{idx}',f'ch{idx}'))
                 got = []
@@ -516,6 +519,7 @@ def sql_checks() -> None:
                     row=con.execute('SELECT cc.payload FROM generation_chunk gc JOIN checkpoint_chunk cc ON cc.id=gc.chunk_id WHERE gc.generation_id=?',(generation,)).fetchone()
                     got.append(json.loads(row[0])['balance'])
                 record('SQL-과거 세대 바이트 조회', [] if got==[100,60] else [str(got)], 'g1=100, g2=60을 서로 다른 실제 chunk에서 조회. 전체 게임 복원 알고리즘 실행은 아님.')
+                record('SQL-P3 durable generation 상태', [] if assert_constraint(con, "UPDATE save_generation SET status='WRITING' WHERE id='g1'") else ['WRITING generation이 durable 허용됨'])
                 record('SQL-FK: 참조 중 chunk 삭제 방지', [] if assert_constraint(con,"DELETE FROM checkpoint_chunk WHERE id='ch1'") else ['참조 중 chunk 삭제 허용됨'])
                 # 3. Default stat key eliminates SQLite UNIQUE+NULL duplicate-event loophole.
                 con.execute("INSERT INTO mercenary(id,sex_code,given_name,family_name,display_name,name_generator_version,birth_game_day,culture_id,portrait_image_key,portrait_pool_version,class_id,level,experience,lifecycle_status) VALUES('npc1','M','카엘','발렌','카엘 발렌','v1',0,'c1','NPC-M-00001','p1','sword',1,0,'ACTIVE')")
@@ -595,6 +599,7 @@ def main() -> int:
         expected_classes[function_match.group(1)]=(
             'BUILD_ARTIFACT' if 'build 산출물' in durable else
             'PROJECTION' if 'consumer' in kind else
+            'AUTHORITATIVE' if kind in ('maintenance', 'maintenance/read', '내부 persistence', 'lifecycle restore') else
             'LIFECYCLE' if 'lifecycle' in kind else
             'READ' if kind in ('read','compute') or 'read/' in kind else
             'TOOL'

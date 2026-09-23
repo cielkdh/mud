@@ -2991,8 +2991,8 @@
     "name": "현재상태 스키마·Dirty 단위 저장 — 계약·Fixture",
     "function": "FUNC-P3-001",
     "stage": "계약",
-    "detail": "모든 P3 기능 Task의 선행 bootstrap이다. 첫 단계에 최소 :core:save module·Room test harness를 만든 뒤 실제 단말 storage/recovery spike(WAL·storage full·candidate swap·previous fallback)를 통과하고 gameplay WorldSession.execute→SavePort commit/segment와 바깥 CreateNewWorld/CheckpointWorld checkpoint의 DTO·오류·불변식을 확정한다. EMPTY genesis·첫 생성 실패·uncertain-commit receipt reconcile 및 §3.1.2 lifecycle/maintenance 경계를 포함하며 내부 중첩 receipt/event는 금지한다. P2 envelope actor→receipt.actor_id와 scoped DomainEvent audience→SavePort commit DTO 전달을 확정하고 visibility만으로 권한을 추론하지 않는다. 모든 P3 Test ID는 PLANNED로 등록하고 실제 spike source가 존재하는 case만 BOUND한다. 매핑은 실행 증거가 아니며 실행 전 case는 NOT_RUN이다. §3.3.1 crash oracle 확정 전 다른 기능 lane을 시작하지 않는다. SaveCoordinator는 P2 scheduled_action·occupancy·resource_reservation을 포함한 active baseline을 바깥 transaction에 저장한다.",
-    "module": ":core:simulation / :core:save",
+    "detail": "선행 bootstrap을 A(:core:save Room harness·SQLiteProfile.v1·Android cloud/D2D backup exclusion), B(SavePort gameplay/checkpoint·actor/audience·EMPTY genesis·receipt reconcile), C(실제 단말 WAL 완료 barrier/storage-full/candidate swap/previous fallback crash spike), D(P2 repository conformance·JUnit mapping·QA freshness), G(§3.1.2/§3.3.1 Gate)의 독립 변경·리뷰로 수행한다. A~D/G별 재산정 전 일정 약속에 사용하지 않고 G 전 다른 기능 lane을 열지 않는다. 첨부 ZIP만으로 P2 실행 증거를 PASS로 보지 않는다. P3 case는 PLANNED, 실제 source/runner가 있는 case만 BOUND하며 실행 전 NOT_RUN이다. SaveCoordinator는 중첩 command/receipt/event를 만들지 않는다.",
+    "module": ":core:simulation / :core:save / :app (backup rules)",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
@@ -3006,7 +3006,7 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "실제 harness의 storage/recovery spike와 §3.3.1 process-kill crash oracle 통과, 생성된 spike case만 BOUND·validator parity, 외부 gameplay/checkpoint command당 receipt 1개·maintenance/lifecycle의 gameplay receipt/event 0·내부 SaveCoordinator 중첩 command 0을 포함한 DTO/fixture 승인",
+    "done": "A/B/C/D 각각 리뷰·증거 확인 뒤 G Gate 통과. SQLiteProfile readback·cloud/D2D backup exclusion·WAL 완료 barrier와 실제 harness의 storage/recovery spike·process-kill oracle, P2 실제 repository source↔JUnit 및 QA freshness, 생성된 spike case만 BOUND·validator parity, 외부 gameplay/checkpoint command당 receipt 1개·maintenance/lifecycle gameplay receipt/event 0·SaveCoordinator 중첩 command 0",
     "tests": [
       "P3-UT-001",
       "P3-BT-001",
@@ -3084,7 +3084,7 @@
     "name": "현재상태 스키마·Dirty 단위 저장 — 저장·연계",
     "function": "FUNC-P3-001",
     "stage": "어댑터",
-    "detail": "대상 world_state, command_receipt, world_event, rng_state, scheduled_action, occupancy, resource_reservation, save_generation. Delta+receipt+RNG+source events+codec을 원자 commit에 연결하고, checkpoint는 RequiredDomainSet.v1·frozen snapshot을 검증하며, affected rows/충돌/재실행을 검사한다. 선행상태와 후속 port 계약을 등록한다.",
+    "detail": "GAMEPLAY은 typed Delta·RNG·source events·바깥 receipt를 SavePort.commit/commitSegment 한 번에 원자 commit한다. CHECKPOINT는 RequiredDomainSet.v1·frozen snapshot·완전 manifest·바깥 receipt만 SavePort.checkpoint에 넣고 내부 Delta/event/RNG draw는 0이다. 일반 commit의 stateHash는 갱신하지 않으며 affected rows·재실행을 검사한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-001"
@@ -3298,7 +3298,7 @@
     "name": "복원 가능한 세대·슬롯·불변 청크 — 저장·연계",
     "function": "FUNC-P3-002",
     "stage": "어댑터",
-    "detail": "대상 save_generation, save_slot, checkpoint_chunk, generation_chunk. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다.",
+    "detail": "CHECKPOINT 내부 GenerationStore plan은 frozen snapshot·UNKNOWN dirty 재구성·chunk·완전 manifest·slot을 바깥 SavePort.checkpoint transaction에 연결한다. 바깥 receipt 1개 외 별도 CommandEnvelope/DomainDelta/receipt/event/RNG draw/publication은 0개다. affected rows·재호출·실패 rollback을 검사한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-006"
@@ -3512,7 +3512,7 @@
     "name": "전투·장기진행·대화 복구 — 저장·연계",
     "function": "FUNC-P3-003",
     "stage": "어댑터",
-    "detail": "대상 recovery_checkpoint, time_advance_state, scheduled_action, occupancy, resource_reservation 및 receipt actor·event audience 열. dialogue_session은 후속 P11 참조이며 P3 v1 생성 대상이 아니다. Delta+receipt+RNG+source events+codec을 원자 commit하고 SummaryStart.v1을 첫 segment와 원자 저장·RESUME에서 재사용한다. terminal summary는 receipt.actor_id·EventAudience.v1·SummaryStart.v1·terminal public snapshot에서 재구성하고 scoped event를 사건별로 fail-closed 필터링한다.",
+    "detail": "GAMEPLAY RESUME의 바깥 Delta·RNG·event·receipt는 SavePort.commitSegment에서 원자 확정하고 SummaryStart.v1을 첫 segment에서 저장·재사용한다. START_CHECKPOINT는 별도 RecoveryService lifecycle operation으로 candidate를 검증·교체하며 gameplay Delta/receipt/event/RNG draw는 0이다. terminal summary는 receipt.actor_id·EventAudience.v1·SummaryStart.v1·terminal public snapshot에서 재구성한다. dialogue_session은 후속 P11 참조다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-011"
@@ -3726,7 +3726,7 @@
     "name": "마이그레이션·콘텐츠 호환 — 저장·연계",
     "function": "FUNC-P3-004",
     "stage": "어댑터",
-    "detail": "GREENFIELD_V1은 최초 v1 생성·재오픈 adapter와 빈 migration registry를 구현한다. LEGACY_CHAIN은 실제 exported schema/fixture가 있을 때만 migration_history, save_generation, content_binding 변환을 활성화하고 원본 hash·단계별 결과·재실행을 검사한다.",
+    "detail": "GREENFIELD_V1은 최초 v1 생성·재오픈 adapter와 빈 migration registry를 구현한다. LEGACY_CHAIN의 MNT-P3-MIGRATE는 operationId/inputFingerprint로 재실행을 reconcile하고 gameplay command/receipt/event/RNG 변경 0이다. 실제 exported schema/fixture가 있을 때만 migration_history, save_generation, content_binding 변환을 활성화하고 원본 hash·단계별 결과·재실행을 검사한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-016"
@@ -3899,7 +3899,7 @@
     "name": "오프라인 Export·Import·아카이브 보호 — 핵심 규칙",
     "function": "FUNC-P3-005",
     "stage": "알고리즘",
-    "detail": "SAF 로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다; 경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding 을 검사한다; WAL 사용 중 열린 save.db 만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다; checksum 은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다. 정해진 입력에서는 '새 slotId·기존 슬롯 hash 불변·동일 상태 복원'을 만족해야 한다.",
+    "detail": "SaveArchiveManifest.v1을 canonical 검증하고 SAF streaming·경로 traversal·zip bomb·중복 entry·version·checksum·content binding을 검사한다. Import 전 checked Long으로 staging/candidate/WAL/backup 공간을 계산하고 진행 중 ENOSPC를 처리한다. WAL main 파일 단독 복사를 금지하며 새 slotId·기존 slot hash 불변·동일 상태 복원을 검증한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-021"
@@ -3940,7 +3940,7 @@
     "name": "오프라인 Export·Import·아카이브 보호 — 저장·연계",
     "function": "FUNC-P3-005",
     "stage": "어댑터",
-    "detail": "대상 save_slot, save_generation, recovery_journal. Delta+receipt+RNG+source events+codec 원자 commit과 affected rows/충돌/재실행을 검증한다. SaveArchiveService가 첫 CreateNewWorld 및 debounce autosave checkpoint의 durable commit 후 앱 전용 독립 백업을 생성·검증·게시하며 새 검증본 전까지 이전 검증본을 보존한다.",
+    "detail": "ARCHIVE_IMPORT/EXPORT maintenance operationId·inputFingerprint·journal/sidecar로 재시도 결과를 reconcile한다. gameplay WorldEngine/CommandEnvelope/DomainDelta/receipt/event/RNG mutation/publication은 0개다. streaming 한도·공간·checksum·candidate 검증 후 Import 새 slot을 1회 활성화한다. 독립 백업은 checkpoint 뒤 생성·검증하고 Latest/Previous 두 검증본을 회전한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-021"
@@ -4065,7 +4065,7 @@
     "name": "무결성 검사·복구·보존 GC — 계약·Fixture",
     "function": "FUNC-P3-006",
     "stage": "계약",
-    "detail": "SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport 의 DTO/오류/불변식 정의. 입력 generationId, quick/deep, retainedRootIds[], repairMode. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성.",
+    "detail": "SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport 의 DTO/오류/불변식 정의. 입력 generationId, quick/deep, retainedRootIds[]; GC request는 별도 maintenance operation. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성.",
     "module": ":core:save",
     "depends": [
       "P0-TASK-021",
@@ -4113,7 +4113,7 @@
     "name": "무결성 검사·복구·보존 GC — 핵심 규칙",
     "function": "FUNC-P3-006",
     "stage": "알고리즘",
-    "detail": "quick load 는 핵심참조·시계·player·소유권·예약·RNG 를 검사하고 deep audit 은 전체 graph 를 검사한다; 손상은 최신 정상 세대→이전 자동 저장 순으로 제안한다; 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다; 공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다. 정해진 입력에서는 'g2 복원 제안·손실 경계와 시간 표시'을 만족해야 한다.",
+    "detail": "quick/deep audit와 current branch 우선 recovery ordering을 구현한다. 타 branch 자동 선택은 금지하고 손실 경계를 표시한다. root·수동 슬롯을 보호하며 GC 뒤 freelist_count/page_count, bounded incremental vacuum, live/compact ratio를 측정한다. 물리 shrink 실패 시 원본을 보존한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-026"
@@ -4154,7 +4154,7 @@
     "name": "무결성 검사·복구·보존 GC — 저장·연계",
     "function": "FUNC-P3-006",
     "stage": "어댑터",
-    "detail": "대상 checkpoint_chunk, generation_chunk, save_generation, recovery_journal. 원자 commit 및 affected rows/충돌/재실행을 검증한다. RecoveryService는 save.db 전체 불능 시 DB 메타데이터에 의존하지 않고 독립 백업을 integrity/FK/manifest/hash로 검증한 뒤 후보를 제시하며 부재 시 RECOVERY_UNAVAILABLE과 원본 보존을 보장한다.",
+    "detail": "대상 checkpoint_chunk, generation_chunk, save_generation, recovery_journal. MNT-P3-GC는 operationId/inputFingerprint·root 재검증 뒤 원자 commit/재실행을 검사하고 gameplay receipt/event/RNG 변경 0이다. RecoveryService는 save.db 전체 불능 시 DB 메타데이터에 의존하지 않고 독립 백업을 integrity/FK/manifest/hash로 검증한 뒤 후보를 제시하며 부재 시 RECOVERY_UNAVAILABLE과 원본 보존을 보장한다.",
     "module": ":core:save",
     "depends": [
       "P3-TASK-026"

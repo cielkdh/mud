@@ -999,7 +999,7 @@
     "i": 1,
     "id": "FUNC-P3-001",
     "name": "현재상태 스키마·Dirty 단위 저장",
-    "method": "WorldSession.execute(command: CheckpointWorld) -> CommandResult; WorldEngine plans an immutable delta; SavePort.commit(delta, expected: StateVersion) -> CommitReceipt; WorldSession applies and publishes only after success",
+    "method": "WorldSession.execute(envelope) -> CommandResult; gameplay: WorldEngine plan → SavePort.commit/commitSegment; CheckpointWorld/CreateNewWorld: WorldSession frozen snapshot → SavePort.checkpoint; durable receipt reconcile before apply/publish",
     "tables": [
       "world_state",
       "command_receipt",
@@ -1012,7 +1012,8 @@
       "DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다",
       "일반 mutation은 current normalized row·RNG·receipt·events를 동일 write transaction의 같은 stateVersion으로 갱신하고 generation은 0으로 유지한다",
       "checkpoint만 complete generation manifest를 작성하며, cache miss도 durable receipt 조회를 expectedVersion·계산보다 먼저 수행한다",
-      "Dirty set은 성공한 commit만 해제하며 UI는 durable version만 저장됨으로 표시한다",
+      "Dirty는 성능 힌트다. reopen 후 current가 마지막 checkpoint보다 앞서면 UNKNOWN으로 모든 registered shard를 canonical 비교하고 checkpoint 성공 뒤에만 해제한다",
+      "일반 commit은 stateVersion만 갱신하고 stateHash는 최초 생성·checkpoint·restore에서만 전체 scan하며 hash 대상 version을 함께 저장한다",
       "WorldEngine은 :core:simulation의 SavePort만 의존하고 :core:save의 SaveCoordinator는 이를 구현하며 새 CommandEnvelope·commandId·중첩 receipt/Event를 만들지 않는다"
     ],
     "normal": [
@@ -1120,7 +1121,7 @@
       "checksum",
       "Manifest"
     ],
-    "state": "WRITING → COMMITTED; retained roots → reachability GC",
+    "state": "transaction 내부 계획/쓰기 → durable COMMITTED 또는 rollback; retained roots → reachability GC",
     "kind": "mutation",
     "refs": [],
     "sources": [
@@ -1173,7 +1174,7 @@
     "i": 3,
     "id": "FUNC-P3-003",
     "name": "장기진행·예약 복구",
-    "method": "RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession",
+    "method": "RecoveryService.restore(request: StartCheckpointRequest) -> RecoverableSession",
     "tables": [
       "recovery_checkpoint",
       "time_advance_state",
@@ -1427,7 +1428,7 @@
     ],
     "rules": [
       "quick load는 핵심참조·시계·player·소유권·예약·RNG를 검사하고 deep audit은 전체 graph를 검사한다",
-      "손상은 최신 정상 세대→이전 자동저장 순으로 제안한다",
+      "읽을 수 있는 DB의 손상은 current branch root→해당 branch의 최신 정상 자동저장 순으로 제안하며 타 branch는 명시 선택만 허용한다",
       "즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다",
       "공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다"
     ],

@@ -116,6 +116,7 @@
       "engine_order_version INTEGER NOT NULL",
       "state_hash_version TEXT NOT NULL DEFAULT 'StateHash.v1'",
       "player_id TEXT",
+      "state_hash_state_version INTEGER NOT NULL CHECK(state_hash_state_version>=0)",
       "state_hash TEXT NOT NULL"
     ],
     "unique": [],
@@ -308,14 +309,19 @@
       "schema_version INTEGER NOT NULL",
       "content_version TEXT NOT NULL",
       "balance_version TEXT NOT NULL",
+      "manifest_codec TEXT NOT NULL DEFAULT 'CompleteGenerationManifest.v1'",
+      "shard_layout_version TEXT NOT NULL DEFAULT 'ShardLayout.v1'",
+      "required_domain_set_version TEXT NOT NULL",
+      "required_domain_set_hash TEXT NOT NULL",
+      "expected_shard_count INTEGER NOT NULL CHECK(expected_shard_count>0)",
       "manifest_hash TEXT NOT NULL",
-      "status TEXT NOT NULL CHECK(status IN ('WRITING','COMMITTED','ABORTED'))"
+      "status TEXT NOT NULL CHECK(status='COMMITTED')"
     ],
     "unique": [
       "branch_id,generation_no"
     ],
     "indexes": [
-      "status,generation_no"
+      "branch_id,status,generation_no DESC"
     ],
     "note": "삭제 시 부모행 제거는 별도 참조 재기록/보존 정책. 부모는 provenance이며 복원 delta-chain에 의존하지 않음.",
     "store": "save"
@@ -324,6 +330,7 @@
     "name": "checkpoint_chunk",
     "fields": [
       "sha256 TEXT NOT NULL",
+      "codec_id TEXT NOT NULL",
       "codec_version INTEGER NOT NULL",
       "encoding TEXT NOT NULL",
       "uncompressed_bytes INTEGER NOT NULL CHECK(uncompressed_bytes>=0)",

@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-23T12:55:17+09:00",
+  "executed_at": "2026-09-23T15:04:23+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -47,7 +47,7 @@
     {
       "name": "결정대장·Task 결정 의존 정합성",
       "status": "PASS",
-      "detail": "33개 승인 결정과 672개 Task의 문서/관리데이터 의존을 비교",
+      "detail": "34개 승인 결정과 672개 Task의 문서/관리데이터 의존을 비교",
       "failures": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "name": "Mutation과 Query/Tool 기능 분류",
       "status": "PASS",
-      "detail": "mutation 78개 / non-mutation 33개",
+      "detail": "mutation 73개 / non-mutation 38개",
       "failures": []
     },
     {
@@ -113,7 +113,7 @@
     {
       "name": "Screen Action→Mutation 계약 연결",
       "status": "PASS",
-      "detail": "59개 Screen / 37개 Command ID 참조",
+      "detail": "59개 Screen / 39개 Command ID 참조",
       "failures": []
     },
     {
@@ -324,6 +324,12 @@
       "failures": []
     },
     {
+      "name": "SQL-P3 durable generation 상태",
+      "status": "PASS",
+      "detail": "",
+      "failures": []
+    },
+    {
       "name": "SQL-FK: 참조 중 chunk 삭제 방지",
       "status": "PASS",
       "detail": "",
@@ -343,7 +349,7 @@
     }
   ],
   "summary": {
-    "PASS": 55,
+    "PASS": 56,
     "FAIL": 1
   },
   "game_test_execution": "NOT_RUN",
