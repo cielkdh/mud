@@ -2,6 +2,7 @@ package com.imsi.mud.ui
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
@@ -32,7 +33,7 @@ class AppRootTest {
             Triple(AppShellState.Ready, "app-shell-ready", listOf("Ready", "The current world is ready for an implemented feature.")),
             Triple(AppShellState.Empty, "app-shell-empty", listOf("No world is available yet", "Create and import actions are introduced with Phase 3 save support.")),
             Triple(AppShellState.Error("internal save.db path: /private/state"), "app-shell-error", listOf("Unable to continue", "We couldn't complete this action. Please try again.")),
-            Triple(AppShellState.placeholderFor("SCR-START-001"), "app-shell-blocked", listOf("Feature unavailable", "This screen is owned by a later phase."))
+            Triple(AppShellState.placeholderFor("SCR-START-001"), "app-shell-blocked", listOf("Feature unavailable", "This feature is not available in this build yet."))
         ).forEach { (state, prefix, descriptions) ->
             compose.runOnIdle { shellState.value = state }
             if (state == AppShellState.Loading) {
@@ -47,20 +48,16 @@ class AppRootTest {
             compose.onNodeWithTag("$prefix-body")
                 .assertIsDisplayed()
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(descriptions[1])))
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, if (prefix == "app-shell-blocked") 2f else 1f))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1f))
         }
-
-        compose.onNodeWithTag("app-shell-blocked-screen")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Unavailable screen SCR-START-001")))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1f))
 
         assertEquals(56, ScreenRegistry.count())
         compose.runOnIdle { shellState.value = AppShellState.placeholderFor("SCR-UNKNOWN-999") }
         compose.onNodeWithTag("app-shell-blocked-title")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 0f))
         compose.onNodeWithTag("app-shell-blocked-body")
-            .assertTextEquals("Unknown screen route: SCR-UNKNOWN-999")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("Unknown screen route: SCR-UNKNOWN-999")))
+            .assertTextEquals("This feature is not available right now.")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf("This feature is not available right now.")))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1f))
     }
 
@@ -131,5 +128,19 @@ class AppRootTest {
 
         compose.onNodeWithTag("app-shell-error-body")
             .assertTextEquals("We couldn't complete this action. Please try again.")
+    }
+
+    @Test
+    fun blockedStateDoesNotExposeRouteOrInternalReason() {
+        compose.setContent {
+            AppRoot(
+                AppShellState.Blocked("SCR-SAVE-001", "sqlite=/private/save.db; schema=17"),
+                onRetry = {}
+            )
+        }
+
+        compose.onNodeWithTag("app-shell-blocked-body")
+            .assertTextEquals("This feature is not available right now.")
+        compose.onNodeWithTag("app-shell-blocked-screen").assertDoesNotExist()
     }
 }

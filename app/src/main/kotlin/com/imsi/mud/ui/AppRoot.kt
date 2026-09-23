@@ -61,7 +61,9 @@ fun AppRoot(
     onRetry: () -> Unit,
     timeAdvanceEntry: TimeAdvanceEntry? = null,
     onBack: () -> Unit = {},
-    loadingBody: String = "Preparing the world session."
+    loadingBody: String = "Preparing the world session.",
+    phase3SaveState: Phase3SaveState? = null,
+    onPhase3Action: (Phase3SaveAction) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -69,7 +71,13 @@ fun AppRoot(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        when (state) {
+        if (phase3SaveState != null) {
+            Phase3SaveRoute(
+                state = phase3SaveState,
+                onAction = onPhase3Action,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else when (state) {
             AppShellState.Loading -> {
                 CircularProgressIndicator(
                     Modifier
@@ -184,22 +192,11 @@ fun AppRoot(
                     },
                     style = MaterialTheme.typography.headlineSmall
                 )
-                state.screenId?.let {
-                    Text(
-                        text = it,
-                        modifier = Modifier
-                            .testTag("app-shell-blocked-screen")
-                            .semantics {
-                                contentDescription = "Unavailable screen $it"
-                                traversalIndex = 1f
-                            }
-                    )
-                }
                 Text(
-                    text = state.reason,
+                    text = publicBlockedMessage(state.reason),
                     modifier = Modifier.testTag("app-shell-blocked-body").semantics {
-                        contentDescription = state.reason
-                        traversalIndex = if (state.screenId == null) 1f else 2f
+                        contentDescription = publicBlockedMessage(state.reason)
+                        traversalIndex = 1f
                     }
                 )
                 Button(
@@ -209,7 +206,7 @@ fun AppRoot(
                         .testTag("app-shell-blocked-back")
                         .semantics {
                             contentDescription = "Back"
-                            traversalIndex = if (state.screenId == null) 2f else 3f
+                            traversalIndex = 2f
                         }
                 ) {
                     Text("Back")
@@ -221,3 +218,11 @@ fun AppRoot(
 
 private fun publicErrorMessage(@Suppress("UNUSED_PARAMETER") reason: String): String =
     "We couldn't complete this action. Please try again."
+
+private fun publicBlockedMessage(reason: String): String = when {
+    reason.contains("Local save is not available", ignoreCase = true) ->
+        "Save support is not available in this build yet."
+    reason.contains("later phase", ignoreCase = true) ->
+        "This feature is not available in this build yet."
+    else -> "This feature is not available right now."
+}

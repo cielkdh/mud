@@ -1527,7 +1527,7 @@
     "expected_effort": 36.04,
     "optimistic_effort": 22.13,
     "pessimistic_effort": 57.8,
-    "status": "NOT_STARTED",
+    "status": "DONE",
     "owner": "미지정",
     "related_source_ids": []
   },
@@ -1540,8 +1540,8 @@
       2
     ],
     "goal": "동일 시점의 월드·RNG·예약·세이브 세대를 원자적으로 저장·복원한다.",
-    "modules": ":core:database / :core:save / :core:data",
-    "gate": "모든 crash cut에서 이전 또는 다음 완전 세대만 로드",
+    "modules": ":core:save / :app (database/data는 :core:save 논리 package)",
+    "gate": "일반 commit crash cut은 마지막 durable current transaction의 이전/다음 완전 상태, restore swap은 이전/다음 완전 DB/generation만 로드",
     "risks": "세대 번호만 보존하고 이전 값 소실; WAL 파일 복사; 저장공간 부족",
     "features": [
       {
@@ -1549,7 +1549,7 @@
         "i": 1,
         "id": "FUNC-P3-001",
         "name": "현재상태 스키마·Dirty 단위 저장",
-        "method": "WorldSession.execute(command: CheckpointWorld) -> CommandResult; WorldEngine computes WorldDelta; SavePort.commit(delta: WorldDelta, expected: StateVersion) -> CommitReceipt",
+        "method": "WorldSession.execute(command: SaveCommand) -> CommandResult; WorldEngine computes an execution plan; SavePort.commit/commitSegment/checkpoint reconcile before WorldSession apply/publish",
         "tables": [
           "world_state",
           "command_receipt",
@@ -1560,13 +1560,14 @@
         "rules": [
           "content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB를 transaction 안에서 호출하지 않는다",
           "DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다",
-          "current normalized row·RNG·receipt·events·generation manifest를 동일 write transaction에서 갱신한다",
+          "일반 commit은 current normalized row·RNG·receipt·events를 같은 stateVersion의 write transaction에서 갱신하고 generation manifest는 checkpoint에서만 생성한다",
           "Dirty set은 성공한 commit만 해제하며 UI는 durable version만 저장됨으로 표시한다",
-          "WorldEngine은 :core:simulation의 SavePort만 의존하고 :core:save의 SaveCoordinator는 이를 구현하며 새 CommandEnvelope·commandId·중첩 receipt/Event를 만들지 않는다"
+          "WorldEngine은 :core:simulation의 SavePort만 의존하고 :core:save의 SaveCoordinator는 이를 구현하며 새 CommandEnvelope·commandId·중첩 receipt/Event를 만들지 않는다",
+          "WorldSession만 SavePort 성공 확인 뒤 apply/publish하며 checkpoint는 receipt-first idempotency와 uncertain-commit reconcile을 따른다"
         ],
         "normal": [
-          "아이템 이동+금화지출+RNG 1회",
-          "세 요소와 receipt가 같은 generation에서 보임"
+          "scheduled_action·resource_reservation 변경+RNG 1회",
+          "일반 commit의 세 요소와 receipt가 같은 stateVersion에 원자 확정되고 generation 생성0"
         ],
         "edge": [
           "Dirty set 공집합",
@@ -1574,7 +1575,7 @@
         ],
         "failure": [
           "RNG row 쓰기 단계에서 예외",
-          "아이템·금화·RNG 전부 이전 값"
+          "예약·자원·RNG 전부 이전 값"
         ],
         "kw": [
           "원자",
@@ -1649,8 +1650,8 @@
           "보존 root에서 도달 가능한 청크는 절대 GC하지 않고 과거 로드시 새 branch와 epoch를 만든다"
         ],
         "normal": [
-          "g1 금화100, g2 금화60 이후 g1 로드",
-          "금화100 복원; g2 내용도 보존"
+          "g1 action RESERVED, g2 action COMPLETED 이후 g1 로드",
+          "RESERVED 복원; g2 내용도 보존"
         ],
         "edge": [
           "수동슬롯 이름 동일2개",
@@ -1721,41 +1722,40 @@
         "p": 3,
         "i": 3,
         "id": "FUNC-P3-003",
-        "name": "전투·장기진행·대화 복구",
+        "name": "장기진행·예약 복구",
         "method": "RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession",
         "tables": [
           "recovery_checkpoint",
           "time_advance_state",
-          "dialogue_session"
+          "scheduled_action",
+          "occupancy",
+          "resource_reservation"
         ],
         "rules": [
-          "전투 actor/actionId/queue/projectile/status/RNG와 combat/clock residual을 함께 저장한다",
-          "크래시 전투 이어하기와 전투시작 복귀 선택은 패배 SAFE_RECOVERY와 다른 operation이다",
           "장기진행은 lastBoundary와 남은 target을, 선택형 이벤트는 choice receipt를 저장한다",
-          "체크포인트 중 일부만 다른 generation에서 가져오는 부분 복구를 금지한다"
+          "RESUME은 cursor·RNG·예약·점유를 마지막 committed segment 그대로 이어가고 START_CHECKPOINT는 checkpoint snapshot을 복원한다",
+          "체크포인트 중 일부만 다른 generation에서 가져오는 부분 복구를 금지한다",
+          "combat/dialogue codec 또는 domain은 P6/P11 등록 전 IncompatibleSave로 격리한다"
         ],
         "normal": [
-          "투사체 발사 후 시전자 전투불능 checkpoint",
-          "유효 투사체만 이어지고 기존 발사 이벤트 재생성0"
+          "DECISION_REQUIRED 장기진행 checkpoint",
+          "cursor·RNG·예약·점유가 마지막 committed segment와 일치하고 completion event 재생성0"
         ],
         "edge": [
-          "전투 시작 상태로 복귀 선택",
-          "start checkpoint의 상태·RNG 전체 복원"
+          "active baseline 밖 combat/dialogue codec checkpoint",
+          "IncompatibleSave; live world·receipt·publication 변경0"
         ],
         "failure": [
           "checkpoint checksum 불일치",
           "직전 완전 generation 제안·손상 원본 유지"
         ],
         "kw": [
-          "Combat",
           "Recovery",
-          "전투",
           "크래시",
           "TimeAdvance",
-          "관계",
-          "이벤트",
-          "투표",
-          "경매"
+          "예약",
+          "점유",
+          "이벤트"
         ],
         "state": "FOUND → VALIDATED → RESTORED 또는 FALLBACK_OFFERED",
         "kind": "mutation",
@@ -1900,7 +1900,8 @@
           "SAF로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다",
           "경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding을 검사한다",
           "WAL 사용 중 열린 save.db만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다",
-          "checksum은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다"
+          "checksum은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다",
+          "기본 독립 백업은 첫 CreateNewWorld 및 debounce autosave checkpoint 후 SaveArchiveService가 생성·검증·교체하고 이전 검증본을 보존한다"
         ],
         "normal": [
           "정상 archive 가져오기",

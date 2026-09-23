@@ -25,7 +25,7 @@
 |---|---|---|---|
 | C14 | 기술버전·SDK 및 실제 코드 미제공 | 승인·빌드 검증 NOT_RUN | exact 기술/SDK와 GREENFIELD_V1은 승인 완료. 실제 resolve/compile/schema export는 P0 Gate에서 검증. |
 | C16 | 세대번호만 존재하는 과거상태 복원 | 승인·기준선 반영 | 불변청크+완전 manifest+정규화 current projection 원자저장. GC root 보호. |
-| C18 | 미제공 이미지·콘텐츠 정의 및수량 | 승인·실물 검증 NOT_RUN | M/W 각 5,000장의 512×640 WebP 고정 풀과 install-time portraits_v1 pack을 사용한다. 실물/manifest 검수는 NOT_RUN. |
+| C18 | 미제공 이미지·콘텐츠 정의 및수량 | 승인·실물 검증 NOT_RUN | M/W 각 5,000장의 200×200 PNG 또는 WebP 고정 풀(전체 동일 형식)과 install-time portraits_v1 pack을 사용한다. 실물/manifest 검수는 NOT_RUN. |
 | C19 | 장기성능/용량 목표와단말기준 | 승인·BASELINE_V1 / 실측 NOT_RUN | 85 NFR의 MIN/STD·P95·PSS·100/300년 save 상한을 BASELINE_V1으로 승인했다. 실측은 NOT_RUN. |
 | C22 | 암호화·checksum 보장범위 | 원문 해석 확정 | checksum 은손상탐지,인증/치트방지아님. 기본로컬파일백업·사용자동의·원본 보존. |
 

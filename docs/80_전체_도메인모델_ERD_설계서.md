@@ -82,7 +82,7 @@ erDiagram
 
 ## 5. Aggregate 간 쓰기 규칙
 
-1. UI는 DB를 직접 수정하지 않고 `WorldCommand → WorldEngine → Delta → Commit → DomainEvent` 경로를 사용한다.
+1. UI는 DB를 직접 수정하지 않고 `WorldCommand → WorldSession → WorldEngine plan → Delta → SavePort commit → WorldSession apply/publish → DomainEvent` 경로를 사용한다.
 2. 하나의 WorldSession writer가 authoritative state를 수정하며, 동시 UI 요청은 `commandId/sessionEpoch/expectedVersion`으로 직렬화한다.
 3. Aggregate 간 원자 변경이 필요한 경우 같은 command transaction 안에서 수행하고, 외부 효과/Projection publish는 commit 이후 수행한다.
 4. 연대기·통계·검색 Projection은 원본 상태의 대체물이 아니며 재생성 가능성을 유지한다.
@@ -133,9 +133,9 @@ erDiagram
 
 ### 6.4. P3 — 로컬DB 세이브 복구
 
-`checkpoint_chunk`, `command_receipt`, `content_binding`, `dialogue_session`, `generation_chunk`, `migration_history`, `recovery_checkpoint`, `recovery_journal`, `rng_state`, `save_generation`, `save_slot`, `time_advance_state`, `world_event`, `world_state`
+`checkpoint_chunk`, `command_receipt`, `content_binding`, `generation_chunk`, `migration_history`, `recovery_checkpoint`, `recovery_journal`, `rng_state`, `save_generation`, `save_slot`, `time_advance_state`, `world_event`, `world_state`
 
-관련 기능: `FUNC-P3-001` 현재상태 스키마·Dirty 단위 저장, `FUNC-P3-002` 복원 가능한 세대·슬롯·불변 청크, `FUNC-P3-003` 전투·장기진행·대화 복구, `FUNC-P3-004` 마이그레이션·콘텐츠 호환, `FUNC-P3-005` 오프라인 Export·Import·아카이브 보호, `FUNC-P3-006` 무결성 검사·복구·보존 GC
+관련 기능: `FUNC-P3-001` 현재상태 스키마·Dirty 단위 저장, `FUNC-P3-002` 복원 가능한 세대·슬롯·불변 청크, `FUNC-P3-003` 장기진행·예약 복구, `FUNC-P3-004` 마이그레이션·콘텐츠 호환, `FUNC-P3-005` 오프라인 Export·Import·아카이브 보호, `FUNC-P3-006` 무결성 검사·복구·보존 GC. `dialogue_session`은 P11, combat checkpoint 계열은 P6/P7 소유이며 P3 v1 active schema에 포함하지 않는다.
 
 ### 6.5. P4 — 용병생성 성장 잠재력 이름
 

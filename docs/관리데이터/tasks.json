@@ -2884,7 +2884,7 @@
     "name": "Phase 2 통합 검증·인계 Gate",
     "function": "PHASE-2",
     "stage": "Gate",
-    "detail": "Phase 2 필수는 crossed boundary 누락·중복 0, sealed atomic/long ScheduledAction, RNG, canonical resource/singleton 의미 invariant, Risk preview, 관찰 가능한 BoundarySource conformance, payload cap, concurrency/FIFO/safe-boundary, deterministic/cap/overflow, test-only SavePort cutpoint suite와 단방향 인계 매핑이다. latency/P95·MIN/STD·DB bytes는 Release/NFR로, 24시간 offline·process-kill/onStop·Room/WAL/reopen·production SavePort/DB CHECK는 Phase 3 또는 Release QA로 이관하며 Phase 2 PASS로 해석하지 않는다.",
+    "detail": "Phase 2 필수는 crossed boundary 누락·중복 0, sealed atomic/long ScheduledAction, RNG, canonical resource/singleton 의미 invariant, Risk preview, 관찰 가능한 BoundarySource conformance, payload cap, concurrency/FIFO/safe-boundary, deterministic/cap/overflow, test-only SavePort cutpoint suite와 단방향 인계 매핑이다. latency/P95·MIN/STD·DB bytes는 Release/NFR로, P2-OP-001·P2-ET-001의 24시간 offline·process-kill/onStop 및 Room/WAL/reopen·production SavePort/DB CHECK는 Phase 3 또는 Release QA로 이관한다. P2-IT-006은 handoff 관리 기록 전용으로 실행하지 않으며 이 세 NOT_RUN ID는 Gate 필수 실행 목록에서 제외한다.",
     "module": ":core:simulation / :core:common",
     "depends": [
       "P2-TASK-005",
@@ -2901,7 +2901,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "Phase 2 필수 Test PASS·Gate 승인·P3/Release 이관 항목과 DTO/codec/fixture 매핑·미해결중대결함0. latency/NFR와 Room/WAL/reopen/process-kill/production SavePort는 본 완료조건에서 제외하고 NOT_VERIFIED/이관으로 유지",
+    "done": "Gate 필수 29 Test PASS·QA Gate PASS·P3/Release 이관 매핑·미해결 P0/P1/차단 P2 0. P2-OP-001/P2-ET-001/P2-IT-006은 NOT_RUN이며 Gate에서 제외·이관. latency/NFR와 Room/WAL/reopen/process-kill/production SavePort는 Phase 2 PASS 범위가 아님",
     "tests": [
       "P2-UT-001",
       "P2-BT-001",
@@ -2931,7 +2931,9 @@
       "P2-RT-001",
       "P2-CN-001",
       "P2-REC-001",
-      "P2-PT-001",
+      "P2-PT-001"
+    ],
+    "deferred_tests": [
       "P2-OP-001",
       "P2-ET-001",
       "P2-IT-006"
@@ -2989,8 +2991,8 @@
     "name": "현재상태 스키마·Dirty 단위 저장 — 계약·Fixture",
     "function": "FUNC-P3-001",
     "stage": "계약",
-    "detail": "외부 WorldSession.execute(CheckpointWorld(...)), 내부 WorldEngine 계산, SavePort.commit(delta, expected)의 DTO/오류/불변식을 정의한다. :core:save의 SaveCoordinator는 SavePort를 구현하고 새 CommandEnvelope·commandId·중첩 receipt/Event 없이 바깥 command transaction에 저장한다.",
-    "module": ":core:simulation / :core:database / :core:save / :core:data",
+    "detail": "모든 P3 기능 Task의 선행 bootstrap이다. 첫 단계에 최소 :core:save module·Room test harness를 만든 뒤 실제 단말 storage/recovery spike(WAL·storage full·candidate swap·previous fallback)를 통과하고 gameplay WorldSession.execute→SavePort commit/segment와 바깥 CreateNewWorld/CheckpointWorld checkpoint의 DTO·오류·불변식을 확정한다. EMPTY genesis·첫 생성 실패·uncertain-commit receipt reconcile 및 §3.1.2 lifecycle/maintenance 경계를 포함하며 내부 중첩 receipt/event는 금지한다. P2 envelope actor→receipt.actor_id와 scoped DomainEvent audience→SavePort commit DTO 전달을 확정하고 visibility만으로 권한을 추론하지 않는다. 모든 P3 Test ID는 PLANNED로 등록하고 실제 spike source가 존재하는 case만 BOUND한다. 매핑은 실행 증거가 아니며 실행 전 case는 NOT_RUN이다. §3.3.1 crash oracle 확정 전 다른 기능 lane을 시작하지 않는다. SaveCoordinator는 P2 scheduled_action·occupancy·resource_reservation을 포함한 active baseline을 바깥 transaction에 저장한다.",
+    "module": ":core:simulation / :core:save",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
@@ -3004,7 +3006,7 @@
     "optimistic": 0.65,
     "most_likely": 1.0,
     "pessimistic": 1.7,
-    "done": "외부 command 1개당 receipt 1개·내부 SaveCoordinator 중첩 command 0을 포함한 DTO/fixture 승인",
+    "done": "실제 harness의 storage/recovery spike와 §3.3.1 process-kill crash oracle 통과, 생성된 spike case만 BOUND·validator parity, 외부 gameplay/checkpoint command당 receipt 1개·maintenance/lifecycle의 gameplay receipt/event 0·내부 SaveCoordinator 중첩 command 0을 포함한 DTO/fixture 승인",
     "tests": [
       "P3-UT-001",
       "P3-BT-001",
@@ -3019,14 +3021,20 @@
     "successors": [
       "P3-TASK-002",
       "P3-TASK-003",
-      "P3-TASK-004"
+      "P3-TASK-004",
+      "P3-TASK-006",
+      "P3-TASK-011",
+      "P3-TASK-016",
+      "P3-TASK-021",
+      "P3-TASK-026"
     ],
     "earliest_start": 11.13,
     "earliest_finish": 12.19,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3035,8 +3043,8 @@
     "name": "현재상태 스키마·Dirty 단위 저장 — 핵심 규칙",
     "function": "FUNC-P3-001",
     "stage": "알고리즘",
-    "detail": "content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB를 transaction 안에서 호출하지 않는다; DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다; current normalized row·RNG·receipt·events·generation manifest를 동일 write transaction에서 갱신한다; Dirty set은 성공한 commit만 해제하며 UI는 durable version만 저장됨으로 표시한다. 정해진 입력에서는 '세 요소와 receipt가 같은 generation에서 보임'을 만족해야 한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "content.db 읽기 모델과 save.db 상태를 분리하고 다른 DB를 transaction 안에서 호출하지 않는다; DB 진입 전 콘텐츠와 변경 스냅샷을 고정한다; 일반 commit은 current normalized row·scheduled_action·occupancy·resource_reservation·RNG·receipt·events를 동일 stateVersion의 write transaction에서 갱신한다. complete generation manifest는 checkpoint에서만 생성한다. Dirty set은 성공한 commit만 해제하며 UI는 durable version만 저장됨으로 표시한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-001"
     ],
@@ -3066,7 +3074,8 @@
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3075,8 +3084,8 @@
     "name": "현재상태 스키마·Dirty 단위 저장 — 저장·연계",
     "function": "FUNC-P3-001",
     "stage": "어댑터",
-    "detail": "대상 world_state, command_receipt, world_event, rng_state, save_generation. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "대상 world_state, command_receipt, world_event, rng_state, scheduled_action, occupancy, resource_reservation, save_generation. Delta+receipt+RNG+source events+codec을 원자 commit에 연결하고, checkpoint는 RequiredDomainSet.v1·frozen snapshot을 검증하며, affected rows/충돌/재실행을 검사한다. 선행상태와 후속 port 계약을 등록한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-001"
     ],
@@ -3105,7 +3114,8 @@
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3115,7 +3125,7 @@
     "function": "FUNC-P3-001",
     "stage": "표현/진입",
     "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "module": ":app / :core:save (logical database/data package)",
     "depends": [
       "P3-TASK-001"
     ],
@@ -3144,7 +3154,8 @@
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3154,7 +3165,7 @@
     "function": "FUNC-P3-001",
     "stage": "검증",
     "detail": "P3-UT-001, P3-BT-001, P3-FT-001, P3-CT-001, P3-IT-001 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:database / :core:save / :core:data",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-002",
       "P3-TASK-003",
@@ -3188,7 +3199,8 @@
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3197,12 +3209,13 @@
     "name": "복원 가능한 세대·슬롯·불변 청크 — 계약·Fixture",
     "function": "FUNC-P3-002",
     "stage": "계약",
-    "detail": "GenerationStore.create(snapshot: WorldSnapshot, parent: GenerationId?) -> GenerationManifest의 DTO/오류/불변식 정의. 입력 parentGenerationId, branchId, fullDomainShardManifest, newChunks[]. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "GenerationStore.create(snapshot: WorldSnapshot, parent: GenerationId?) -> GenerationManifest 의 DTO/오류/불변식 정의. 입력 parentGenerationId, branchId, fullDomainShardManifest, newChunks[]. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성.",
+    "module": ":core:save",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
-      "P2-TASK-026"
+      "P2-TASK-026",
+      "P3-TASK-001"
     ],
     "importance": "필수",
     "kind": "implementation",
@@ -3210,9 +3223,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인",
     "tests": [
       "P3-UT-002",
       "P3-BT-002",
@@ -3229,12 +3242,13 @@
       "P3-TASK-008",
       "P3-TASK-009"
     ],
-    "earliest_start": 11.13,
-    "earliest_finish": 12.19,
+    "earliest_start": 12.19,
+    "earliest_finish": 13.25,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3243,8 +3257,8 @@
     "name": "복원 가능한 세대·슬롯·불변 청크 — 핵심 규칙",
     "function": "FUNC-P3-002",
     "stage": "알고리즘",
-    "detail": "단순 generationNo만으로 이전 값을 복원할 수 없으므로 설계 보완안으로 불변 청크와 세대별 완전 manifest를 저장한다; 변경 청크만 새로 저장하고 미변경 청크 참조를 재사용하며 세대 delta-chain replay는 기본으로 하지 않는다; 자동3세대·수동5슬롯·전투/진행/마이그레이션 root를 분리한다; 보존 root에서 도달 가능한 청크는 절대 GC하지 않고 과거 로드시 새 branch와 epoch를 만든다. 정해진 입력에서는 '금화100 복원; g2 내용도 보존'을 만족해야 한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "단순 generationNo 만으로 이전 값을 복원할 수 없으므로 설계 보완안으로 불변 청크와 세대별 완전 manifest 를 저장한다; 변경 청크만 새로 저장하고 미변경 청크 참조를 재사용하며 세대 delta-chain replay 는 기본으로 하지 않는다; 자동3 세대·수동5 슬롯·전투/진행/마이그레이션 root 를 분리한다; 보존 root 에서 도달 가능한 청크는 절대 GC 하지 않고 과거 로드시 새 branch 와 epoch 를 만든다. 정해진 입력에서는 '금화100 복원; g2 내용도 보존'을 만족해야 한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-006"
     ],
@@ -3254,7 +3268,7 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
     "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
     "tests": [
@@ -3269,12 +3283,13 @@
     "successors": [
       "P3-TASK-010"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 14.31,
+    "earliest_start": 13.25,
+    "earliest_finish": 15.37,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3283,8 +3298,8 @@
     "name": "복원 가능한 세대·슬롯·불변 청크 — 저장·연계",
     "function": "FUNC-P3-002",
     "stage": "어댑터",
-    "detail": "대상 save_generation, save_slot, checkpoint_chunk, generation_chunk. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "대상 save_generation, save_slot, checkpoint_chunk, generation_chunk. Delta+receipt+RNG+source events+codec 을원자 commit 에연결하고 affected rows/충돌/재실행을 검사한다. 선행 상태와 후속 port 계약을 등록한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-006"
     ],
@@ -3296,7 +3311,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "실제 adapter 통합·필요 migration/codec·FK/취소경계 검증",
     "tests": [
       "P3-CT-002",
       "P3-IT-002"
@@ -3308,12 +3323,13 @@
     "successors": [
       "P3-TASK-010"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.78,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.84,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3322,8 +3338,8 @@
     "name": "복원 가능한 세대·슬롯·불변 청크 — UI·호출 경로",
     "function": "FUNC-P3-002",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "§3.2 public UI/UX 계약의 화면·상태·CTA·접근성·redaction을 구현 기준으로 삼는다. ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
+    "module": ":app / :core:save (논리 database/data package 포함)",
     "depends": [
       "P3-TASK-006"
     ],
@@ -3333,9 +3349,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0",
     "tests": [
       "P3-CT-002",
       "P3-IT-002"
@@ -3347,12 +3363,13 @@
     "successors": [
       "P3-TASK-010"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.25,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.31,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3361,8 +3378,8 @@
     "name": "복원 가능한 세대·슬롯·불변 청크 — Test·리뷰",
     "function": "FUNC-P3-002",
     "stage": "검증",
-    "detail": "P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-007",
       "P3-TASK-008",
@@ -3374,9 +3391,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인",
     "tests": [
       "P3-UT-002",
       "P3-BT-002",
@@ -3391,12 +3408,13 @@
     "successors": [
       "P3-TASK-031"
     ],
-    "earliest_start": 14.31,
-    "earliest_finish": 15.37,
+    "earliest_start": 15.37,
+    "earliest_finish": 16.43,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3405,12 +3423,13 @@
     "name": "전투·장기진행·대화 복구 — 계약·Fixture",
     "function": "FUNC-P3-003",
     "stage": "계약",
-    "detail": "RecoveryService.restore(checkpoint: RecoveryCheckpoint) -> RecoverableSession의 DTO/오류/불변식 정의. 입력 checkpointId, desiredRecoveryMode, installedCodecs, versionBinding. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "RESUME과 START_CHECKPOINT의 DTO/오류/불변식을 분리한다. RESUME은 재오픈한 current snapshot/cursor에서 기존 gameplay continuation command를 WorldSession.execute로 실행해 마지막 committed segment의 RNG·예약·점유를 이어간다. RecoveryService.restore(StartCheckpointRequest)는 operationId·checkpointId·installedCodecs·versionBinding을 받아 선택 checkpoint의 완전 candidate를 검증하며, coordinator만 배타 lease 아래 파일 교체 후 새 session을 연다. 과거 generation은 새 branch/epoch로만 시작한다. 원문 고정/권장/예시를 분리해 assertion manifest와 정상/경계/실패 fixture를 작성한다.",
+    "module": ":core:save",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
-      "P2-TASK-026"
+      "P2-TASK-026",
+      "P3-TASK-001"
     ],
     "importance": "필수",
     "kind": "implementation",
@@ -3418,9 +3437,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인",
     "tests": [
       "P3-UT-003",
       "P3-BT-003",
@@ -3437,12 +3456,13 @@
       "P3-TASK-013",
       "P3-TASK-014"
     ],
-    "earliest_start": 11.13,
-    "earliest_finish": 12.19,
+    "earliest_start": 12.19,
+    "earliest_finish": 13.25,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3451,8 +3471,8 @@
     "name": "전투·장기진행·대화 복구 — 핵심 규칙",
     "function": "FUNC-P3-003",
     "stage": "알고리즘",
-    "detail": "전투 actor/actionId/queue/projectile/status/RNG와 combat/clock residual을 함께 저장한다; 크래시 전투 이어하기와 전투시작 복귀 선택은 패배 SAFE_RECOVERY와 다른 operation이다; 장기진행은 lastBoundary와 남은 target을, 선택형 이벤트는 choice receipt를 저장한다; 체크포인트 중 일부만 다른 generation에서 가져오는 부분 복구를 금지한다. 정해진 입력에서는 '유효 투사체만 이어지고 기존 발사 이벤트 재생성0'을 만족해야 한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "RESUME은 cursor·RNG·예약·점유를 재추첨 없이 이어가고 START_CHECKPOINT는 전체 checkpoint snapshot만 복원하며 completion event를 중복 생성하지 않는다; 장기진행은 lastBoundary와 남은 target, 선택형 이벤트의 choice receipt를 저장한다; 체크포인트 중 일부만 다른 generation에서 가져오는 부분 복구를 금지한다. active baseline 밖 combat/dialogue codec 또는 payload는 `IncompatibleSave`로 격리한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-011"
     ],
@@ -3462,7 +3482,7 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
     "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
     "tests": [
@@ -3477,12 +3497,13 @@
     "successors": [
       "P3-TASK-015"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 14.31,
+    "earliest_start": 13.25,
+    "earliest_finish": 15.37,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3491,8 +3512,8 @@
     "name": "전투·장기진행·대화 복구 — 저장·연계",
     "function": "FUNC-P3-003",
     "stage": "어댑터",
-    "detail": "대상 recovery_checkpoint, time_advance_state, dialogue_session. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "대상 recovery_checkpoint, time_advance_state, scheduled_action, occupancy, resource_reservation 및 receipt actor·event audience 열. dialogue_session은 후속 P11 참조이며 P3 v1 생성 대상이 아니다. Delta+receipt+RNG+source events+codec을 원자 commit하고 SummaryStart.v1을 첫 segment와 원자 저장·RESUME에서 재사용한다. terminal summary는 receipt.actor_id·EventAudience.v1·SummaryStart.v1·terminal public snapshot에서 재구성하고 scoped event를 사건별로 fail-closed 필터링한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-011"
     ],
@@ -3504,7 +3525,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "실제 adapter·codec·FK/취소경계, actor·baseline·audience 재기동 복구 및 두 actor의 observer별 summary parity 검증",
     "tests": [
       "P3-CT-003",
       "P3-IT-003"
@@ -3516,12 +3537,13 @@
     "successors": [
       "P3-TASK-015"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.78,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.84,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3530,8 +3552,8 @@
     "name": "전투·장기진행·대화 복구 — UI·호출 경로",
     "function": "FUNC-P3-003",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "§3.2 public UI/UX 계약의 화면·상태·CTA·접근성·redaction을 구현 기준으로 삼는다. ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
+    "module": ":app / :core:save (논리 database/data package 포함)",
     "depends": [
       "P3-TASK-011"
     ],
@@ -3541,9 +3563,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0",
     "tests": [
       "P3-CT-003",
       "P3-IT-003"
@@ -3555,12 +3577,13 @@
     "successors": [
       "P3-TASK-015"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.25,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.31,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3569,8 +3592,8 @@
     "name": "전투·장기진행·대화 복구 — Test·리뷰",
     "function": "FUNC-P3-003",
     "stage": "검증",
-    "detail": "P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-012",
       "P3-TASK-013",
@@ -3582,9 +3605,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인",
     "tests": [
       "P3-UT-003",
       "P3-BT-003",
@@ -3599,12 +3622,13 @@
     "successors": [
       "P3-TASK-031"
     ],
-    "earliest_start": 14.31,
-    "earliest_finish": 15.37,
+    "earliest_start": 15.37,
+    "earliest_finish": 16.43,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3613,12 +3637,13 @@
     "name": "마이그레이션·콘텐츠 호환 — 계약·Fixture",
     "function": "FUNC-P3-004",
     "stage": "계약",
-    "detail": "MigrationPlanner.migrate(source: SaveArchive, target: SchemaVersion) -> MigrationResult의 DTO/오류/불변식 정의. 입력 baselineMode, exportedSchemas[], releasedFixtures[], sourceFile?, targetSchema, contentAliasPlan. P0 증거로 GREENFIELD_V1/LEGACY_CHAIN을 판정하고 가상 과거버전 생성을 금지하는 assertion과 실제 fixture만 등록한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "MigrationPlanner.migrate(source: SaveArchive, target: SchemaVersion) -> MigrationResult 의 DTO/오류/불변식 정의. 입력 baselineMode, exportedSchemas[], releasedFixtures[], sourceFile?, targetSchema, contentAliasPlan. P0 증거로 GREENFIELD_V1/LEGACY_CHAIN을 판정하고 가상 과거버전 생성을 금지하는 assertion과 실제 fixture만 등록한다.",
+    "module": ":core:save",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
-      "P2-TASK-026"
+      "P2-TASK-026",
+      "P3-TASK-001"
     ],
     "importance": "필수",
     "kind": "implementation",
@@ -3626,9 +3651,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인",
     "tests": [
       "P3-UT-004",
       "P3-BT-004",
@@ -3645,12 +3670,13 @@
       "P3-TASK-018",
       "P3-TASK-019"
     ],
-    "earliest_start": 11.13,
-    "earliest_finish": 12.19,
+    "earliest_start": 12.19,
+    "earliest_finish": 13.25,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3660,7 +3686,7 @@
     "function": "FUNC-P3-004",
     "stage": "알고리즘",
     "detail": "GREENFIELD_V1이면 승인 스키마를 최초 v1으로 fresh create/close/reopen/왕복 검증하고 migration 목록을 비워 둔다. LEGACY_CHAIN이면 실제 Room export schema와 DB fixture만 N→N+1 복제본 migration하며 destructive migration을 금지한다. 실제 변경마다 migration ID/fixture를 추가하고 버전·alias·derived rebuild를 검증한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-016"
     ],
@@ -3670,7 +3696,7 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
     "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
     "tests": [
@@ -3685,12 +3711,13 @@
     "successors": [
       "P3-TASK-020"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 14.31,
+    "earliest_start": 13.25,
+    "earliest_finish": 15.37,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3700,7 +3727,7 @@
     "function": "FUNC-P3-004",
     "stage": "어댑터",
     "detail": "GREENFIELD_V1은 최초 v1 생성·재오픈 adapter와 빈 migration registry를 구현한다. LEGACY_CHAIN은 실제 exported schema/fixture가 있을 때만 migration_history, save_generation, content_binding 변환을 활성화하고 원본 hash·단계별 결과·재실행을 검사한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-016"
     ],
@@ -3712,7 +3739,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "실제 adapter 통합·필요 migration/codec·FK/취소경계 검증",
     "tests": [
       "P3-CT-004",
       "P3-IT-004"
@@ -3724,12 +3751,13 @@
     "successors": [
       "P3-TASK-020"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.78,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.84,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3738,8 +3766,8 @@
     "name": "마이그레이션·콘텐츠 호환 — UI·호출 경로",
     "function": "FUNC-P3-004",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "§3.2 public UI/UX 계약의 화면·상태·CTA·접근성·redaction을 구현 기준으로 삼는다. ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
+    "module": ":app / :core:save (논리 database/data package 포함)",
     "depends": [
       "P3-TASK-016"
     ],
@@ -3749,9 +3777,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0",
     "tests": [
       "P3-CT-004",
       "P3-IT-004"
@@ -3763,12 +3791,13 @@
     "successors": [
       "P3-TASK-020"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.25,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.31,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3778,7 +3807,7 @@
     "function": "FUNC-P3-004",
     "stage": "검증",
     "detail": "P3-UT-004, P3-BT-004, P3-FT-004, P3-CT-004, P3-IT-004 구현/실행. P0 baselineMode와 실제 exported schema/fixture 경로를 증거에 기록하고 GREENFIELD_V1에서 가상 migration 0개, LEGACY_CHAIN에서 실제 단계별 보존을 검증한다. PR 코드·DDL·transaction·정보공개·원문변경 유무를 독립리뷰한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-017",
       "P3-TASK-018",
@@ -3790,9 +3819,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인",
     "tests": [
       "P3-UT-004",
       "P3-BT-004",
@@ -3807,12 +3836,13 @@
     "successors": [
       "P3-TASK-031"
     ],
-    "earliest_start": 14.31,
-    "earliest_finish": 15.37,
+    "earliest_start": 15.37,
+    "earliest_finish": 16.43,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3821,12 +3851,13 @@
     "name": "오프라인 Export·Import·아카이브 보호 — 계약·Fixture",
     "function": "FUNC-P3-005",
     "stage": "계약",
-    "detail": "SaveArchiveService.importArchive(input: LocalDocument) -> NewSlotResult의 DTO/오류/불변식 정의. 입력 SAF documentUri, maxArchiveBytes, maxEntryCount, maxExpandedBytes. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "SaveArchiveService.importArchive(input: LocalDocument) -> NewSlotResult 의 DTO/오류/불변식 정의. 입력 SAF documentUri, maxArchiveBytes, maxEntryCount, maxExpandedBytes. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성.",
+    "module": ":core:save",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
-      "P2-TASK-026"
+      "P2-TASK-026",
+      "P3-TASK-001"
     ],
     "importance": "필수",
     "kind": "implementation",
@@ -3834,9 +3865,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인",
     "tests": [
       "P3-UT-005",
       "P3-BT-005",
@@ -3853,12 +3884,13 @@
       "P3-TASK-023",
       "P3-TASK-024"
     ],
-    "earliest_start": 11.13,
-    "earliest_finish": 12.19,
+    "earliest_start": 12.19,
+    "earliest_finish": 13.25,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3867,8 +3899,8 @@
     "name": "오프라인 Export·Import·아카이브 보호 — 핵심 규칙",
     "function": "FUNC-P3-005",
     "stage": "알고리즘",
-    "detail": "SAF로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다; 경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding을 검사한다; WAL 사용 중 열린 save.db만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다; checksum은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다. 정해진 입력에서는 '새 slotId·기존 슬롯 hash 불변·동일 상태 복원'을 만족해야 한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "SAF 로 사용자가 지정한 파일만 읽고 새 슬롯에 가져온다; 경로 traversal·zip bomb·중복 entry·크기 상한·checksum·content binding 을 검사한다; WAL 사용 중 열린 save.db 만 복사하지 않으며 checkpoint/close barrier 또는 검증된 snapshot export 경로를 사용한다; checksum 은 손상 탐지이지 변조 방지 인증이 아니며 서버/로그인은 요구하지 않는다. 정해진 입력에서는 '새 slotId·기존 슬롯 hash 불변·동일 상태 복원'을 만족해야 한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-021"
     ],
@@ -3878,7 +3910,7 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
     "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
     "tests": [
@@ -3893,12 +3925,13 @@
     "successors": [
       "P3-TASK-025"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 14.31,
+    "earliest_start": 13.25,
+    "earliest_finish": 15.37,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3907,8 +3940,8 @@
     "name": "오프라인 Export·Import·아카이브 보호 — 저장·연계",
     "function": "FUNC-P3-005",
     "stage": "어댑터",
-    "detail": "대상 save_slot, save_generation, recovery_journal. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "대상 save_slot, save_generation, recovery_journal. Delta+receipt+RNG+source events+codec 원자 commit과 affected rows/충돌/재실행을 검증한다. SaveArchiveService가 첫 CreateNewWorld 및 debounce autosave checkpoint의 durable commit 후 앱 전용 독립 백업을 생성·검증·게시하며 새 검증본 전까지 이전 검증본을 보존한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-021"
     ],
@@ -3920,7 +3953,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "실제 adapter 통합·필요 migration/codec·FK/취소경계 및 독립 백업 생성·실패 시 이전본 보존 검증",
     "tests": [
       "P3-CT-005",
       "P3-IT-005"
@@ -3932,12 +3965,13 @@
     "successors": [
       "P3-TASK-025"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.78,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.84,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3946,8 +3980,8 @@
     "name": "오프라인 Export·Import·아카이브 보호 — UI·호출 경로",
     "function": "FUNC-P3-005",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "§3.2 public UI/UX 계약의 화면·상태·CTA·접근성·redaction을 구현 기준으로 삼는다. ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
+    "module": ":app / :core:save (논리 database/data package 포함)",
     "depends": [
       "P3-TASK-021"
     ],
@@ -3957,9 +3991,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0",
     "tests": [
       "P3-CT-005",
       "P3-IT-005"
@@ -3971,12 +4005,13 @@
     "successors": [
       "P3-TASK-025"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.25,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.31,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -3985,8 +4020,8 @@
     "name": "오프라인 Export·Import·아카이브 보호 — Test·리뷰",
     "function": "FUNC-P3-005",
     "stage": "검증",
-    "detail": "P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-022",
       "P3-TASK-023",
@@ -3998,9 +4033,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인",
     "tests": [
       "P3-UT-005",
       "P3-BT-005",
@@ -4015,12 +4050,13 @@
     "successors": [
       "P3-TASK-031"
     ],
-    "earliest_start": 14.31,
-    "earliest_finish": 15.37,
+    "earliest_start": 15.37,
+    "earliest_finish": 16.43,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -4029,12 +4065,13 @@
     "name": "무결성 검사·복구·보존 GC — 계약·Fixture",
     "function": "FUNC-P3-006",
     "stage": "계약",
-    "detail": "SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport의 DTO/오류/불변식 정의. 입력 generationId, quick/deep, retainedRootIds[], repairMode. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest에 옮기고 정상/경계/실패 fixture 작성.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "SaveIntegrityService.audit(generation: GenerationId, depth: AuditDepth) -> IntegrityReport 의 DTO/오류/불변식 정의. 입력 generationId, quick/deep, retainedRootIds[], repairMode. 원문 소유절의 고정/권장/예시를 분리해 각 규칙을 assertion manifest 에 옮기고 정상/경계/실패 fixture 작성.",
+    "module": ":core:save",
     "depends": [
       "P0-TASK-021",
       "P1-TASK-021",
-      "P2-TASK-026"
+      "P2-TASK-026",
+      "P3-TASK-001"
     ],
     "importance": "필수",
     "kind": "implementation",
@@ -4042,9 +4079,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "DTO schema·source assertion manifest·3종 fixture를 리뷰 승인",
+    "done": "DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인",
     "tests": [
       "P3-UT-006",
       "P3-BT-006",
@@ -4061,12 +4098,13 @@
       "P3-TASK-028",
       "P3-TASK-029"
     ],
-    "earliest_start": 11.13,
-    "earliest_finish": 12.19,
+    "earliest_start": 12.19,
+    "earliest_finish": 13.25,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -4075,8 +4113,8 @@
     "name": "무결성 검사·복구·보존 GC — 핵심 규칙",
     "function": "FUNC-P3-006",
     "stage": "알고리즘",
-    "detail": "quick load는 핵심참조·시계·player·소유권·예약·RNG를 검사하고 deep audit은 전체 graph를 검사한다; 손상은 최신 정상 세대→이전 자동저장 순으로 제안한다; 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다; 공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다. 정해진 입력에서는 'g2 복원 제안·손실 경계와 시간 표시'을 만족해야 한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "quick load 는 핵심참조·시계·player·소유권·예약·RNG 를 검사하고 deep audit 은 전체 graph 를 검사한다; 손상은 최신 정상 세대→이전 자동 저장 순으로 제안한다; 즐겨찾기/가문/귀환증표/역사 인물과 root 청크는 자동삭제하지 않는다; 공간 확보는 캐시부터 하며 사용자 수동 세이브 자동 삭제를 금지한다. 정해진 입력에서는 'g2 복원 제안·손실 경계와 시간 표시'을 만족해야 한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-026"
     ],
@@ -4086,7 +4124,7 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 1.3,
-    "most_likely": 2.0,
+    "most_likely": 2,
     "pessimistic": 3.4,
     "done": "순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지",
     "tests": [
@@ -4101,12 +4139,13 @@
     "successors": [
       "P3-TASK-030"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 14.31,
+    "earliest_start": 13.25,
+    "earliest_finish": 15.37,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -4115,8 +4154,8 @@
     "name": "무결성 검사·복구·보존 GC — 저장·연계",
     "function": "FUNC-P3-006",
     "stage": "어댑터",
-    "detail": "대상 checkpoint_chunk, generation_chunk, save_generation, recovery_journal. Delta+receipt+RNG+source events+codec을원자commit에연결하고affected rows/충돌/재실행을검사한다. 선행상태와후속port 계약을등록한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "대상 checkpoint_chunk, generation_chunk, save_generation, recovery_journal. 원자 commit 및 affected rows/충돌/재실행을 검증한다. RecoveryService는 save.db 전체 불능 시 DB 메타데이터에 의존하지 않고 독립 백업을 integrity/FK/manifest/hash로 검증한 뒤 후보를 제시하며 부재 시 RECOVERY_UNAVAILABLE과 원본 보존을 보장한다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-026"
     ],
@@ -4128,7 +4167,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "실제adapter 통합·필요migration/codec·FK/취소경계 검증",
+    "done": "실제 adapter 통합·필요 migration/codec·FK/취소경계 검증",
     "tests": [
       "P3-CT-006",
       "P3-IT-006"
@@ -4140,12 +4179,13 @@
     "successors": [
       "P3-TASK-030"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.78,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.84,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -4154,8 +4194,8 @@
     "name": "무결성 검사·복구·보존 GC — UI·호출 경로",
     "function": "FUNC-P3-006",
     "stage": "표현/진입",
-    "detail": "ID기반호출/공개ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain기능은해당feature화면의실제버튼/대화/예약handler에연결하며데이터를직접수정하지않는다. tool기능은CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "§3.2 public UI/UX 계약의 화면·상태·CTA·접근성·redaction을 구현 기준으로 삼는다. ID 기반호출/공개 ViewState/Loading·Empty·Error·Blocked·성공상태를구현한다. domain 기능은해당 feature 화면의실제버튼/대화/예약 handler 에연결하며데이터를직접수정하지않는다. tool 기능은 CLI/검증리포트/관리화면으로동등한진입점을제공한다.",
+    "module": ":app / :core:save (논리 database/data package 포함)",
     "depends": [
       "P3-TASK-026"
     ],
@@ -4165,9 +4205,9 @@
     "role": "담당 개발자",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "정상·경계·실패가관측가능한최소진입점과접근성labels; 핵심권한우회0",
+    "done": "정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0",
     "tests": [
       "P3-CT-006",
       "P3-IT-006"
@@ -4179,12 +4219,13 @@
     "successors": [
       "P3-TASK-030"
     ],
-    "earliest_start": 12.19,
-    "earliest_finish": 13.25,
+    "earliest_start": 13.25,
+    "earliest_finish": 14.31,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -4193,8 +4234,8 @@
     "name": "무결성 검사·복구·보존 GC — Test·리뷰",
     "function": "FUNC-P3-006",
     "stage": "검증",
-    "detail": "P3-UT-006, P3-BT-006, P3-FT-006, P3-CT-006, P3-IT-006 구현/실행. 원문 소유절별 assertion manifest의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR코드·DDL·transaction·정보공개·원문변경유무를독립리뷰.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "P3-UT-006, P3-BT-006, P3-FT-006, P3-CT-006, P3-IT-006 구현/실행. 원문 소유절별 assertion manifest 의 각항목을 데이터행/프로필/파라미터시험에 연결하고 불명확항목은결정대장에등록. PR 코드·DDL·transaction·정보공개·원문변경 유무를독립리뷰.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-027",
       "P3-TASK-028",
@@ -4206,9 +4247,9 @@
     "role": "QA/리뷰어",
     "status": "NOT_STARTED",
     "optimistic": 0.65,
-    "most_likely": 1.0,
+    "most_likely": 1,
     "pessimistic": 1.7,
-    "done": "대표5개Test와원문세부assertion coverage 검토완료·관련중대결함0·리뷰승인",
+    "done": "대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인",
     "tests": [
       "P3-UT-006",
       "P3-BT-006",
@@ -4223,12 +4264,13 @@
     "successors": [
       "P3-TASK-031"
     ],
-    "earliest_start": 14.31,
-    "earliest_finish": 15.37,
+    "earliest_start": 15.37,
+    "earliest_finish": 16.43,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {
@@ -4237,8 +4279,8 @@
     "name": "Phase 3 통합 검증·인계 Gate",
     "function": "PHASE-3",
     "stage": "Gate",
-    "detail": "모든 crash cut에서 이전 또는 다음 완전 세대만 로드; 기능별리뷰/예외/회귀/세이브호환/후속port확인. 미승인설계보완안은해당기능구현활성화를차단하고상태를은폐하지않는다.",
-    "module": ":core:database / :core:save / :core:data",
+    "detail": "일반 commit crash cut은 마지막 durable current transaction을 복원하고, 파일 복원 crash cut은 이전 또는 다음 완전 세대만 로드한다. 기능별 리뷰/예외/회귀/세이브 호환/후속 port를 확인한다. 미승인 설계 보완안은 해당 기능 구현 활성화를 차단하고 상태를 은폐하지 않는다.",
+    "module": ":core:save",
     "depends": [
       "P3-TASK-005",
       "P3-TASK-010",
@@ -4255,7 +4297,7 @@
     "optimistic": 0.98,
     "most_likely": 1.5,
     "pessimistic": 2.55,
-    "done": "필수Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0",
+    "done": "필수 Test PASS·Gate 승인·인계 DTO/codec/fixture·미해결중대결함0",
     "tests": [
       "P3-UT-001",
       "P3-BT-001",
@@ -4333,12 +4375,13 @@
       "P18-TASK-011",
       "P18-TASK-016"
     ],
-    "earliest_start": 15.37,
-    "earliest_finish": 16.96,
+    "earliest_start": 16.43,
+    "earliest_finish": 18.02,
     "decision_dependencies": [
       "C14",
       "C15",
-      "C16"
+      "C16",
+      "C31"
     ]
   },
   {

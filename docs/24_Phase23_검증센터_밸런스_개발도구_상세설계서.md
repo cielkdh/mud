@@ -38,7 +38,7 @@ P23은 Property/Fuzz/Monte Carlo/Long World의 최초 발견 시점이 아니다
 | C10 | 퍼센트/%p 및 불완전 효과 데이터 | 승인·기준선 반영 | unit=RATIO/BASIS_POINT/FLAT, typed effect AST; description-only effect 를임의숫자로출시하지않음. |
 | C11 | 개인랭킹·동률·기여계수 공백 | 승인·기준선 반영 | 개인공식, 동률1 위 인정/단독순위, 기간/가중치 versioned profile 에 확정. |
 | C17 | 축약전투와상세전투 기대값 편차 | 승인·기준선 반영 | 활동 ID/정산 receipt 통합, 구간별성공률/자산/부상모형을실제엔진표본으로교정. |
-| C18 | 미제공 이미지·콘텐츠 정의 및수량 | 승인·실물 검증 NOT_RUN | M/W 각 5,000장의 512×640 WebP 고정 풀과 install-time portraits_v1 pack을 사용한다. 실물/manifest 검수는 NOT_RUN. |
+| C18 | 미제공 이미지·콘텐츠 정의 및수량 | 승인·실물 검증 NOT_RUN | M/W 각 5,000장의 200×200 PNG 또는 WebP 고정 풀(전체 동일 형식)과 install-time portraits_v1 pack을 사용한다. 실물/manifest 검수는 NOT_RUN. |
 
 ## 4. 기능 범위 및 요구 연결
 | 기능 ID | 기능명 | 중요도 | 선행 기능/Phase | 원문요구/공통근거 |

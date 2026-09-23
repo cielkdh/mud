@@ -254,6 +254,58 @@ def junit_id_mapping_failures(tests: list[dict]) -> list[str]:
     return failures
 
 
+def p3_execution_mapping_failures(tests: list[dict], tasks: list[dict]) -> list[str]:
+    """Require P3 cases to be planned or explicitly bound without treating mapping as evidence."""
+    p3_tests = [test for test in tests if test.get('phase') == 3]
+    failures: list[str] = []
+    counts = Counter(test.get('id') for test in p3_tests)
+    failures += [f'{test_id}: duplicate P3 test mapping' for test_id, count in counts.items() if count != 1]
+    bound_ids: set[str] = set()
+    for test in p3_tests:
+        test_id = test.get('id')
+        mapping = test.get('execution_mapping')
+        if not isinstance(test_id, str) or not isinstance(mapping, dict):
+            failures.append(f'{test_id}: execution_mapping missing')
+            continue
+        state = mapping.get('status')
+        if mapping.get('case_key') != test_id:
+            failures.append(f'{test_id}: case_key mismatch')
+        if state == 'PLANNED':
+            if any(mapping.get(key) is not None for key in ('source', 'command', 'result_locator')):
+                failures.append(f'{test_id}: PLANNED mapping must not claim bound artifacts')
+            if test.get('status') == 'PASS':
+                failures.append(f'{test_id}: PASS requires BOUND execution_mapping')
+        elif state == 'BOUND':
+            bound_ids.add(test_id)
+            for key in ('source', 'command', 'result_locator'):
+                if not isinstance(mapping.get(key), str) or not mapping[key].strip():
+                    failures.append(f'{test_id}: BOUND {key} missing')
+            locator = mapping.get('result_locator')
+            if isinstance(locator, str) and test_id not in locator:
+                failures.append(f'{test_id}: result_locator does not identify case_key')
+        else:
+            failures.append(f'{test_id}: execution_mapping status must be PLANNED or BOUND')
+
+    task = next((item for item in tasks if item.get('id') == 'P3-TASK-001'), None)
+    if task is None:
+        failures.append('P3-TASK-001: task missing')
+    for task in tasks:
+        if task.get('phase') != 3 or task.get('status') not in {'REVIEW', 'QA', 'DONE'}:
+            continue
+        task_id = task.get('id')
+        if task_id == 'P3-TASK-031':
+            required = {test.get('id') for test in p3_tests}
+        elif task_id in {'P3-TASK-005', 'P3-TASK-010', 'P3-TASK-015',
+                         'P3-TASK-020', 'P3-TASK-025', 'P3-TASK-030'}:
+            required = set(task.get('tests', []))
+        else:
+            continue
+        missing = required - bound_ids
+        if missing:
+            failures.append(f'{task_id} {task["status"]} requires BOUND mappings: {sorted(missing)}')
+    return failures
+
+
 def event_contract_checks(contract: str, save_ddl: str) -> None:
     failures: list[str] = []
     block = re.search(r'data class DomainEvent<[^>]+>\s*\((.*?)\n\)', contract, re.S)
@@ -264,7 +316,7 @@ def event_contract_checks(contract: str, save_ddl: str) -> None:
         failures.append('replay sort key missing')
     if 'versioned `EventCodecId`' not in contract or 'CombatCompleted.v1' not in contract or 'decoder/upcaster' not in contract:
         failures.append('versioned EventCodecId/decoder/upcaster contract missing')
-    expected_columns = {'id', 'source_id', 'source_event_id', 'source_epoch', 'source_command_id', 'source_version', 'event_type', 'event_sequence', 'game_minute', 'sub_ms', 'visibility', 'importance', 'payload_json'}
+    expected_columns = {'id', 'source_id', 'source_event_id', 'source_epoch', 'source_command_id', 'source_version', 'event_type', 'event_sequence', 'game_minute', 'sub_ms', 'visibility', 'audience_codec', 'audience_payload', 'audience_hash', 'importance', 'payload_json'}
     try:
         with sqlite3.connect(':memory:') as con:
             con.executescript(save_ddl)
@@ -292,7 +344,8 @@ def event_contract_checks(contract: str, save_ddl: str) -> None:
                 ('event_sequence -1', "UPDATE world_event SET event_sequence=-1 WHERE id='ev1'"),
                 ('source_version -1', "UPDATE world_event SET source_version=-1 WHERE id='ev1'"),
                 ('source command sequence duplicate', "INSERT INTO world_event(id,source_epoch,source_command_id,source_version,event_type,event_sequence,game_minute,sub_ms,visibility,importance,payload_json) VALUES('ev3','e1','cmd',7,'TestEvent',0,10,123,'PUBLIC',50,'{}')"),
-                ('missing command receipt', "UPDATE world_event SET source_epoch='missing' WHERE id='ev1'")
+                ('missing command receipt', "UPDATE world_event SET source_epoch='missing' WHERE id='ev1'"),
+                ('scoped event without audience', "UPDATE world_event SET visibility='PARTICIPANTS' WHERE id='ev1'")
             )
             failures += [name for name, sql in probes if not assert_constraint(con, sql)]
     except Exception as exc:
@@ -328,7 +381,26 @@ def validator_self_checks() -> None:
     decision_markers = ('approved_at 누락', 'unknown decision C02', 'decision registry only: C03', 'decision document only: C04')
     if any(not any(marker in item for item in decision_failures) for marker in decision_markers) or not any('문서' in item and 'registry' in item for item in decision_failures):
         failures.append('decision registry/document mismatch not detected')
-    record('검증기 false-negative 회귀', failures, 'Function 중복·미지 탭·MUTATING CMD 누락·핵심 Test 범용 템플릿을 synthetic fixture로 거절')
+    planned_case = {'id': 'P3-UT-001', 'phase': 3, 'status': 'NOT_RUN', 'execution_mapping': {
+        'status': 'PLANNED', 'source': None, 'case_key': 'P3-UT-001', 'command': None, 'result_locator': None}}
+    if p3_execution_mapping_failures([planned_case], [{'id': 'P3-TASK-001', 'status': 'NOT_STARTED'}]):
+        failures.append('PLANNED mapping with NOT_RUN was rejected')
+    unbound_pass = dict(planned_case, status='PASS')
+    if not any('PASS requires BOUND' in item for item in p3_execution_mapping_failures(
+            [unbound_pass], [{'id': 'P3-TASK-001', 'status': 'NOT_STARTED'}])):
+        failures.append('PASS with PLANNED mapping was not rejected')
+    bound_case = dict(planned_case, status='PASS', execution_mapping={
+        'status': 'BOUND', 'source': 'src/test/Test.kt#case', 'case_key': 'P3-UT-001',
+        'command': 'gradlew test --tests case', 'result_locator': 'TEST-case.xml::P3-UT-001'})
+    if p3_execution_mapping_failures([bound_case], [{'id': 'P3-TASK-001', 'status': 'NOT_STARTED'}]):
+        failures.append('complete BOUND mapping was rejected')
+    if p3_execution_mapping_failures([planned_case], [{'id': 'P3-TASK-001', 'phase': 3, 'status': 'REVIEW'}]):
+        failures.append('P3-TASK-001 REVIEW incorrectly required future mappings')
+    for gate in ('P3-TASK-005', 'P3-TASK-031'):
+        if not any('requires BOUND mappings' in item for item in p3_execution_mapping_failures(
+                [planned_case], [{'id': 'P3-TASK-001'}, {'id': gate, 'phase': 3, 'status': 'REVIEW', 'tests': ['P3-UT-001']}])):
+            failures.append(f'{gate} REVIEW gate with PLANNED mapping was not rejected')
+    record('검증기 false-negative 회귀', failures, 'Function 중복·미지 탭·MUTATING CMD 누락·핵심 Test 범용 템플릿·P3 미매핑 PASS와 기능/Phase Gate 위반을 synthetic fixture로 거절')
 
 
 def sql_checks() -> None:
@@ -405,12 +477,12 @@ def sql_checks() -> None:
                 for command_id in ('child1', 'child2', 'child3', 'child4'):
                     con.execute("INSERT INTO command_receipt(id,command_id,epoch,payload_hash,result_code,result_json,state_version,game_minute) VALUES(?,?,?,?,?,?,?,0)",
                                 (f'r-{command_id}', command_id, 'e1', f'h-{command_id}', 'OK', '{}', 2))
-                con.execute("INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,pending_decision_gate_id,pending_batch_codec,pending_batch_payload,pending_batch_hash,time_advance_interrupt_policy_json,status) VALUES('ta-parent','e1','cmd1',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'gate','BoundaryBatch.v1',X'01','hash','{}','DECISION_REQUIRED')")
-                con.execute("INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child1','e1','child1',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','e1','cmd1',10,10,10,'{}','COMPLETED')")
+                con.execute("INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,pending_decision_gate_id,pending_batch_codec,pending_batch_payload,pending_batch_hash,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-parent','e1','cmd1',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'gate','BoundaryBatch.v1',X'01','hash','{}','SummaryStart.v1',X'01','hash','DECISION_REQUIRED')")
+                con.execute("INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-child1','e1','child1',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','e1','cmd1',10,10,10,'{}','SummaryStart.v1',X'01','hash','COMPLETED')")
                 continuation_probes = (
-                    ('predecessor child UNIQUE', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child2','e1','child2',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','e1','cmd1',10,10,10,'{}','COMPLETED')"),
-                    ('predecessor composite FK', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child3','e1','child3',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','wrong','cmd1',10,10,10,'{}','COMPLETED')"),
-                    ('continuation epoch/id pair', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-child4','e1','child4',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','cmd1',10,10,10,'{}','COMPLETED')"),
+                    ('predecessor child UNIQUE', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-child2','e1','child2',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','e1','cmd1',10,10,10,'{}','SummaryStart.v1',X'01','hash','COMPLETED')"),
+                    ('predecessor composite FK', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_epoch,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-child3','e1','child3',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','wrong','cmd1',10,10,10,'{}','SummaryStart.v1',X'01','hash','COMPLETED')"),
+                    ('continuation epoch/id pair', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,continuation_of_command_id,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-child4','e1','child4',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}','cmd1',10,10,10,'{}','SummaryStart.v1',X'01','hash','COMPLETED')"),
                 )
                 continuation_failures = [label for label, sql in continuation_probes if not assert_constraint(con, sql)]
                 record('SQL-TimeAdvance continuation exactly-once', continuation_failures,
@@ -427,8 +499,8 @@ def sql_checks() -> None:
                     ('occupancy status', "UPDATE occupancy SET status='RUNNING' WHERE id='occ1'"),
                     ('resource reservation status', "UPDATE resource_reservation SET status='OTHER' WHERE id='rr1'"),
                     ('RNG hex and odd increment', "INSERT INTO rng_state(id,stream_key,algorithm_version,state_hex,increment_hex,draw_counter) VALUES('rng-bad','world/test','PCG32-XSH-RR.v1','0123456789ABCDEG','0000000000000002',0)"),
-                    ('TimeAdvance progression mode', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,status) VALUES('ta-mode','e1','child2',0,'OTHER',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'{}','COMPLETED')"),
-                    ('pending aggregate byte cap', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,pending_decision_gate_id,pending_batch_codec,pending_batch_payload,pending_batch_hash,time_advance_interrupt_policy_json,status) VALUES('ta-over','e1','child3',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'gate','BoundaryBatch.v1',zeroblob(1048577),'hash','{}','DECISION_REQUIRED')"),
+                    ('TimeAdvance progression mode', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-mode','e1','child2',0,'OTHER',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'{}','SummaryStart.v1',X'01','hash','COMPLETED')"),
+                    ('pending aggregate byte cap', "INSERT INTO time_advance_state(id,command_epoch,request_id,start_minute,progression_mode,engine_order_version,target_type,goal_codec,goal_payload,max_advance_minute,max_boundary_count,max_candidates_per_batch,pending_decision_gate_id,pending_batch_codec,pending_batch_payload,pending_batch_hash,time_advance_interrupt_policy_json,summary_start_codec,summary_start_payload,summary_start_hash,status) VALUES('ta-over','e1','child3',0,'FAST_FORWARD',1,'UNTIL_MINUTE','TIME_ADVANCE_GOAL.v1','{}',10,10,10,'gate','BoundaryBatch.v1',zeroblob(1048577),'hash','{}','SummaryStart.v1',X'01','hash','DECISION_REQUIRED')"),
                 )
                 invariant_failures = [label for label, sql in invariant_probes if not assert_constraint(con, sql)]
                 record('SQL-P2 authoritative singleton·resource identity·enum/hex·payload cap', invariant_failures,
@@ -437,7 +509,7 @@ def sql_checks() -> None:
                 for idx, value in ((1,100),(2,60)):
                     payload = json.dumps({'balance':value}, separators=(',',':')).encode()
                     con.execute('INSERT INTO checkpoint_chunk(id,sha256,codec_version,encoding,uncompressed_bytes,payload) VALUES(?,?,1,\'json\',?,?)', (f'ch{idx}', hashlib.sha256(payload).hexdigest(),len(payload),payload))
-                    con.execute("INSERT INTO save_generation(id,parent_id,branch_id,generation_no,game_minute,schema_version,content_version,balance_version,manifest_hash,status) VALUES(?,?,'b',?,0,1,'c1','b1',?,'COMMITTED')",(f'g{idx}',None if idx==1 else 'g1',idx,f'm{idx}'))
+                    con.execute("INSERT INTO save_generation(id,parent_id,branch_id,generation_no,game_minute,schema_version,content_version,balance_version,required_domain_set_version,required_domain_set_hash,expected_shard_count,manifest_hash,status) VALUES(?,?,'b',?,0,1,'c1','b1','RequiredDomainSet.v1','fixture-hash',1,?,'COMMITTED')",(f'g{idx}',None if idx==1 else 'g1',idx,f'm{idx}'))
                     con.execute("INSERT INTO generation_chunk(id,generation_id,domain_key,shard_no,chunk_id) VALUES(?,?,'money',0,?)",(f'gc{idx}',f'g{idx}',f'ch{idx}'))
                 got = []
                 for generation in ('g1','g2'):
@@ -1033,6 +1105,8 @@ def main() -> int:
     record('로컬 Markdown 링크·명시적 anchor',failures,f'{link_count}개 링크 확인; 코드 블록 및 원문 부록 링크는 제외')
     required_fields=['precondition','input','steps','expected','db','logs','state','success']
     record('Test Case 필수 검증 필드',[t['id']+': '+k for t in tests for k in required_fields if not t.get(k)], f'{len(tests)}개 Case의 사전조건·입력·절차·기대·DB·로그·상태·성공조건 검사')
+    record('P3 Test ID·execution_mapping·Task Gate 정합성', p3_execution_mapping_failures(tests, tasks),
+           f'{sum(t.get("phase") == 3 for t in tests)}개 P3 ID의 case_key, PLANNED/BOUND 필드, PASS 금지와 기능/Phase Gate REVIEW 진입 조건 검사; mapping은 실행 증거가 아님')
     record('공식 P2 Test ID·JUnit suite/testcase 1:1 정합성', junit_id_mapping_failures(tests),
            '지정된 simulation JUnit display name에서 공식 ID 중복·누락·RNG 보조 접두사·관리 suite/testcase 불일치를 검사')
     compact=lambda value: re.sub(r'[\s`]','',str(value))

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.rules.ActivityScenarioRule
@@ -30,9 +31,9 @@ class MainActivityTest {
             runCatching { compose.onNodeWithTag("app-shell-blocked-title").assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithTag("app-shell-blocked-title").assertIsDisplayed()
-        compose.onNodeWithText("SCR-START-001").assertIsDisplayed()
-        compose.onNodeWithText("Local save is not available yet. Time advance will be enabled after save setup.")
+        compose.onNodeWithText("Save support is not available in this build yet.")
             .assertIsDisplayed()
+        compose.onAllNodesWithText("SCR-START-001").assertCountEquals(0)
         compose.onNodeWithTag("app-shell-blocked-back").assertIsDisplayed()
         compose.onAllNodesWithTag("app-shell-ready-title").assertCountEquals(0)
         compose.onAllNodesWithTag("phase2-time-screen").assertCountEquals(0)

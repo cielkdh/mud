@@ -38,7 +38,9 @@
 | `PROTOTYPE_ACCEPTED` | fixture의 모든 요청 usage가 exact 또는 승인 fallback으로 resolve되고 unresolved 0, resolver·패키징·메모리·preview 검증 통과 | 기능 개발 |
 | `FULL_CONTENT_READY` | 실물 10,000개와 권리·해시·패키징 검수, entity kind×usage별 unresolved 0 및 승인된 fallback coverage 완료 | P23/P25 Full Gate |
 
-적용 결정은 C09·C10·C13·C18·C23과 Phase 1 보완 기준선 C24다. C23의 `APPROVED_REQUIREMENT`는 요구·Owner 승인 상태이며 실제 구현·검증 완료는 P1 Gate 증거로 별도 판정한다.
+적용 결정은 C09·C10·C13·C18·C23과 Phase 1 보완 기준선 C24·C33이다. C23의 `APPROVED_REQUIREMENT`는 요구·Owner 승인 상태이며 실제 구현·검증 완료는 P1 Gate 증거로 별도 판정한다.
+
+C18 NPC 초상 원본은 `200×200` px로 고정한다. `asset-manifest.json`의 `PORTRAIT` entry는 `width=200`, `height=200`, `colorSpace=SRGB` 및 C18의 alpha/format 정책과 일치해야 하며, 실제 파일·manifest 검수 전 상태는 계속 `NOT_RUN/BLOCKED_ASSET`이다.
 
 ## 4. 기능 범위와 권한 분류
 
@@ -3556,8 +3558,8 @@ NPC-W-05000
 즉 남성 5,000장, 여성 5,000장으로
 총 10,000장의 고정 NPC portrait pool을 가진다.
 
-파일 확장자는 실제 자산 형식에 따라 `.webp`, `.png`, `.jpg` 중 하나로 고정한다.
-프로젝트 전체에서는 한 형식을 통일하는 것을 권장한다.
+파일 확장자는 `.png` 또는 `.webp` 중 하나로 고정한다.
+10,000개 전체에서 한 형식을 통일하며 `.jpg`는 사용하지 않는다.
 
 NPC 런타임 ID와 이미지 파일 ID는 서로 다른 개념이다.
 
@@ -4609,7 +4611,7 @@ battle token
 128×128 또는 192×192
 
 monster portrait
-384×384 ~ 512×512
+200×200 (정사각형)
 
 dungeon keyart
 1280×720 전후
@@ -4624,8 +4626,8 @@ facility thumb
 320×180 전후
 ```
 
-실제 앱 렌더링은 더 작아도
-원본 자산은 적절한 여유 해상도를 둔다.
+실제 앱 렌더링은 원본보다 작게 사용하는 것을 원칙으로 한다.
+C33 보완에 따라 몬스터 초상화는 도감·조우·전투 상단용 200×200 정사각 원본을 기준으로 한다.
 
 ---
 

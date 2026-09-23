@@ -1,5 +1,5 @@
 {
-  "executed_at": "2026-09-21T13:43:51+09:00",
+  "executed_at": "2026-09-23T12:55:17+09:00",
   "scope": "documentation_and_proposed_sql_only",
   "checks": [
     {
@@ -47,7 +47,7 @@
     {
       "name": "결정대장·Task 결정 의존 정합성",
       "status": "PASS",
-      "detail": "30개 승인 결정과 672개 Task의 문서/관리데이터 의존을 비교",
+      "detail": "33개 승인 결정과 672개 Task의 문서/관리데이터 의존을 비교",
       "failures": []
     },
     {
@@ -113,7 +113,7 @@
     {
       "name": "Screen Action→Mutation 계약 연결",
       "status": "PASS",
-      "detail": "56개 Screen / 36개 Command ID 참조",
+      "detail": "59개 Screen / 37개 Command ID 참조",
       "failures": []
     },
     {
@@ -209,7 +209,7 @@
     {
       "name": "검증기 false-negative 회귀",
       "status": "PASS",
-      "detail": "Function 중복·미지 탭·MUTATING CMD 누락·핵심 Test 범용 템플릿을 synthetic fixture로 거절",
+      "detail": "Function 중복·미지 탭·MUTATING CMD 누락·핵심 Test 범용 템플릿·P3 미매핑 PASS와 기능/Phase Gate 위반을 synthetic fixture로 거절",
       "failures": []
     },
     {
@@ -233,13 +233,19 @@
     {
       "name": "로컬 Markdown 링크·명시적 anchor",
       "status": "PASS",
-      "detail": "8087개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
+      "detail": "8088개 링크 확인; 코드 블록 및 원문 부록 링크는 제외",
       "failures": []
     },
     {
       "name": "Test Case 필수 검증 필드",
       "status": "PASS",
       "detail": "751개 Case의 사전조건·입력·절차·기대·DB·로그·상태·성공조건 검사",
+      "failures": []
+    },
+    {
+      "name": "P3 Test ID·execution_mapping·Task Gate 정합성",
+      "status": "PASS",
+      "detail": "37개 P3 ID의 case_key, PLANNED/BOUND 필드, PASS 금지와 기능/Phase Gate REVIEW 진입 조건 검사; mapping은 실행 증거가 아님",
       "failures": []
     },
     {
@@ -250,20 +256,23 @@
     },
     {
       "name": "Test 관리데이터→Phase·전역 계획 동기화",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "751개 Test의 사전조건·입력·절차·기대·DB·로그·상태·성공조건·실행상태 비교",
-      "failures": []
+      "failures": [
+        "P4-CN-001: Phase expected mismatch",
+        "P4-CN-001: global plan row mismatch"
+      ]
     },
     {
       "name": "테스트 상태에 실행증거 요구",
       "status": "PASS",
-      "detail": "현재 Counter({'NOT_RUN': 690, 'PASS': 61}); 문서 검사 결과를 게임 Test에 전파하지 않음",
+      "detail": "현재 Counter({'NOT_RUN': 687, 'PASS': 64}); 문서 검사 결과를 게임 Test에 전파하지 않음",
       "failures": []
     },
     {
       "name": "SQL-content: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.50.4; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.53.1; 6개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
@@ -275,7 +284,7 @@
     {
       "name": "SQL-save: DDL 구문·FK 대상·무결성",
       "status": "PASS",
-      "detail": "SQLite 3.50.4; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
+      "detail": "SQLite 3.53.1; 155개 테이블 생성. Room/KSP/Android 실행은 아님.",
       "failures": []
     },
     {
@@ -334,8 +343,9 @@
     }
   ],
   "summary": {
-    "PASS": 55
+    "PASS": 55,
+    "FAIL": 1
   },
   "game_test_execution": "NOT_RUN",
-  "management_game_test_status": "NOT_RUN=690, PASS=61"
+  "management_game_test_status": "NOT_RUN=687, PASS=64"
 }

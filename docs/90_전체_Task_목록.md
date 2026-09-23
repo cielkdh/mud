@@ -7,6 +7,8 @@
 
 `depends`는 완료 선행관계, `decision_dependencies`는 검토 결정, `blocked_by`는 현재 설계 차단사유다. C14는 승인되었지만 실제 build/Room 증거는 각각 P0/P3에서 얻는다. 표의 공수는 코드·담당자·검증환경 확인 전 계획 가정이며 실제 일정으로 합산하지 않는다.
 
+Phase 3 표의 `:core:database`·`:core:data`는 `:core:save` 내부 논리 package이며 별도 Gradle module이 아니다. UI·launcher Task에는 `:app`도 포함된다. 실제 대상은 Phase 3 상세설계서와 `tasks.json`을 따른다.
+
 ## 2. 통합 Task 표
 | Phase | Task ID / 상세 | Task | 선행 Task | 중요도 | 대상 모듈 | 병렬 가능 | Test | 완료 기준 | 기대 인일 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -83,27 +85,27 @@
 | 3 | [P3-TASK-003](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-003) | 현재상태 스키마·Dirty 단위 저장 — 저장·연계 | P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-001, P3-IT-001 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
 | 3 | [P3-TASK-004](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-004) | 현재상태 스키마·Dirty 단위 저장 — UI·호출 경로 | P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-001, P3-IT-001 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
 | 3 | [P3-TASK-005](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-005) | 현재상태 스키마·Dirty 단위 저장 — Test·리뷰 | P3-TASK-002, P3-TASK-003, P3-TASK-004 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-001, P3-BT-001, P3-FT-001, P3-CT-001, P3-IT-001 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 3 | [P3-TASK-006](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-006) | 복원 가능한 세대·슬롯·불변 청크 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
+| 3 | [P3-TASK-006](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-006) | 복원 가능한 세대·슬롯·불변 청크 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026, P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
 | 3 | [P3-TASK-007](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-007) | 복원 가능한 세대·슬롯·불변 청크 — 핵심 규칙 | P3-TASK-006 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-002, P3-BT-002, P3-FT-002 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
 | 3 | [P3-TASK-008](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-008) | 복원 가능한 세대·슬롯·불변 청크 — 저장·연계 | P3-TASK-006 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-002, P3-IT-002 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
 | 3 | [P3-TASK-009](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-009) | 복원 가능한 세대·슬롯·불변 청크 — UI·호출 경로 | P3-TASK-006 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-002, P3-IT-002 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
 | 3 | [P3-TASK-010](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-010) | 복원 가능한 세대·슬롯·불변 청크 — Test·리뷰 | P3-TASK-007, P3-TASK-008, P3-TASK-009 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-002, P3-BT-002, P3-FT-002, P3-CT-002, P3-IT-002 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 3 | [P3-TASK-011](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-011) | 전투·장기진행·대화 복구 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
-| 3 | [P3-TASK-012](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-012) | 전투·장기진행·대화 복구 — 핵심 규칙 | P3-TASK-011 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-003, P3-BT-003, P3-FT-003 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
-| 3 | [P3-TASK-013](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-013) | 전투·장기진행·대화 복구 — 저장·연계 | P3-TASK-011 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-003, P3-IT-003 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
-| 3 | [P3-TASK-014](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-014) | 전투·장기진행·대화 복구 — UI·호출 경로 | P3-TASK-011 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-003, P3-IT-003 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
-| 3 | [P3-TASK-015](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-015) | 전투·장기진행·대화 복구 — Test·리뷰 | P3-TASK-012, P3-TASK-013, P3-TASK-014 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 3 | [P3-TASK-016](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-016) | 마이그레이션·콘텐츠 호환 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-004, P3-BT-004, P3-FT-004, P3-CT-004, P3-IT-004 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
+| 3 | [P3-TASK-011](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-011) | 장기진행·예약 복구 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026, P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
+| 3 | [P3-TASK-012](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-012) | 장기진행·예약 복구 — 핵심 규칙 | P3-TASK-011 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-003, P3-BT-003, P3-FT-003 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
+| 3 | [P3-TASK-013](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-013) | 장기진행·예약 복구 — 저장·연계 | P3-TASK-011 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-003, P3-IT-003 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
+| 3 | [P3-TASK-014](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-014) | 장기진행·예약 복구 — UI·호출 경로 | P3-TASK-011 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-003, P3-IT-003 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
+| 3 | [P3-TASK-015](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-015) | 장기진행·예약 복구 — Test·리뷰 | P3-TASK-012, P3-TASK-013, P3-TASK-014 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-003, P3-BT-003, P3-FT-003, P3-CT-003, P3-IT-003 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
+| 3 | [P3-TASK-016](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-016) | 마이그레이션·콘텐츠 호환 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026, P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-004, P3-BT-004, P3-FT-004, P3-CT-004, P3-IT-004 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
 | 3 | [P3-TASK-017](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-017) | 마이그레이션·콘텐츠 호환 — 핵심 규칙 | P3-TASK-016 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-004, P3-BT-004, P3-FT-004 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
 | 3 | [P3-TASK-018](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-018) | 마이그레이션·콘텐츠 호환 — 저장·연계 | P3-TASK-016 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-004, P3-IT-004 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
 | 3 | [P3-TASK-019](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-019) | 마이그레이션·콘텐츠 호환 — UI·호출 경로 | P3-TASK-016 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-004, P3-IT-004 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
 | 3 | [P3-TASK-020](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-020) | 마이그레이션·콘텐츠 호환 — Test·리뷰 | P3-TASK-017, P3-TASK-018, P3-TASK-019 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-004, P3-BT-004, P3-FT-004, P3-CT-004, P3-IT-004 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 3 | [P3-TASK-021](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-021) | 오프라인 Export·Import·아카이브 보호 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
+| 3 | [P3-TASK-021](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-021) | 오프라인 Export·Import·아카이브 보호 — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026, P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
 | 3 | [P3-TASK-022](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-022) | 오프라인 Export·Import·아카이브 보호 — 핵심 규칙 | P3-TASK-021 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-005, P3-BT-005, P3-FT-005 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
 | 3 | [P3-TASK-023](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-023) | 오프라인 Export·Import·아카이브 보호 — 저장·연계 | P3-TASK-021 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-005, P3-IT-005 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
 | 3 | [P3-TASK-024](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-024) | 오프라인 Export·Import·아카이브 보호 — UI·호출 경로 | P3-TASK-021 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-005, P3-IT-005 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
 | 3 | [P3-TASK-025](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-025) | 오프라인 Export·Import·아카이브 보호 — Test·리뷰 | P3-TASK-022, P3-TASK-023, P3-TASK-024 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-005, P3-BT-005, P3-FT-005, P3-CT-005, P3-IT-005 | 대표5 개 Test 와원문세부 assertion coverage 검토완료·관련중대결함0·리뷰승인 | 1.06 |
-| 3 | [P3-TASK-026](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-026) | 무결성 검사·복구·보존 GC — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-006, P3-BT-006, P3-FT-006, P3-CT-006, P3-IT-006 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
+| 3 | [P3-TASK-026](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-026) | 무결성 검사·복구·보존 GC — 계약·Fixture | P0-TASK-021, P1-TASK-021, P2-TASK-026, P3-TASK-001 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-006, P3-BT-006, P3-FT-006, P3-CT-006, P3-IT-006 | DTO schema·source assertion manifest·3 종 fixture 를 리뷰 승인 | 1.06 |
 | 3 | [P3-TASK-027](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-027) | 무결성 검사·복구·보존 GC — 핵심 규칙 | P3-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-UT-006, P3-BT-006, P3-FT-006 | 순수핵심 메소드·경계검사·결정론 golden 결과 구현; 미정규칙 활성금지 | 2.12 |
 | 3 | [P3-TASK-028](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-028) | 무결성 검사·복구·보존 GC — 저장·연계 | P3-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-006, P3-IT-006 | 실제 adapter 통합·필요 migration/codec·FK/취소경계 검증 | 1.59 |
 | 3 | [P3-TASK-029](04_Phase3_로컬DB_세이브_복구_상세설계서.md#p3-task-029) | 무결성 검사·복구·보존 GC — UI·호출 경로 | P3-TASK-026 | 필수 | :core:database / :core:save / :core:data | 선행계약후;공통 schema 충돌은직렬 | P3-CT-006, P3-IT-006 | 정상·경계·실패가관측가능한최소진입점과접근성 labels; 핵심권한우회0 | 1.06 |
@@ -767,11 +769,11 @@
 077. P3-TASK-008 복원 가능한 세대·슬롯·불변 청크 — 저장·연계
 078. P3-TASK-009 복원 가능한 세대·슬롯·불변 청크 — UI·호출 경로
 079. P3-TASK-010 복원 가능한 세대·슬롯·불변 청크 — Test·리뷰
-080. P3-TASK-011 전투·장기진행·대화 복구 — 계약·Fixture
-081. P3-TASK-012 전투·장기진행·대화 복구 — 핵심 규칙
-082. P3-TASK-013 전투·장기진행·대화 복구 — 저장·연계
-083. P3-TASK-014 전투·장기진행·대화 복구 — UI·호출 경로
-084. P3-TASK-015 전투·장기진행·대화 복구 — Test·리뷰
+080. P3-TASK-011 장기진행·예약 복구 — 계약·Fixture
+081. P3-TASK-012 장기진행·예약 복구 — 핵심 규칙
+082. P3-TASK-013 장기진행·예약 복구 — 저장·연계
+083. P3-TASK-014 장기진행·예약 복구 — UI·호출 경로
+084. P3-TASK-015 장기진행·예약 복구 — Test·리뷰
 085. P3-TASK-016 마이그레이션·콘텐츠 호환 — 계약·Fixture
 086. P3-TASK-017 마이그레이션·콘텐츠 호환 — 핵심 규칙
 087. P3-TASK-018 마이그레이션·콘텐츠 호환 — 저장·연계

@@ -1,7 +1,7 @@
 # Phase 2. 월드명령 · 시간 · 예약 · RNG 상세 설계서
 
-> 버전 v31.4 · 기준원문 v30 · 작성일 2026-09-14
-> 상태: **구현 전 기술 보완 완료 / 구현 NOT_STARTED / Test NOT_RUN**
+> 버전 v31.6 · 기준원문 v30 · 작성일 2026-09-23
+> 상태: **Phase 2 완료 / QA PASS / 사용자 승인 완료** — P2-TASK-001~026 DONE; Gate 필수 Test 29/29 PASS. P2-OP-001·P2-ET-001은 Phase 3/Release 이관, P2-IT-006은 비실행 handoff 기록이며 세 ID는 NOT_RUN 유지.
 > 마스터: [전체 구현](00_전체_구현_마스터_설계서.md) · 요구추적: [93](93_요구사항_추적표.md) · 결정대장: [94](94_설계보완안_및_결정대장.md)
 
 ## 1. 문서 개요
@@ -496,7 +496,26 @@ candidate 목록은 batch 시작 snapshot에서 한 번 수집·검증해 동결
 
 `SYSTEM_HALT`는 DB invariant 실패·save corruption·codec incompatibility 같은 시스템 실패이며 boundary category/Event가 아니다. 미commit batch를 폐기하고 직전 durable state를 보존한 채 즉시 안전 정지한다. `DECISION_GATE`는 플레이어 선택 없이는 뒤 결과를 결정할 수 없는 authoritative candidate다. `TIME_ADVANCE_STOP`은 같은 timestamp의 authoritative batch를 끝까지 commit한 뒤 다음 timestamp로 넘어가지 않는 fast-forward 결과다.
 
-terminal commit 뒤 `TimeAdvanceSummaryView.v1`은 receipt, committed public world events와 현재 public snapshot에서 재구축하는 read projection이다. `elapsedMinutes`, `terminalReason`, 주요 사건, 완료 작업, 자원 경고, 중요 상태 변화, 낮은 중요도 유형별 묶음 수, 확인하지 않은 중요 사건 수와 가능한 다음 행동/continuation을 포함한다. 항목은 public event order로 안정 정렬하고 상세 목록에는 고정 개수 상한과 overflow count를 둔다. 숨은 값은 `PublicConsequencePreview`와 같은 visibility projection을 거친다. summary 생성 실패는 gameplay commit을 rollback하지 않으며 재조회로 복원한다.
+terminal commit 뒤 `TimeAdvanceSummaryView.v1`은 terminal receipt, committed public `world_event`, 진행 시작 시점의 summary 비교 기준, terminal `PublicSnapshot`에서 재구축하는 비권위 read projection이다. 필드별 source는 아래와 같이 고정한다.
+
+| 필드 | 의미와 1:1 source |
+|---|---|
+| `elapsedMinutes` | `terminal PublicSnapshot.clock.minute - time_advance_state.start_minute`; 음수는 invariant 오류다. |
+| `terminalReason` | terminal `command_receipt.result`; `time_advance_state.status`와 일치해야 한다. |
+| `majorEvents` | observer에게 공개된 known event 중 `HIGH`/`CRITICAL`; `type=payload.codecId`, `gameMinute=world_event.game_minute`. |
+| `completedWork` | 시작 비교 기준에서 미완료였고 terminal `scheduled_action`에서 완료된 observer 소유/참여 작업; 공개값은 `actionKind`와 `dueMinute`뿐이다. |
+| `resourceWarnings` | observer가 볼 수 있는 action claim 자원 중 시작 available이 0보다 크고 terminal available이 0인 자원; 공개값은 `resourceKind`와 terminal `availableQuantity`뿐이다. |
+| `importantChanges` | observer에게 공개된 known `NORMAL` event의 type과 game minute. |
+| `lowImportanceBundles` | observer에게 공개된 `LOW` event를 public type별로 묶은 count; 순서는 첫 사건의 public event order를 따른다. |
+| `unknownImportantEventCount` | observer에게 공개된 `HIGH`/`CRITICAL` 중 summary codec registry가 해석하지 못한 사건 수다. **미열람/미확인 사건 수가 아니다.** |
+| `continuation` | `INTERRUPTED→RESUME`, `DECISION_REQUIRED→DECISION`, 나머지는 `null`. |
+| `nextAction` | `INTERRUPTED→CONTINUE`, `DECISION_REQUIRED→CHOOSE_DECISION`, durable progress가 있는 `FAILED→RETRY`, 나머지는 `ACKNOWLEDGE`. `ACKNOWLEDGE`는 이 summary를 닫는 동작이지 사건별 읽음 기록이 아니다. |
+
+사건 상세는 공개 type key와 game minute만 포함한다. `eventId`는 v1에서 노출하지 않고, 공개 내용은 해당 public type의 정적 표시명/설명까지만 허용한다. raw payload, stable entity/action ID, source epoch/command ID는 projection에 포함하지 않는다. Importance는 별도 필드로 내보내지 않고 `majorEvents=HIGH/CRITICAL`, `importantChanges=NORMAL`, `lowImportanceBundles=LOW`의 구획으로 표현한다. 상세 목록별 상한은 5개이며 overflow count는 전체 공개 항목 중 목록에 담기지 않은 수다.
+
+관찰자 식별은 terminal receipt의 actor를 사용한다. 요약기는 receipt, source epoch/command/event sequence가 검증된 committed event, 시작 summary 비교 기준, terminal public snapshot을 입력으로 받아야 한다. 시작 비교 기준은 accepted command의 첫 segment 전에 캡처하며 observer가 볼 수 있는 action status와 action claim 자원의 canonical identity·시작 available을 포함한다. 동일 RUNNING command의 `RESUME`은 이 기준을 재사용하고, 새 continuation command는 자기 시작 시점에 새 기준을 캡처한다. 이 기준은 summary 재구성에 필요한 권위 복구 입력으로 세션 재구성 뒤에도 제공되어야 하며 summary 출력이나 `progress_summary_json`/event에서 역산하지 않는다. `SYSTEM_HIDDEN`은 직접 요약 projection에 포함하지 않으며 예외를 두지 않는다. 그 결과를 플레이어에게 보여줘야 하면 별도의 권한 검증된 public event 또는 terminal public state로 발행한다. hidden 관계·성격·확률·조건, RNG seed/state/counter/draw, 내부 payload/hash, 비관찰자 식별자는 금지한다. summary 생성 실패는 gameplay commit을 rollback하지 않으며 위 source에서 재조회한다.
+
+`FAILED`이지만 durable progress가 있는 명령은 receipt lifecycle `INTERRUPTED`와 durable `remainingGoal`을 가진 terminal이다. summary의 `nextAction=RETRY`는 원 envelope/commandId 재전송이나 원 goal의 처음부터 재시작을 뜻하지 않는다. 사용자가 선택하면 새 envelope와 commandId로 `continuationOfCommandId`를 연결해 authoritative `remainingGoal`에서 계속하며, 이미 commit된 slice·event·RNG draw를 다시 적용하지 않는다. `INTERRUPTED` receipt는 terminal로 유지한다. admission 전 deterministic reject는 receipt lifecycle `REJECTED`이며 TimeAdvance terminal summary가 아니다. 같은 reject commandId를 재사용해 재시도하지 않고, 거절 원인을 해소한 새 command로 제출한다.
 
 같은 `boundaryTime`에는 아래 category rank를 오름차순으로 적용한다. mandatory decision prerequisite/gate는 해당 category의 stable candidate로 표현한다. 일반 P0 중요도는 자동으로 SYSTEM_HALT를 뜻하지 않으며 policy상 forced stop일 수 있다.
 
@@ -647,7 +666,7 @@ draw 계약은 `nextUInt32` raw draw 1회, `bounded(n)` rejection마다 raw draw
 | pending_elapsed_hash TEXT | codec+payload SHA-256; continuation 전에 검증 |
 | pending_elapsed_effective_minute INTEGER | sealed outcome을 정확히 한 번 적용할 target world minute |
 | time_advance_interrupt_policy_json TEXT NOT NULL | `TimeAdvanceInterruptPolicy.v1` canonical JSON; ActionInterruptionPolicy와 별개 |
-| progress_summary_json TEXT | UI/debug 파생 summary. 복구 권위가 아니며 current state/goal에서 재구축 가능해야 한다. |
+| progress_summary_json TEXT | UI/debug 파생 summary cache이며 복구 권위가 아니다. terminal summary 비교 필드는 admission 시 확정한 authoritative baseline과 committed event·terminal snapshot으로 재구축하고 current state/goal만으로 역산하지 않는다. |
 | status TEXT NOT NULL | RUNNING/COMPLETED/INTERRUPTED/DECISION_REQUIRED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED. terminal continuation은 새 command로만 생성한다. |
 #### `world_event` 필드 및 관계
 
@@ -1344,7 +1363,7 @@ CREATE TABLE IF NOT EXISTS world_state (
 |---|---|
 | Task ID | P2-TASK-019 |
 | 목적 | 표현/진입 책임을 하나의 리뷰 가능한 PR 로 완성한다. |
-| 상세 구현 내용 | goal/policy/limit를 명시해 AdvanceTime을 호출하고 ADVANCING/요청 접수 중/INTERRUPTED/DECISION_REQUIRED/COMPLETED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED와 `AdvanceInProgress`를 구분해 표시한다. 계속은 terminal receipt 재활성화가 아니라 continuationOfCommandId를 가진 새 command로 제출한다. terminal 뒤 `TimeAdvanceSummaryView.v1`으로 경과 시간·정지 이유·주요 사건·완료 작업·자원 경고·중요 변화·묶음 수·미확인 중요 건수와 다음 행동을 표시한다. |
+| 상세 구현 내용 | goal/policy/limit를 명시해 AdvanceTime을 호출하고 ADVANCING/요청 접수 중/INTERRUPTED/DECISION_REQUIRED/COMPLETED/CANCELLED/UNREACHABLE/LIMIT_REACHED/FAILED와 `AdvanceInProgress`를 구분해 표시한다. 계속은 terminal receipt 재활성화가 아니라 continuationOfCommandId를 가진 새 command로 제출한다. terminal 뒤 `TimeAdvanceSummaryView.v1`으로 경과 시간·정지 이유·주요 사건·완료 작업·자원 경고·중요 변화·낮은 중요도 묶음·지원되지 않는 중요 공개 사건 수와 다음 행동을 표시한다. 사건별 미열람 수를 뜻하지 않으며 public type+시각만 공개한다. |
 | 대상 모듈 | :app (시간진행 UI 조립) → :core:simulation API. core에는 preset persistence/Compose/ViewState를 두지 않는다. |
 | 신규/수정 | 신규/adapter 제안. 기존 저장소 확인 후 file/line 과 기존 interface 에 대한 영향을 PR 에 첨부한다. |
 | DB 변경 | world_state, scheduled_action, time_advance_state, world_event; 실제 변경은 DDL, DAO, codec migration 영향으로 구분한다. |
@@ -1525,8 +1544,9 @@ CREATE TABLE IF NOT EXISTS world_state (
 | 현재 차단/상태 | DONE |
 | 담당 역할/담당자 | QA/리뷰어 / 미지정 |
 | 공수 O/M/P / 기대 인일 | 0.98/1.5/2.55 / 1.59; 초기 계획 가정 |
-| Test | P2-UT-001, P2-BT-001, P2-FT-001, P2-CT-001, P2-IT-001, P2-UT-002, P2-BT-002, P2-FT-002, P2-CT-002, P2-IT-002, P2-UT-003, P2-BT-003, P2-FT-003, P2-CT-003, P2-IT-003, P2-UT-004, P2-BT-004, P2-FT-004, P2-CT-004, P2-IT-004, P2-UT-005, P2-BT-005, P2-FT-005, P2-CT-005, P2-IT-005, P2-RT-001, P2-CN-001, P2-REC-001, P2-PT-001, P2-OP-001, P2-ET-001, P2-IT-006 |
-| 완료 조건 | Phase 2 필수 Test PASS·Gate 승인·P3/Release 이관 항목과 DTO/codec/fixture 매핑·미해결중대결함0. latency/NFR와 Room/WAL/reopen/process-kill/production SavePort는 본 완료조건에서 제외하고 NOT_VERIFIED/이관으로 유지 |
+| Gate 필수 Test | P2-UT/BT/FT/CT/IT-001~005, P2-RT-001, P2-CN-001, P2-REC-001, P2-PT-001 — 총 29개, 모두 PASS |
+| Gate에서 제외·이관한 Test | P2-OP-001, P2-ET-001: Phase 3/Release에서 실행; P2-IT-006: handoff 관리 기록 전용이며 runtime 미실행. 세 ID는 NOT_RUN/NOT_VERIFIED로 유지하며 PASS로 승격하지 않는다. |
+| 완료 조건 | 29개 Gate 필수 Test PASS·Gate 승인·P3/Release 단방향 이관 매핑·미해결 P0/P1/차단 P2 0. latency/NFR와 Room/WAL/reopen/process-kill/production SavePort는 Phase 2 완료조건에서 제외하고 미검증/이관으로 유지 |
 | 리뷰/PR/증거 | Phase Product QA PASS; JVM 114/114 및 기존 Android 47/47 결과 확인; 수석 기술 리뷰어 최종 기술 판정 APPROVED; 사용자 최종 승인 완료 |
 
 

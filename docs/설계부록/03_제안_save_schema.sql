@@ -1,4 +1,7 @@
 -- 제안 DDL; 실제 Room 생성 schema와 검토 후 동기화.
+-- P3 활성 baseline은 Phase3 설계서 §6 표와 P2 복구 baseline
+-- (scheduled_action, occupancy, resource_reservation)을 생성한다.
+-- 아래 후속 Phase 도메인 테이블만 FUTURE_PHASE_REFERENCE이며 P3 v1 Gate 대상이 아니다.
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS world_state (
@@ -23,6 +26,7 @@ CREATE TABLE IF NOT EXISTS command_receipt (
   row_version INTEGER NOT NULL DEFAULT 0 CHECK(row_version>=0),
   command_id TEXT NOT NULL,
   epoch TEXT NOT NULL,
+  actor_id TEXT,
   payload_codec TEXT NOT NULL DEFAULT 'CommandPayloadCodec.v1',
   payload_hash TEXT NOT NULL,
   lifecycle_status TEXT NOT NULL DEFAULT 'COMMITTED' CHECK(lifecycle_status IN ('RUNNING','COMMITTED','INTERRUPTED','REJECTED')),
@@ -48,9 +52,14 @@ CREATE TABLE IF NOT EXISTS world_event (
   game_minute INTEGER NOT NULL CHECK(game_minute>=0),
   sub_ms INTEGER NOT NULL CHECK(sub_ms BETWEEN 0 AND 59999),
   visibility TEXT NOT NULL CHECK(visibility IN ('PUBLIC','PARTICIPANTS','OBSERVER_SCOPED','SYSTEM_HIDDEN')),
+  audience_codec TEXT,
+  audience_payload BLOB,
+  audience_hash TEXT,
   importance INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   consumed_mask INTEGER NOT NULL DEFAULT 0,
+  CHECK((visibility IN ('PUBLIC','SYSTEM_HIDDEN') AND audience_codec IS NULL AND audience_payload IS NULL AND audience_hash IS NULL)
+     OR (visibility IN ('PARTICIPANTS','OBSERVER_SCOPED') AND audience_codec IS NOT NULL AND audience_payload IS NOT NULL AND audience_hash IS NOT NULL)),
   UNIQUE(source_epoch,source_command_id,event_sequence),
   FOREIGN KEY(source_epoch,source_command_id) REFERENCES command_receipt(epoch,command_id) ON DELETE RESTRICT
 );
@@ -146,6 +155,9 @@ CREATE TABLE IF NOT EXISTS time_advance_state (
   pending_elapsed_hash TEXT,
   pending_elapsed_effective_minute INTEGER,
   time_advance_interrupt_policy_json TEXT NOT NULL,
+  summary_start_codec TEXT NOT NULL,
+  summary_start_payload BLOB NOT NULL,
+  summary_start_hash TEXT NOT NULL,
   progress_summary_json TEXT,
   status TEXT NOT NULL CHECK(status IN ('RUNNING','COMPLETED','INTERRUPTED','DECISION_REQUIRED','CANCELLED','UNREACHABLE','LIMIT_REACHED','FAILED')),
   UNIQUE(command_epoch,request_id),
@@ -169,6 +181,10 @@ CREATE TABLE IF NOT EXISTS save_generation (
   schema_version INTEGER NOT NULL,
   content_version TEXT NOT NULL,
   balance_version TEXT NOT NULL,
+  manifest_codec TEXT NOT NULL DEFAULT 'CompleteGenerationManifest.v1',
+  required_domain_set_version TEXT NOT NULL,
+  required_domain_set_hash TEXT NOT NULL,
+  expected_shard_count INTEGER NOT NULL CHECK(expected_shard_count>0),
   manifest_hash TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('WRITING','COMMITTED','ABORTED')),
   UNIQUE(branch_id,generation_no)
